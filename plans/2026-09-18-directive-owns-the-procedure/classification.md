@@ -34,6 +34,11 @@ came out of one design conversation).
   stdout. Triage recall selected no memory entry; `craft:directive-writing`
   and `craft:test-discipline` own the domain and load at the point of use.
 
+  > **Corrected at review, 2026-09-18.** "the 24 rows there that assert empty
+  > stdout" is a miscount: six rows assert `stdout == ""`, four of them on a
+  > boundary skill. See the matching note in `outline.md`. The classification
+  > stands — B still changes those rows.
+
 ## Routing
 
 One outline, non-prose Moderate path: `outline.md` → `/proof` → `/runbook`.
