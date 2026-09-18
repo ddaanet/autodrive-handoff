@@ -152,6 +152,16 @@ text, the two dangling wikilinks.
      `clear: false`: asserts line 1 is `armed`, `handoff-approved` absent from
      stdout, and the non-empty `commit_directive()` present. Mutation check:
      widen the second disjunct to `K and C` ⟹ this row alone reds.
+
+     > **Corrected at review, 2026-09-18.** "this row alone reds" is wrong:
+     > the `K and C` mutant also reds the pre-existing
+     > `test_rename_only_manifest_present_empty_sentinel_written` (untyped
+     > handoff, `with-commit`, non-gitlore repo, so `M` false), which pins the
+     > sentinel bytes `armed\nrename\n…` and so occupies the same cell. Evidence:
+     > `reports/item-2-1-s2-red.md` and `item-2-1-s2-test-review.md`, both
+     > `2 failed, 162 passed` naming those two rows. What stands: the mutation
+     > reds this row, and this row is still the only one that names the cell
+     > and asserts both stdout facts (commit act present, arming absent).
   3. `test_sentinel_typing_nothing_arms_even_with_memory_gate_pending`
      (`test_checkpoint.py:1819` — precompact, `compact: false`, dirty memory)
      gains a `with-commit` parameter: asserts `armed` under both modes. `T` is
