@@ -246,6 +246,54 @@ pick up per the task file" ]
     [[ "$output" != *"Ready to"* ]]
 }
 
+# Drift guard between the closing line's two producers: bin/handoff-approved's
+# literal `case` arms and closing_directive() in scripts/_checkpoint_lib.py.
+# Both sides pass through `$(...)`, so trailing newlines are the one
+# difference these rows cannot see.
+expected_closing() {
+    local skill="$1" typed="$2"
+    PYTHONPATH="$repo_root/scripts" python3 -c "
+from _checkpoint_lib import closing_directive
+print(closing_directive('$skill', typed=$typed), end='')
+"
+}
+
+@test "handoff-approved: closing line matches the checkpoint's, per kind — rename" {
+    repo="$(make_repo)"
+    printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" rename "/rename A Title" \
+        > "$repo/.claude/autodrive"
+    run_approved "$repo"
+    [ "$status" -eq 0 ]
+    expected="$(expected_closing handoff False)"
+    [ -n "$expected" ]
+    closing="${output#*$'\n\n'}"
+    [ "$closing" = "$expected" ]
+}
+
+@test "handoff-approved: closing line matches the checkpoint's, per kind — clear" {
+    repo="$(make_repo)"
+    printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" clear "/rename A Title" /clear \
+        > "$repo/.claude/autodrive"
+    run_approved "$repo"
+    [ "$status" -eq 0 ]
+    expected="$(expected_closing handoff True)"
+    [ -n "$expected" ]
+    closing="${output#*$'\n\n'}"
+    [ "$closing" = "$expected" ]
+}
+
+@test "handoff-approved: closing line matches the checkpoint's, per kind — compact" {
+    repo="$(make_repo)"
+    printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" compact "/compact" \
+        > "$repo/.claude/autodrive"
+    run_approved "$repo"
+    [ "$status" -eq 0 ]
+    expected="$(expected_closing precompact True)"
+    [ -n "$expected" ]
+    closing="${output#*$'\n\n'}"
+    [ "$closing" = "$expected" ]
+}
+
 # ==========================================================================
 # shim (bin/handoff-checkpoint)
 # ==========================================================================
