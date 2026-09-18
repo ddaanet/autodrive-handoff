@@ -2360,6 +2360,7 @@ def test_clause_refusal_is_followed_by_no_commit_or_arming(tmp_path: Path) -> No
     assert boundary not in out
     assert commit_act not in out
     assert arming not in out
+    assert "End on one line" not in out
     first_line = (repo / ".claude" / "autodrive").read_text().splitlines()[0]
     assert first_line == "held sess-checkpoint"
 
@@ -2564,3 +2565,81 @@ def test_several_live_workspaces_most_recently_modified_wins(tmp_path: Path) -> 
         assert result.returncode == 0
         assert f".superpowers/sdd/{live}/progress.md" in result.stdout
         assert stale not in result.stdout
+
+
+# ==========================================================================
+# Closing line
+# ==========================================================================
+
+
+@pytest.mark.parametrize(
+    ("skill", "typed"),
+    [
+        ("handoff", False),
+        ("precompact", False),
+        ("handoff", True),
+        ("precompact", True),
+    ],
+)
+def test_closing_line_names_what_the_boundary_is_ready_for(
+    tmp_path: Path, skill: str, *, typed: bool
+) -> None:
+    repo = make_gitlore_repo(tmp_path)
+    if skill == "handoff":
+        payload = handoff_payload("without-commit")
+        payload["clear"] = typed
+    else:
+        payload = precompact_payload("without-commit")
+        payload["compact"] = typed
+    result = run_checkpoint(repo, payload)
+    assert result.returncode == 0
+    first_line = (repo / ".claude" / "autodrive").read_text().splitlines()[0]
+    assert first_line == "armed"
+    assert_stdout_is_closing(result, skill, typed=typed)
+    out = result.stdout
+    assert out.startswith("End on one line")
+    if typed:
+        assert "armed" in out
+        assert "Ready to" not in out
+    elif skill == "handoff":
+        assert "Ready to /clear" in out
+    else:
+        assert "Ready to /compact" in out
+
+
+@pytest.mark.parametrize(
+    ("payload_fn", "typed_field"),
+    [(handoff_payload, "clear"), (precompact_payload, "compact")],
+)
+def test_held_sentinel_prints_no_closing_line(
+    tmp_path: Path,
+    payload_fn: Callable[[str], dict[str, object]],
+    typed_field: str,
+) -> None:
+    repo = make_gitlore_repo(tmp_path)
+    assert lib.memory_directive(str(repo), "with-commit").text == ""
+    payload = payload_fn("with-commit")
+    payload[typed_field] = True
+    result = run_checkpoint(repo, payload)
+    assert result.returncode == 0
+    first_line = (repo / ".claude" / "autodrive").read_text().splitlines()[0]
+    assert first_line == "held sess-checkpoint"
+    assert "End on one line" not in result.stdout
+
+
+def test_refusal_prints_alone_when_not_held(tmp_path: Path) -> None:
+    repo = make_gitlore_repo(tmp_path)
+    dirty_memory(repo)
+    subprocess.run(
+        ["git", "config", "--unset", "gitlore.memoryApprovalClauseFile"],
+        cwd=repo,
+        check=True,
+    )
+    refusal = lib.memory_directive(str(repo), "with-commit")
+    assert refusal.text != ""
+    assert refusal.refusal
+    result = run_checkpoint(repo, precompact_payload("with-commit"))
+    assert result.returncode == 0
+    first_line = (repo / ".claude" / "autodrive").read_text().splitlines()[0]
+    assert first_line == "armed"
+    assert result.stdout == refusal.text + "\n"
