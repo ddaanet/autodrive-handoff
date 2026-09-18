@@ -579,12 +579,19 @@ def _read_back_drive(drive_path: Path) -> tuple[bool, str]:
     return result.returncode == 0, result.stderr
 
 
+class Ending(NamedTuple):
+    """What ends the directive output: the arming instruction or closing line.
+
+    `held` is the one hold decision, shared with the sentinel; `typed` picks the
+    closing line when not held.
+    """
+
+    held: bool
+    typed: bool
+
+
 def compose_directives(
-    skill: str,
-    root: Path,
-    commit_mode: str,
-    memory: lib.MemoryPart,
-    transition: Transition,
+    skill: str, root: Path, commit_mode: str, memory: lib.MemoryPart, ending: Ending
 ) -> list[str]:
     """Return the ordered, non-empty directive parts for this boundary.
 
@@ -593,9 +600,7 @@ def compose_directives(
     (held) or the closing line (not held) — always last, and mutually
     exclusive. [] under autoname/restart. The clause-file refusal
     (`memory.refusal`) suppresses every other part — the checkpoint prints it
-    alone. Recomputes `held` from `transition`/`memory`/`commit_mode` via
-    `hold_decision` rather than taking it as a separate argument, so the one
-    formula stays the only source of truth.
+    alone.
     """
     if skill not in ("handoff", "precompact"):
         return []
@@ -608,13 +613,10 @@ def compose_directives(
         second = lib.sdd_directive(root_s)
     commit = lib.commit_directive() if commit_mode == "with-commit" else ""
     parts = [part for part in (memory.text, second, commit) if part]
-    held = hold_decision(
-        transition, memory=bool(memory.text), commit=commit_mode == "with-commit"
-    )
-    if held:
+    if ending.held:
         parts.append(lib.arming_directive())
     else:
-        parts.append(lib.closing_directive(skill, typed=transition.typed))
+        parts.append(lib.closing_directive(skill, typed=ending.typed))
     return parts
 
 
@@ -666,7 +668,8 @@ def main() -> int:
         transition, memory=bool(memory.text), commit=commit_mode == "with-commit"
     )
     compose_sentinel(root, transition, continuation, held=held)
-    parts = compose_directives(skill, root, commit_mode, memory, transition)
+    ending = Ending(held=held, typed=transition.typed)
+    parts = compose_directives(skill, root, commit_mode, memory, ending)
     print_output(parts)
     return 0
 
