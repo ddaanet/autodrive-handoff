@@ -61,4 +61,32 @@ handoff_drive_read "$drive" || err "$HANDOFF_REL_DRIVE is malformed — $DRIVE_E
 handoff_drive_arm "$drive" armed \
     || err "could not rewrite $HANDOFF_REL_DRIVE"
 
-printf 'handoff: %s armed; it runs at the end of this turn.\n' "$DRIVE_KIND"
+status_fact=$(printf 'handoff: %s armed; it runs at the end of this turn.' "$DRIVE_KIND")
+
+# The closing line for each kind, byte-identical to closing_directive() in
+# scripts/_checkpoint_lib.py — held whole by NFR1's shape rather than shelling
+# out to Python to compose it. A kind this command reaches but that names no
+# closing line (there is none today; restart never holds) falls back to the
+# status fact alone rather than guessing. Single-quoted: the backticks are
+# literal text, and double-quoting them would open command substitution.
+# shellcheck disable=SC2016
+case "$DRIVE_KIND" in
+    rename)
+        closing='End on one line: `Ready to /clear`.'
+        ;;
+    clear)
+        closing='End on one line: `Clear armed — it runs when this turn ends.`'
+        ;;
+    compact)
+        closing='End on one line: `Compaction armed — it runs when this turn ends.`'
+        ;;
+    *)
+        closing=''
+        ;;
+esac
+
+if [ -n "$closing" ]; then
+    printf '%s\n\n%s\n' "$status_fact" "$closing"
+else
+    printf '%s\n' "$status_fact"
+fi

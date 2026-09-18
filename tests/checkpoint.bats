@@ -204,6 +204,48 @@ pick up per the task file" ]
     [ "$(head -n1 "$repo/.claude/autodrive")" = "armed" ]
 }
 
+# After arming, handoff-approved prints the status fact, a blank line, then
+# the closing line for the kind (Item 3.2/1). Slice 2 pins the closing
+# line's exact text against closing_directive(); here it is only the
+# per-kind shape (prepared vs driven) that is asserted.
+@test "handoff-approved: status fact then closing content — rename" {
+    repo="$(make_repo)"
+    printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" rename "/rename A Title" \
+        > "$repo/.claude/autodrive"
+    run_approved "$repo"
+    [ "$status" -eq 0 ]
+    [ "${lines[0]}" = "handoff: rename armed; it runs at the end of this turn." ]
+    # `lines` drops empty lines, so the blank separator is asserted on $output.
+    [[ "$output" == "${lines[0]}"$'\n\n'* ]]
+    [[ "$output" == *"Ready to /clear"* ]]
+}
+
+@test "handoff-approved: status fact then closing content — clear" {
+    repo="$(make_repo)"
+    printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" clear "/rename A Title" /clear \
+        > "$repo/.claude/autodrive"
+    run_approved "$repo"
+    [ "$status" -eq 0 ]
+    [ "${lines[0]}" = "handoff: clear armed; it runs at the end of this turn." ]
+    [[ "$output" == "${lines[0]}"$'\n\n'* ]]
+    [[ "$output" == *"End on one line"* ]]
+    [[ "$output" == *"Clear armed"* ]]
+    [[ "$output" != *"Ready to"* ]]
+}
+
+@test "handoff-approved: status fact then closing content — compact" {
+    repo="$(make_repo)"
+    printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" compact "/compact" \
+        > "$repo/.claude/autodrive"
+    run_approved "$repo"
+    [ "$status" -eq 0 ]
+    [ "${lines[0]}" = "handoff: compact armed; it runs at the end of this turn." ]
+    [[ "$output" == "${lines[0]}"$'\n\n'* ]]
+    [[ "$output" == *"End on one line"* ]]
+    [[ "$output" == *"Compaction armed"* ]]
+    [[ "$output" != *"Ready to"* ]]
+}
+
 # ==========================================================================
 # shim (bin/handoff-checkpoint)
 # ==========================================================================
