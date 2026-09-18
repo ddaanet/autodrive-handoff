@@ -82,18 +82,6 @@ def _resolve_approval_clause(root: str) -> str | None:
     return path.read_text(encoding="utf-8").rstrip("\n")
 
 
-class MemoryPart(NamedTuple):
-    """The memory directive's text, and whether it is the clause-file refusal.
-
-    `text == ""` when nothing is owed. `refusal` is true only for the clause-
-    file refusal, the one memory text that suppresses every part after it — the
-    checkpoint prints it alone.
-    """
-
-    text: str
-    refusal: bool
-
-
 def memory_directive(root: str, mode: str) -> MemoryPart:
     """Return the gitlore memory-commit directive, or an empty part.
 
@@ -169,6 +157,18 @@ def memory_directive(root: str, mode: str) -> MemoryPart:
             f"     {trigger}",
         )
     return MemoryPart(common + specific, refusal=False)
+
+
+class MemoryPart(NamedTuple):
+    """The memory directive's text, and whether it is the clause-file refusal.
+
+    `text == ""` when nothing is owed. `refusal` is true only for the clause-
+    file refusal, the one memory text that suppresses every part after it — the
+    checkpoint prints it alone.
+    """
+
+    text: str
+    refusal: bool
 
 
 def commit_directive() -> str:
