@@ -2238,6 +2238,45 @@ def test_commit_act_names_no_git_verb() -> None:
 
 
 # ==========================================================================
+# Ordering
+# ==========================================================================
+
+
+def test_handoff_parts_print_in_order(tmp_path: Path) -> None:
+    repo = make_gitlore_repo(tmp_path)
+    dirty_memory(repo)
+    add_sdd_ledger(repo)
+    todo_boundary = lib.todo_boundary(str(repo))
+    commit_act = lib.commit_directive()
+    assert todo_boundary
+    assert commit_act
+    result = run_checkpoint(repo, handoff_payload("with-commit"))
+    assert result.returncode == 0
+    out = result.stdout
+    memory_index = out.index("gitlore memory has uncommitted changes")
+    todo_index = out.index(todo_boundary)
+    commit_index = out.index(commit_act)
+    assert memory_index < todo_index < commit_index
+
+
+def test_precompact_parts_print_in_order(tmp_path: Path) -> None:
+    repo = make_gitlore_repo(tmp_path)
+    dirty_memory(repo)
+    add_sdd_ledger(repo)
+    sdd_directive = lib.sdd_directive(str(repo))
+    commit_act = lib.commit_directive()
+    assert sdd_directive
+    assert commit_act
+    result = run_checkpoint(repo, precompact_payload("with-commit"))
+    assert result.returncode == 0
+    out = result.stdout
+    memory_index = out.index("gitlore memory has uncommitted changes")
+    sdd_index = out.index(sdd_directive)
+    commit_index = out.index(commit_act)
+    assert memory_index < sdd_index < commit_index
+
+
+# ==========================================================================
 # Composition
 # ==========================================================================
 
