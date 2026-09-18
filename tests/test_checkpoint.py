@@ -2320,6 +2320,34 @@ def test_arming_text_refers_to_everything_above(tmp_path: Path) -> None:
     assert "handoff-approved" in arming
 
 
+def test_clause_refusal_is_followed_by_no_commit_or_arming(tmp_path: Path) -> None:
+    repo = make_gitlore_repo(tmp_path)
+    dirty_memory(repo)
+    subprocess.run(
+        ["git", "config", "--unset", "gitlore.memoryApprovalClauseFile"],
+        cwd=repo,
+        check=True,
+    )
+    add_sdd_ledger(repo)
+    boundary = lib.todo_boundary(str(repo))
+    commit_act = lib.commit_directive()
+    arming = lib.arming_directive()
+    assert boundary
+    assert commit_act
+    assert arming
+    payload = handoff_payload("with-commit")
+    payload["clear"] = True
+    result = run_checkpoint(repo, payload)
+    assert result.returncode == 0
+    out = result.stdout
+    assert "gitlore.memoryapprovalclausefile" in out.lower()
+    assert boundary not in out
+    assert commit_act not in out
+    assert arming not in out
+    first_line = (repo / ".claude" / "autodrive").read_text().splitlines()[0]
+    assert first_line == "held sess-checkpoint"
+
+
 # ==========================================================================
 # Composition
 # ==========================================================================

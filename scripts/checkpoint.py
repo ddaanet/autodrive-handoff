@@ -574,15 +574,19 @@ def _read_back_drive(drive_path: Path) -> tuple[bool, str]:
 
 
 def compose_directives(
-    skill: str, root: Path, commit_mode: str, memory: str, *, held: bool
+    skill: str, root: Path, commit_mode: str, memory: lib.MemoryPart, *, held: bool
 ) -> list[str]:
     """Return the ordered, non-empty directive parts for this boundary.
 
     Print order: memory, then the todo boundary/SDD nudge, then the commit act
     (present only under "with-commit"), then the arming instruction (present
     only when held, and always last). [] under autoname/restart, which owe no
-    memory, carry no commit mode and are never held.
+    memory, carry no commit mode and are never held. The clause-file refusal
+    (`memory.refusal`) suppresses every other part — the checkpoint prints it
+    alone.
     """
+    if memory.refusal:
+        return [memory.text]
     root_s = str(root)
     if skill == "handoff":
         second = lib.todo_boundary(root_s)
@@ -591,7 +595,7 @@ def compose_directives(
     else:
         second = ""
     commit = lib.commit_directive() if commit_mode == "with-commit" else ""
-    parts = [part for part in (memory, second, commit) if part]
+    parts = [part for part in (memory.text, second, commit) if part]
     if held:
         parts.append(lib.arming_directive())
     return parts
@@ -638,10 +642,10 @@ def main() -> int:
         manifest_lines = task_plan.manifest_lines + todo_plan.manifest_lines
     write_manifest(root, manifest_lines)
 
-    memory = ""
+    memory = lib.MemoryPart("", refusal=False)
     if skill in ("handoff", "precompact"):
         memory = lib.memory_directive(str(root), commit_mode)
-    held = hold_decision(transition, memory=bool(memory))
+    held = hold_decision(transition, memory=bool(memory.text))
     compose_sentinel(root, transition, continuation, held=held)
     parts = compose_directives(skill, root, commit_mode, memory, held=held)
     print_output(parts)

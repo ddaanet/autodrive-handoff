@@ -14,6 +14,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import NamedTuple
 
 
 def _printf_lines(*args: str) -> str:
@@ -81,8 +82,20 @@ def _resolve_approval_clause(root: str) -> str | None:
     return path.read_text(encoding="utf-8").rstrip("\n")
 
 
-def memory_directive(root: str, mode: str) -> str:
-    """Return the gitlore memory-commit directive, or "" if nothing to commit.
+class MemoryPart(NamedTuple):
+    """The memory directive's text, and whether it is the clause-file refusal.
+
+    `text == ""` when nothing is owed. `refusal` is true only for the clause-
+    file refusal, the one memory text that suppresses every part after it — the
+    checkpoint prints it alone.
+    """
+
+    text: str
+    refusal: bool
+
+
+def memory_directive(root: str, mode: str) -> MemoryPart:
+    """Return the gitlore memory-commit directive, or an empty part.
 
     `mode` ("with-commit"/"without-commit") selects which of gitlore's two
     commit paths the agent is told to take. The with-commit text never mentions
@@ -91,10 +104,10 @@ def memory_directive(root: str, mode: str) -> str:
     """
     mempath = _resolve_submodule_path(root)
     if not mempath:
-        return ""
+        return MemoryPart("", refusal=False)
     mem = Path(root) / mempath
     if not (mem / ".git").exists():
-        return ""
+        return MemoryPart("", refusal=False)
 
     status = subprocess.run(
         ["git", "-C", str(mem), "status", "--porcelain"],
@@ -103,17 +116,20 @@ def memory_directive(root: str, mode: str) -> str:
         check=False,
     ).stdout.rstrip("\n")
     if not status.strip():
-        return ""
+        return MemoryPart("", refusal=False)
 
     clause = _resolve_approval_clause(root)
     if clause is None:
-        return _printf_lines(
-            "gitlore memory has uncommitted changes, but this session cannot read "
-            "the memory-approval wording: git config "
-            "gitlore.memoryApprovalClauseFile is unset or its file is missing. "
-            "gitlore pins that key at SessionStart — run /handoff:restart (or "
-            "exit and relaunch with --resume, by hand), then retry. Nothing has "
-            "been written and the memory changes are still pending."
+        return MemoryPart(
+            _printf_lines(
+                "gitlore memory has uncommitted changes, but this session cannot "
+                "read the memory-approval wording: git config "
+                "gitlore.memoryApprovalClauseFile is unset or its file is missing. "
+                "gitlore pins that key at SessionStart — run /handoff:restart (or "
+                "exit and relaunch with --resume, by hand), then retry. Nothing has "
+                "been written and the memory changes are still pending."
+            ),
+            refusal=True,
         )
 
     msgfile = Path(root) / ".claude" / "gitlore-memory-message"
@@ -152,7 +168,7 @@ def memory_directive(root: str, mode: str) -> str:
             "  2. Write the trigger file (any content) to:",
             f"     {trigger}",
         )
-    return common + specific
+    return MemoryPart(common + specific, refusal=False)
 
 
 def commit_directive() -> str:
