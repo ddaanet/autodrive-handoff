@@ -141,8 +141,7 @@ def memory_directive(root: str, mode: str) -> str:
             "",
             f"     {msgfile}",
             "",
-            "The commit that lands these changes carries the memory. Nothing "
-            "further is needed from you.",
+            "The commit that lands these changes carries the memory.",
         )
     else:
         specific = _printf_lines(

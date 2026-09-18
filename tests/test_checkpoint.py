@@ -2198,6 +2198,15 @@ def test_without_commit_keeps_standalone_two_file_instruction(tmp_path: Path) ->
     assert "carries the memory" not in result.stdout
 
 
+def test_with_commit_memory_text_drops_nothing_further(tmp_path: Path) -> None:
+    repo = make_gitlore_repo(tmp_path)
+    dirty_memory(repo)
+    result = run_checkpoint(repo, handoff_payload("with-commit"))
+    assert result.returncode == 0
+    assert "gitlore memory has uncommitted changes" in result.stdout
+    assert "nothing further" not in result.stdout.lower()
+
+
 # ==========================================================================
 # Commit act
 # ==========================================================================
