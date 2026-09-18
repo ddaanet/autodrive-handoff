@@ -2063,26 +2063,40 @@ def precompact_payload(commit: str) -> dict[str, object]:
     }
 
 
-def test_not_gitlore_managed_silent(tmp_path: Path) -> None:
+def assert_stdout_is_closing(
+    result: subprocess.CompletedProcess[str], skill: str, *, typed: bool
+) -> None:
+    """Assert stdout is exactly the (skill, typed) closing line plus one
+    newline.
+
+    First asserts the line itself is non-empty, so this cannot pass against an
+    unwritten closing_directive.
+    """
+    closing = lib.closing_directive(skill, typed=typed)
+    assert closing != ""
+    assert result.stdout == closing + "\n"
+
+
+def test_not_gitlore_managed_closing_only(tmp_path: Path) -> None:
     repo = make_repo(tmp_path, "plain")
     result = run_checkpoint(repo, handoff_payload("without-commit"))
     assert result.returncode == 0
-    assert result.stdout == ""
+    assert_stdout_is_closing(result, "handoff", typed=False)
 
 
-def test_gitlore_clean_memory_silent(tmp_path: Path) -> None:
+def test_gitlore_clean_memory_closing_only(tmp_path: Path) -> None:
     repo = make_gitlore_repo(tmp_path)
     result = run_checkpoint(repo, handoff_payload("without-commit"))
     assert result.returncode == 0
-    assert result.stdout == ""
+    assert_stdout_is_closing(result, "handoff", typed=False)
 
 
-def test_submodule_registered_not_materialized_silent(tmp_path: Path) -> None:
+def test_submodule_registered_not_materialized_closing_only(tmp_path: Path) -> None:
     repo = make_gitlore_repo(tmp_path)
     shutil.rmtree(repo / "memory" / ".git")
     result = run_checkpoint(repo, handoff_payload("without-commit"))
     assert result.returncode == 0
-    assert result.stdout == ""
+    assert_stdout_is_closing(result, "handoff", typed=False)
 
 
 def test_dirty_memory_directive_names_both_ipc_paths(tmp_path: Path) -> None:
@@ -2524,14 +2538,14 @@ def test_unidentified_workspace_does_not_suppress_todo_file(tmp_path: Path) -> N
     assert "handoff-todo.md" not in result.stdout
 
 
-def test_flat_path_ledger_alone_precompact_silent(tmp_path: Path) -> None:
+def test_flat_path_ledger_alone_precompact_closing_only(tmp_path: Path) -> None:
     repo = tmp_path / "sddflat"
     (repo / ".claude").mkdir(parents=True)
     subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
     add_flat_sdd_ledger(repo)
     result = run_checkpoint(repo, precompact_payload("without-commit"))
     assert result.returncode == 0
-    assert result.stdout == ""
+    assert_stdout_is_closing(result, "precompact", typed=False)
 
 
 def test_several_live_workspaces_most_recently_modified_wins(tmp_path: Path) -> None:

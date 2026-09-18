@@ -193,6 +193,24 @@ def arming_directive() -> str:
     )
 
 
+def closing_directive(skill: str, *, typed: bool) -> str:
+    """Return the instruction to end the reply on one named line.
+
+    Prepared (untyped): the named line reports what the boundary is ready for,
+    since nothing runs until the user acts on it. Driven (typed): the sentinel
+    is already armed, so the named line reports that instead — the transition
+    runs at the end of this turn without further action. Also printed by
+    `bin/handoff-approved` after its own status fact, so the driven text stands
+    alone rather than assuming the checkpoint's output is what precedes it.
+    """
+    if typed:
+        return _printf_lines(
+            "End on one line: the transition is armed and runs at the end of this turn."
+        )
+    boundary = "/clear" if skill == "handoff" else "/compact"
+    return _printf_lines(f"End on one line: `Ready to {boundary}`.")
+
+
 def ledger_path(root: str) -> str | None:
     """Return the live workflow-owned progress ledger under root, or None.
 

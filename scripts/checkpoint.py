@@ -580,15 +580,22 @@ def _read_back_drive(drive_path: Path) -> tuple[bool, str]:
 
 
 def compose_directives(
-    skill: str, root: Path, commit_mode: str, memory: lib.MemoryPart, *, held: bool
+    skill: str,
+    root: Path,
+    commit_mode: str,
+    memory: lib.MemoryPart,
+    transition: Transition,
 ) -> list[str]:
     """Return the ordered, non-empty directive parts for this boundary.
 
     Print order: memory, then the todo boundary/SDD nudge, then the commit act
-    (present only under "with-commit"), then the arming instruction (present
-    only when held, and always last). [] under autoname/restart. The clause-file
-    refusal (`memory.refusal`) suppresses every other part — the checkpoint
-    prints it alone.
+    (present only under "with-commit"), then either the arming instruction
+    (held) or the closing line (not held) — always last, and mutually
+    exclusive. [] under autoname/restart. The clause-file refusal
+    (`memory.refusal`) suppresses every other part — the checkpoint prints it
+    alone. Recomputes `held` from `transition`/`memory`/`commit_mode` via
+    `hold_decision` rather than taking it as a separate argument, so the one
+    formula stays the only source of truth.
     """
     if skill not in ("handoff", "precompact"):
         return []
@@ -601,8 +608,13 @@ def compose_directives(
         second = lib.sdd_directive(root_s)
     commit = lib.commit_directive() if commit_mode == "with-commit" else ""
     parts = [part for part in (memory.text, second, commit) if part]
+    held = hold_decision(
+        transition, memory=bool(memory.text), commit=commit_mode == "with-commit"
+    )
     if held:
         parts.append(lib.arming_directive())
+    else:
+        parts.append(lib.closing_directive(skill, typed=transition.typed))
     return parts
 
 
@@ -654,7 +666,7 @@ def main() -> int:
         transition, memory=bool(memory.text), commit=commit_mode == "with-commit"
     )
     compose_sentinel(root, transition, continuation, held=held)
-    parts = compose_directives(skill, root, commit_mode, memory, held=held)
+    parts = compose_directives(skill, root, commit_mode, memory, transition)
     print_output(parts)
     return 0
 
