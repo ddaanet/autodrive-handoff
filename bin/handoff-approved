@@ -63,8 +63,9 @@ handoff_drive_arm "$drive" armed \
 
 printf 'handoff: %s armed; it runs at the end of this turn.\n\n' "$DRIVE_KIND"
 
-# The closing line for each kind a held sentinel can carry — restart never
-# holds. Literal rather than composed in Python, so this command stays one file
+# The closing line for each kind a held sentinel can carry. Restart never holds,
+# and neither does autoname, so a held rename is always an untyped handoff and
+# a held clear or compact always a driven one. Literal rather than composed in Python, so this command stays one file
 # rewrite (NFR1); it must match closing_directive() in
 # scripts/_checkpoint_lib.py byte for byte. Single-quoted: the backticks are
 # literal text, and double-quoting them would open command substitution.

@@ -204,52 +204,12 @@ pick up per the task file" ]
     [ "$(head -n1 "$repo/.claude/autodrive")" = "armed" ]
 }
 
-# After arming, handoff-approved prints the status fact, a blank line, then
-# the closing line for the kind (Item 3.2/1). Slice 2 pins the closing
-# line's exact text against closing_directive(); here it is only the
-# per-kind shape (prepared vs driven) that is asserted.
-@test "handoff-approved: status fact then closing content — rename" {
-    repo="$(make_repo)"
-    printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" rename "/rename A Title" \
-        > "$repo/.claude/autodrive"
-    run_approved "$repo"
-    [ "$status" -eq 0 ]
-    [ "${lines[0]}" = "handoff: rename armed; it runs at the end of this turn." ]
-    # `lines` drops empty lines, so the blank separator is asserted on $output.
-    [[ "$output" == "${lines[0]}"$'\n\n'* ]]
-    [[ "$output" == *"Ready to /clear"* ]]
-}
-
-@test "handoff-approved: status fact then closing content — clear" {
-    repo="$(make_repo)"
-    printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" clear "/rename A Title" /clear \
-        > "$repo/.claude/autodrive"
-    run_approved "$repo"
-    [ "$status" -eq 0 ]
-    [ "${lines[0]}" = "handoff: clear armed; it runs at the end of this turn." ]
-    [[ "$output" == "${lines[0]}"$'\n\n'* ]]
-    [[ "$output" == *"End on one line"* ]]
-    [[ "$output" == *"Clear armed"* ]]
-    [[ "$output" != *"Ready to"* ]]
-}
-
-@test "handoff-approved: status fact then closing content — compact" {
-    repo="$(make_repo)"
-    printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" compact "/compact" \
-        > "$repo/.claude/autodrive"
-    run_approved "$repo"
-    [ "$status" -eq 0 ]
-    [ "${lines[0]}" = "handoff: compact armed; it runs at the end of this turn." ]
-    [[ "$output" == "${lines[0]}"$'\n\n'* ]]
-    [[ "$output" == *"End on one line"* ]]
-    [[ "$output" == *"Compaction armed"* ]]
-    [[ "$output" != *"Ready to"* ]]
-}
-
-# Drift guard between the closing line's two producers: bin/handoff-approved's
-# literal `case` arms and closing_directive() in scripts/_checkpoint_lib.py.
-# Both sides pass through `$(...)`, so trailing newlines are the one
-# difference these rows cannot see.
+# After arming, handoff-approved prints the status fact, a blank line, then the
+# closing line for the kind. The closing line is literal in the script and
+# composed by closing_directive() in scripts/_checkpoint_lib.py for the
+# checkpoint's own path; these rows are what keeps the two producers from
+# drifting. Both sides pass through `$(...)`, so trailing newlines are the one
+# difference they cannot see.
 expected_closing() {
     local skill="$1" typed="$2"
     PYTHONPATH="$repo_root/scripts" python3 -c "
@@ -258,7 +218,7 @@ print(closing_directive('$skill', typed=$typed), end='')
 "
 }
 
-@test "handoff-approved: closing line matches the checkpoint's, per kind — rename" {
+@test "handoff-approved: status fact, blank line, the checkpoint's closing line — rename" {
     repo="$(make_repo)"
     printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" rename "/rename A Title" \
         > "$repo/.claude/autodrive"
@@ -266,11 +226,10 @@ print(closing_directive('$skill', typed=$typed), end='')
     [ "$status" -eq 0 ]
     expected="$(expected_closing handoff False)"
     [ -n "$expected" ]
-    closing="${output#*$'\n\n'}"
-    [ "$closing" = "$expected" ]
+    [ "$output" = "handoff: rename armed; it runs at the end of this turn."$'\n\n'"$expected" ]
 }
 
-@test "handoff-approved: closing line matches the checkpoint's, per kind — clear" {
+@test "handoff-approved: status fact, blank line, the checkpoint's closing line — clear" {
     repo="$(make_repo)"
     printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" clear "/rename A Title" /clear \
         > "$repo/.claude/autodrive"
@@ -278,11 +237,10 @@ print(closing_directive('$skill', typed=$typed), end='')
     [ "$status" -eq 0 ]
     expected="$(expected_closing handoff True)"
     [ -n "$expected" ]
-    closing="${output#*$'\n\n'}"
-    [ "$closing" = "$expected" ]
+    [ "$output" = "handoff: clear armed; it runs at the end of this turn."$'\n\n'"$expected" ]
 }
 
-@test "handoff-approved: closing line matches the checkpoint's, per kind — compact" {
+@test "handoff-approved: status fact, blank line, the checkpoint's closing line — compact" {
     repo="$(make_repo)"
     printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" compact "/compact" \
         > "$repo/.claude/autodrive"
@@ -290,8 +248,7 @@ print(closing_directive('$skill', typed=$typed), end='')
     [ "$status" -eq 0 ]
     expected="$(expected_closing precompact True)"
     [ -n "$expected" ]
-    closing="${output#*$'\n\n'}"
-    [ "$closing" = "$expected" ]
+    [ "$output" = "handoff: compact armed; it runs at the end of this turn."$'\n\n'"$expected" ]
 }
 
 # ==========================================================================

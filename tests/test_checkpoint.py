@@ -2066,8 +2066,7 @@ def precompact_payload(commit: str) -> dict[str, object]:
 def assert_stdout_is_closing(
     result: subprocess.CompletedProcess[str], skill: str, *, typed: bool
 ) -> None:
-    """Assert stdout is exactly the (skill, typed) closing line plus one
-    newline.
+    """Assert stdout is exactly the closing line plus one newline.
 
     First asserts the line itself is non-empty, so this cannot pass against an
     unwritten closing_directive.
@@ -2290,15 +2289,23 @@ def test_precompact_parts_print_in_order(tmp_path: Path) -> None:
     add_sdd_ledger(repo)
     sdd_directive = lib.sdd_directive(str(repo))
     commit_act = lib.commit_directive()
+    closing = lib.closing_directive("precompact", typed=False)
     assert sdd_directive
     assert commit_act
+    assert closing
     result = run_checkpoint(repo, precompact_payload("with-commit"))
     assert result.returncode == 0
+    # Untyped precompact types nothing, so it stays armed with memory dirty:
+    # the one cell where the closing line follows every other part.
+    first_line = (repo / ".claude" / "autodrive").read_text().splitlines()[0]
+    assert first_line == "armed"
     out = result.stdout
     memory_index = out.index("gitlore memory has uncommitted changes")
     sdd_index = out.index(sdd_directive)
     commit_index = out.index(commit_act)
-    assert memory_index < sdd_index < commit_index
+    closing_index = out.index(closing)
+    assert memory_index < sdd_index < commit_index < closing_index
+    assert out.endswith(closing + "\n")
 
 
 # ==========================================================================
@@ -2599,7 +2606,8 @@ def test_closing_line_names_what_the_boundary_is_ready_for(
     out = result.stdout
     assert out.startswith("End on one line")
     if typed:
-        assert "armed" in out
+        name = "Clear" if skill == "handoff" else "Compaction"
+        assert f"{name} armed" in out
         assert "Ready to" not in out
     elif skill == "handoff":
         assert "Ready to /clear" in out
