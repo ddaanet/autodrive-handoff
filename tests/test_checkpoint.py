@@ -1817,14 +1817,16 @@ def test_untyped_handoff_still_types_rename_so_it_holds_too(tmp_path: Path) -> N
     assert "handoff-approved" in result.stdout
 
 
+@pytest.mark.parametrize("commit", ["without-commit", "with-commit"])
 def test_sentinel_typing_nothing_arms_even_with_memory_gate_pending(
     tmp_path: Path,
+    commit: str,
 ) -> None:
     repo = make_gitlore_repo(tmp_path)
     dirty_memory(repo)
     payload = {
         "skill": "precompact",
-        "commit": "without-commit",
+        "commit": commit,
         "compact": False,
         "continue": None,
         "task": task_clear(),
@@ -2378,6 +2380,20 @@ def test_typed_with_commit_clean_memory_is_held(
     commit_index = out.index(commit_act)
     arming_index = out.index(arming)
     assert commit_index < arming_index
+
+
+def test_untyped_handoff_with_commit_clean_memory_is_armed(tmp_path: Path) -> None:
+    repo = make_gitlore_repo(tmp_path)
+    assert lib.memory_directive(str(repo), "with-commit").text == ""
+    commit_act = lib.commit_directive()
+    assert commit_act
+    payload = handoff_payload("with-commit")
+    result = run_checkpoint(repo, payload)
+    assert result.returncode == 0
+    first_line = (repo / ".claude" / "autodrive").read_text().splitlines()[0]
+    assert first_line == "armed"
+    assert "handoff-approved" not in result.stdout
+    assert commit_act in result.stdout
 
 
 # ==========================================================================
