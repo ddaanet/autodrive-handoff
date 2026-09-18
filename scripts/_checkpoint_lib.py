@@ -156,6 +156,19 @@ def memory_directive(root: str, mode: str) -> str:
     return common + specific
 
 
+def commit_directive() -> str:
+    """Return the commit act, printed under "with-commit".
+
+    Names no git verb — the request may call for an amend, folding into a commit
+    in progress, or a fresh one, and the checkpoint does not know which. States
+    the act and its place: after the checkpoint, before what follows here runs.
+    """
+    return _printf_lines(
+        "Make the commit now, in whatever shape the request called for, "
+        "before what follows here runs."
+    )
+
+
 def arming_directive() -> str:
     """Return the instruction that releases a held transition."""
     return _printf_lines(

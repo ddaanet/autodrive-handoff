@@ -14,9 +14,10 @@ import os
 import shutil
 import subprocess
 import sys
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 
+import _checkpoint_lib as lib
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -2195,6 +2196,45 @@ def test_without_commit_keeps_standalone_two_file_instruction(tmp_path: Path) ->
     assert "two file writes" in result.stdout
     assert "Write the trigger file (any content)" in result.stdout
     assert "carries the memory" not in result.stdout
+
+
+# ==========================================================================
+# Commit act
+# ==========================================================================
+
+
+@pytest.mark.parametrize("payload_fn", [handoff_payload, precompact_payload])
+def test_with_commit_prints_the_commit_act(
+    tmp_path: Path, payload_fn: Callable[[str], dict[str, object]]
+) -> None:
+    repo = make_gitlore_repo(tmp_path)
+    commit_act = lib.commit_directive()
+    assert commit_act
+    result = run_checkpoint(repo, payload_fn("with-commit"))
+    assert result.returncode == 0
+    assert commit_act in result.stdout
+    assert "commit" in commit_act.lower()
+
+
+@pytest.mark.parametrize("payload_fn", [handoff_payload, precompact_payload])
+def test_without_commit_prints_no_commit_act(
+    tmp_path: Path, payload_fn: Callable[[str], dict[str, object]]
+) -> None:
+    repo = make_gitlore_repo(tmp_path)
+    commit_act = lib.commit_directive()
+    assert commit_act
+    result = run_checkpoint(repo, payload_fn("without-commit"))
+    assert result.returncode == 0
+    assert commit_act not in result.stdout
+
+
+def test_commit_act_names_no_git_verb() -> None:
+    commit_act = lib.commit_directive()
+    assert commit_act
+    lowered = commit_act.lower()
+    assert "git commit" not in lowered
+    assert "--amend" not in lowered
+    assert "git add" not in lowered
 
 
 # ==========================================================================

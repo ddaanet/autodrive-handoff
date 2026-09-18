@@ -520,14 +520,26 @@ def write_manifest(root: Path, manifest_lines: list[str]) -> None:
     (root / ".claude" / "checkpoint-manifest").write_text(content, encoding="utf-8")
 
 
-def compose_directives(skill: str, root: Path, commit_mode: str) -> tuple[str, str]:
-    """Return the (memory, second) directive pair for this boundary."""
+def compose_directives(
+    skill: str, root: Path, commit_mode: str
+) -> tuple[str, str, str]:
+    """Return the (memory, second, commit) directive parts for this boundary.
+
+    In print order: memory, then the todo boundary/SDD nudge, then the commit
+    act — present only under "with-commit". "" (never printed) for
+    autoname/restart, which carry no commit mode.
+    """
     root_s = str(root)
     if skill == "handoff":
-        return lib.memory_directive(root_s, commit_mode), lib.todo_boundary(root_s)
-    if skill == "precompact":
-        return lib.memory_directive(root_s, commit_mode), lib.sdd_directive(root_s)
-    return "", ""
+        memory = lib.memory_directive(root_s, commit_mode)
+        second = lib.todo_boundary(root_s)
+    elif skill == "precompact":
+        memory = lib.memory_directive(root_s, commit_mode)
+        second = lib.sdd_directive(root_s)
+    else:
+        memory, second = "", ""
+    commit = lib.commit_directive() if commit_mode == "with-commit" else ""
+    return memory, second, commit
 
 
 def _read_back_drive(drive_path: Path) -> tuple[bool, str]:
@@ -577,14 +589,14 @@ def compose_sentinel(
     return memory
 
 
-def print_output(memory: str, second: str) -> None:
-    """Print the directive output (FR9): memory, second, both, or neither."""
-    if memory and second:
-        sys.stdout.write(f"{memory}\n\n{second}\n")
-    elif memory:
-        sys.stdout.write(f"{memory}\n")
-    elif second:
-        sys.stdout.write(f"{second}\n")
+def print_output(memory: str, second: str, commit: str) -> None:
+    """Print the directive output (FR9).
+
+    The non-empty parts, in order, blank-line separated.
+    """
+    parts = [part for part in (memory, second, commit) if part]
+    if parts:
+        sys.stdout.write("\n\n".join(parts) + "\n")
 
 
 def main() -> int:
@@ -618,9 +630,9 @@ def main() -> int:
         manifest_lines = task_plan.manifest_lines + todo_plan.manifest_lines
     write_manifest(root, manifest_lines)
 
-    memory, second = compose_directives(skill, root, commit_mode)
+    memory, second, commit = compose_directives(skill, root, commit_mode)
     memory = compose_sentinel(root, transition, continuation, memory)
-    print_output(memory, second)
+    print_output(memory, second, commit)
     return 0
 
 
