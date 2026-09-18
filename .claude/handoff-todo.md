@@ -1,3 +1,3 @@
-## Open decisions
+## Remaining
 
-- Whether Step 3 of `skills/handoff/SKILL.md` and step 5 of `skills/precompact/SKILL.md` should still end a prepared `with-commit` boundary on "Ready to commit, then /clear" (resp. /compact), now that Step 2 has the agent make the commit the ask implies in the same turn, after the checkpoint.
+- Fix two dangling wikilinks in the ddaanet memory tier, both introduced on this repo's side before the tier merge: `[[errexit-blind-inside-test]]` in `memory/ddaanet/git-add-untracked-deletion.md` and `[[mutation-check-discipline]]` in `memory/ddaanet/sandbox-effects.md` — likely meant the `shell-scripting:shell-gotchas` and `craft:test-discipline` skills; confirm before swapping.
