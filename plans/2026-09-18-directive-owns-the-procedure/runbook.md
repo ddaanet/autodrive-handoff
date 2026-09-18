@@ -211,20 +211,19 @@ text, the two dangling wikilinks.
   `rename` → the prepared-handoff line; `clear` → the driven-handoff line;
   `compact` → the driven-precompact line. The text is literal in the script's
   final `printf`, per kind — `handoff-approved` calls no Python and keeps NFR1's
-  shape (one file rewritten, no git, no tmux); slice 3 is what holds the two
+  shape (one file rewritten, no git, no tmux); slice 2 is what holds the two
   producers together. Requirements: R8. Depends on: Item 3.1
   Slices:
-  1. `handoff-approved: rename prints the status fact then Ready to /clear` —
-     a held `rename` sentinel written as three lines (`held
-     $CLAUDE_CODE_SESSION_ID`, `rename`, `/rename A Title`), run through the
-     existing `run_approved` helper, which separates stderr: asserts output
-     line 1 is `handoff: rename armed; it runs at the end of this turn.` and
-     the output contains `Ready to /clear`.
-  2. `handoff-approved: clear and compact print the driven line` — one row per
-     kind, each over that kind's sentinel shape (`clear`: state, kind,
-     `/rename A Title`, `/clear`; `compact`: state, kind, `/compact`): asserts
-     the status fact on line 1, `End on one line` present, `Ready to` absent.
-  3. `handoff-approved: closing line matches the checkpoint's, per kind` — for
+  1. `handoff-approved: status fact then closing content, per kind` — one row
+     per kind, each over that kind's sentinel shape (`rename`: `held
+     $CLAUDE_CODE_SESSION_ID`, `rename`, `/rename A Title`; `clear`: state,
+     kind, `/rename A Title`, `/clear`; `compact`: state, kind, `/compact`),
+     run through the existing `run_approved` helper, which separates stderr:
+     every row asserts output line 1 is `handoff: <kind> armed; it runs at
+     the end of this turn.`; `rename`'s row additionally asserts the output
+     contains `Ready to /clear`; `clear` and `compact` assert `End on one
+     line` present and `Ready to` absent.
+  2. `handoff-approved: closing line matches the checkpoint's, per kind` — for
      each of the three kinds, asserts everything after the blank line equals
      what a `python3 -c` one-liner prints for `closing_directive` with the
      matching `(skill, typed)`, run with `PYTHONPATH="$repo_root/scripts"`:
