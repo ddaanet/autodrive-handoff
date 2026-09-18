@@ -3,8 +3,10 @@
 #
 # The checkpoint writes a transition-typing sentinel in state `held` when a
 # memory approval is outstanding, so the keystrokes cannot reach a pane whose
-# turn is about to end on that question. This is the one command that leaves
-# that state, and the directive the checkpoint printed is what names it.
+# turn is about to end on that question, or when a typed transition follows a
+# commit this turn owes, so it cannot run over a commit that failed. This is
+# the one command that leaves that state, and the directive the checkpoint
+# printed is what names it.
 #
 # The whole script, not a shim over scripts/: it is short enough to read at
 # once, its only caller would be its own shim, and bin/* is already inside the

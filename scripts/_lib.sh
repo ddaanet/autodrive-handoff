@@ -137,8 +137,9 @@ _handoff_drive_prose() {
 # the remaining lines need no separator, and each kind keeps its own rules:
 #
 #   held <session-id>
-#            written, but not yet the turn's to arm: a memory approval is
-#            outstanding, and handoff-approved is what releases it. The session
+#            written, but not yet the turn's to arm: a memory approval or,
+#            ahead of a typed transition, the turn's commit is outstanding,
+#            and handoff-approved is what releases it. The session
 #            id is the one whose approval it waits on — the state that outlives
 #            its turn by design is the one that must say whose turn
 #   armed    the transition this turn's Stop will arm
