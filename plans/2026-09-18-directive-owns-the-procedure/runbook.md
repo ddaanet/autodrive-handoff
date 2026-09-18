@@ -216,6 +216,14 @@ text, the two dangling wikilinks.
   - `closing_directive(skill: str, typed: bool) -> str` — never `""`; opens
     with `End on one line`
 
+  > **List revision after slice 3.1/1.** `typed` is keyword-only —
+  > `closing_directive(skill: str, *, typed: bool)` — since the positional
+  > form fails ruff FBT001/FBT003. `compose_directives` takes
+  > `ending: Ending` (a `NamedTuple` of `held` and `typed`, in
+  > `checkpoint.py`) in place of `*, held`, keeping one hold decision under
+  > ruff's five-parameter cap. Item 3.2 slice 2's one-liner calls
+  > `closing_directive("<skill>", typed=<bool>)`.
+
 - Item 3.2: `bin/handoff-approved`, `tests/checkpoint.bats` — after arming, print
   the existing status fact, a blank line, then the closing line for the kind:
   `rename` → the prepared-handoff line; `clear` → the driven-handoff line;
