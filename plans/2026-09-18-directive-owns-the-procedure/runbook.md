@@ -9,7 +9,23 @@ verbatim; everything else is prose, and no test or implementation body is
 written here.
 
 Every executor runs `just precommit` before its commit, calls bare `pytest`
-(never `uv run`), and places entry points before the definitions they use.
+(never `uv run`), places entry points before the definitions they use, and
+keeps no compat alias or back-compat wrapper for a signature this runbook
+changes — every in-repo caller is patched in the same item.
+
+Standing rules for the test rows below:
+
+- `import _checkpoint_lib as lib` resolves in `tests/` because `pyproject.toml`
+  sets `pythonpath = ["scripts"]`; `tests/test_checkpoint.py` does not import it
+  today, so the import is added by Item 1.1.
+- **Every assertion that compares stdout against a `lib.*()` return value first
+  asserts that value is non-empty.** A function returning `""` satisfies a
+  containment check and scores index 0 in an ordering check, so the row would
+  pass against an unwritten function.
+- Skills load at the point of use: `craft:directive-writing` for every new
+  agent-facing string (Items 1.1, 3.1, 3.2, 4.1, 4.2), `craft:test-discipline`
+  for every mutation-checked row (phases 1–3), `plugin-craft:skill-authoring`
+  for phase 4, `craft:design-doc-writing` for phase 5.
 
 | Requirement | Phase | Items | Notes |
 |---|---|---|---|
@@ -23,6 +39,7 @@ Every executor runs `just precommit` before its commit, calls bare `pytest`
 | R8 `handoff-approved` prints status fact then closing line, per kind | 3 | 3.2 | same text as R7's producer |
 | R9 both skill bodies take the three-step shape | 4 | 4.1, 4.2 | |
 | R10 design doc, changelog, index, `CLAUDE.md` | 5 | 5.1–5.3 | |
+| R11 `autoname`/`restart` still print nothing | 3 | 3.1 | two existing rows keep `stdout == ""` |
 
 Out of scope: the sentinel grammar, `handoff_drive_read`, `stop-drive.sh`, the
 walker, the loaders, `autoname`/`restart` behaviour, the approval flow's own
@@ -33,76 +50,115 @@ text, the two dangling wikilinks.
 - Item 1.1: `scripts/_checkpoint_lib.py`, `scripts/checkpoint.py`,
   `tests/test_checkpoint.py` — the checkpoint composes an ordered list of parts
   and prints them blank-line separated. `memory_directive` reports whether its
-  text is the clause-file refusal. `compose_sentinel` receives the hold
+  text is the clause-file refusal, and `compose_directives` returns that
+  refusal as the whole list when it is. `compose_sentinel` receives the hold
   decision and appends no text; `hold_decision` carries today's rule unchanged
-  (`K and M`, a refusal counting as `M`). Call sites: `checkpoint.py:main`,
-  `compose_directives`, `compose_sentinel`, `print_output`;
-  `_checkpoint_lib.py:memory_directive`, `arming_directive`.
+  (`K and M`, a refusal counting as `M`). `main`'s order becomes: resolve the
+  memory part, compute `held` from it via `hold_decision`, `compose_sentinel`
+  with that decision, `compose_directives` with the memory part and that
+  decision, `print_output`. `memory_directive` is called once, by `main`; the
+  sentinel read-back through `handoff_drive_read` is unchanged. Call sites:
+  `checkpoint.py:main`, `compose_directives`, `compose_sentinel`,
+  `print_output`; `_checkpoint_lib.py:memory_directive`, `arming_directive`.
   Requirements: R1, R2, R3, R4, R5.
   Slices:
-  1. External contract, over `handoff_payload`/`precompact_payload` on a clean
-     `make_gitlore_repo`, parametrized on both skills:
-     `test_with_commit_prints_the_commit_act` — asserts stdout contains
-     `lib.commit_directive()` verbatim; `test_without_commit_prints_no_commit_act`
-     — same fixture, asserts it is absent. `test_commit_act_names_no_git_verb` —
-     asserts `commit_directive()` contains none of `git commit`, `--amend`,
-     `git add`.
-  2. Ordering: `test_handoff_parts_print_in_order` — dirty memory, `with-commit`,
-     untyped: asserts index of `gitlore memory has uncommitted changes` < index
-     of `lib.todo_boundary(root)` < index of `lib.commit_directive()`.
-     `test_precompact_parts_print_in_order` — same with a live SDD ledger and
-     `lib.sdd_directive(root)` in the middle position.
+  1. External contract, over the existing `handoff_payload(commit)` /
+     `precompact_payload(commit)` helpers on a clean `make_gitlore_repo`
+     (clean memory, no ledger), parametrized on both skills:
+     `test_with_commit_prints_the_commit_act` — asserts `lib.commit_directive()`
+     is non-empty and appears in stdout verbatim, and that its lowercased text
+     contains the word `commit` (the anchor that keeps a stub from passing);
+     `test_without_commit_prints_no_commit_act` — same fixture, asserts that
+     same non-empty text is absent from stdout.
+     `test_commit_act_names_no_git_verb` — asserts `commit_directive()` is
+     non-empty and contains none of `git commit`, `--amend`, `git add`.
+  2. Ordering, each row over `make_gitlore_repo` + `dirty_memory` +
+     `add_sdd_ledger` — the ledger is what makes the middle part non-empty, and
+     without it both assertions below are vacuous or false:
+     `test_handoff_parts_print_in_order` — `with-commit`, untyped: asserts
+     `lib.todo_boundary(root)` and `lib.commit_directive()` are both non-empty,
+     then index of `gitlore memory has uncommitted changes` < index of
+     `lib.todo_boundary(root)` < index of `lib.commit_directive()`.
+     `test_precompact_parts_print_in_order` — same fixture and shape with
+     `lib.sdd_directive(root)`, likewise asserted non-empty, in the middle
+     position.
   3. `test_with_commit_memory_text_drops_nothing_further` — dirty memory,
      `with-commit`: asserts `nothing further` absent from lowercased stdout;
-     the existing `carries the memory` row stays green.
+     the existing `carries the memory` row (`test_checkpoint.py:2187`) stays
+     green, and so does the load-bearing negative that `with-commit` output
+     never names the trigger file.
   4. Arming moved and reworded: `test_arming_instruction_follows_every_other_part`
-     — typed clear, `without-commit`, dirty memory: asserts `held sess-checkpoint`
-     on line 1, index of `lib.todo_boundary(root)` < index of
-     `lib.arming_directive()`, stdout ends with `arming_directive()`, and
-     `Once that is done` absent. `test_arming_text_refers_to_everything_above`
-     — asserts `arming_directive()` contains `everything above` and
+     — typed clear, `without-commit`, dirty memory, `add_sdd_ledger`: asserts
+     `lib.todo_boundary(root)` and `lib.arming_directive()` are non-empty, line
+     1 of the sentinel is `held sess-checkpoint`, index of
+     `lib.todo_boundary(root)` < index of `lib.arming_directive()`, stdout with
+     trailing newlines stripped ends with `arming_directive()` likewise
+     stripped (`print_output` adds one newline past the last part, so a bare
+     `endswith` on the unstripped text is false), and `Once that is done` is
+     absent. Nothing follows the arming instruction in this cell in any later
+     phase either: the closing line of Item 3.1 prints only when the sentinel
+     is not held. `test_arming_text_refers_to_everything_above` — asserts
+     `arming_directive()` is non-empty and contains `everything above` and
      `handoff-approved`.
   5. Refusal alone: `test_clause_refusal_is_followed_by_no_commit_or_arming` —
-     clause key unset, dirty memory, `with-commit`, typed clear: asserts stdout
-     contains `gitlore.memoryApprovalClauseFile`, contains neither
+     clause key unset (`git config --unset gitlore.memoryApprovalClauseFile`,
+     as in `test_clause_file_unset_names_key_and_restart`), dirty memory,
+     `with-commit`, typed clear: asserts stdout contains
+     `gitlore.memoryApprovalClauseFile`, contains neither the (non-empty)
      `commit_directive()` nor `arming_directive()`, and line 1 of the sentinel
-     is still `held sess-checkpoint`. Mutation check, recorded in the slice
-     report: print parts 3–4 regardless of `refusal` ⟹ this row alone reds.
+     is still `held sess-checkpoint` — the refusal suppresses the printed parts
+     and not the hold. Mutation check, recorded in the slice report: print
+     parts 3–4 regardless of `refusal` ⟹ this row alone reds.
   Interfaces:
   - `class MemoryPart(NamedTuple)` — `text: str`, `refusal: bool`; `text == ""`
-    when nothing is owed
+    when nothing is owed, and `refusal` is true only for the clause-file refusal
   - `memory_directive(root: str, mode: str) -> MemoryPart`
-  - `commit_directive() -> str`
-  - `arming_directive() -> str`
-  - `hold_decision(transition: Transition, *, memory: bool, commit: bool) -> bool`
-  - `compose_directives(skill: str, root: Path, commit_mode: str, *, held: bool) -> list[str]`
-    — non-empty parts only, in print order
+  - `commit_directive() -> str` — never `""`
+  - `arming_directive() -> str` — never `""`
+  - `hold_decision(transition: Transition, *, memory: bool) -> bool` — today's
+    rule, `transition.cmds and memory`; the `commit` parameter arrives in Item
+    2.1, where it is first read (ruff runs `select = ["ALL"]` over `scripts/`
+    with `ARG` un-ignored, so an unused parameter fails `just precommit`)
+  - `compose_directives(skill: str, root: Path, commit_mode: str, memory: MemoryPart, *, held: bool) -> list[str]`
+    — non-empty parts only, in print order; `[memory.text]` alone when
+    `memory.refusal`; `[]` for `autoname`/`restart`
   - `compose_sentinel(root: Path, transition: Transition, continuation: str, *, held: bool) -> None`
-  - `print_output(parts: list[str]) -> None`
+  - `print_output(parts: list[str]) -> None` — writes nothing for an empty list
+    (the four silent boundary rows assert `stdout == ""` until Item 3.1);
+    otherwise the parts joined by two newlines plus one trailing newline, which
+    is byte-identical to today's output in the memory-only, second-only and
+    memory+second cases
 
 ## Phase 2: Hold rule (type: tdd)
 
 - Item 2.1: `scripts/checkpoint.py:hold_decision`, `tests/test_checkpoint.py` —
   widen the rule to `(K and M) or (T and C)`. Post-phase-1 state: `main`
-  already passes `commit=` and prints the arming instruction from `held`, so
-  this item changes one predicate and adds rows beside
-  `test_typed_transition_no_memory_gate_armed_no_arming_instruction`, over that
-  row's fixture. Requirements: R6. Depends on: Item 1.1
+  already computes `held` through `hold_decision` and the composition already
+  prints the arming instruction from it, so this item adds the `commit`
+  parameter and its `main` call-site argument, changes one predicate, and adds
+  rows beside `test_typed_transition_no_memory_gate_armed_no_arming_instruction`
+  (`test_checkpoint.py:1780` — handoff, `without-commit`, `clear: true`, clean
+  memory), over that row's fixture with `commit` flipped. No phase-1 row
+  depends on the widened rule: every phase-1 cell that holds holds through the
+  first disjunct. Requirements: R6. Depends on: Item 1.1
   Slices:
   1. `test_typed_with_commit_clean_memory_is_held` — parametrized: handoff
      `clear: true`, precompact `compact: true`; clean memory, `with-commit`:
-     asserts line 1 is `held sess-checkpoint`, and index of `commit_directive()`
-     < index of `arming_directive()` in stdout. Mutation check: drop the second
-     disjunct ⟹ this row alone reds.
+     asserts `lib.commit_directive()` and `lib.arming_directive()` are
+     non-empty, line 1 of the sentinel is `held sess-checkpoint`, and index of
+     `commit_directive()` < index of `arming_directive()` in stdout. Mutation
+     check: drop the second disjunct ⟹ this row alone reds.
   2. `test_untyped_handoff_with_commit_clean_memory_is_armed` — same fixture,
      `clear: false`: asserts line 1 is `armed`, `handoff-approved` absent from
-     stdout, `commit_directive()` present. Mutation check: widen the second
-     disjunct to `K and C` ⟹ this row alone reds.
-  3. `test_sentinel_typing_nothing_arms_even_with_memory_gate_pending` gains a
-     `with-commit` parameter: asserts `armed` under both modes.
+     stdout, and the non-empty `commit_directive()` present. Mutation check:
+     widen the second disjunct to `K and C` ⟹ this row alone reds.
+  3. `test_sentinel_typing_nothing_arms_even_with_memory_gate_pending`
+     (`test_checkpoint.py:1819` — precompact, `compact: false`, dirty memory)
+     gains a `with-commit` parameter: asserts `armed` under both modes. `T` is
+     false there, so the second disjunct must not fire on the FR-G marker.
   Interfaces:
   - `hold_decision(transition: Transition, *, memory: bool, commit: bool) -> bool`
-    — signature unchanged from Item 1.1; true iff
+    — widened from Item 1.1's `(transition, *, memory)`; true iff
     `(transition.cmds and memory) or (transition.typed and commit)`
 
 ## Phase 3: Closing line (type: tdd)
@@ -114,45 +170,67 @@ text, the two dangling wikilinks.
   one named line. Requirements: R5, R7. Depends on: Item 2.1
   Slices:
   1. External contract: a helper `assert_stdout_is_closing(result, skill, typed)`
-     asserts stdout equals `lib.closing_directive(skill, typed)` plus one
-     newline. The four silent boundary rows
-     (`test_not_gitlore_managed_silent`, `test_gitlore_clean_memory_silent`,
-     `test_submodule_registered_not_materialized_silent`,
-     `test_flat_path_ledger_alone_precompact_silent`) move from
-     `stdout == ""` to the helper. The `autoname` and `restart` rows keep
-     `stdout == ""`.
+     asserts `lib.closing_directive(skill, typed)` is non-empty and that stdout
+     equals it plus one newline. The four silent boundary rows
+     (`test_not_gitlore_managed_silent`:2063,
+     `test_gitlore_clean_memory_silent`:2070,
+     `test_submodule_registered_not_materialized_silent`:2077,
+     `test_flat_path_ledger_alone_precompact_silent`:2328 — all
+     `without-commit`, clean memory, untyped, so all armed) move from
+     `stdout == ""` to the helper. The two non-boundary rows
+     (`test_restart_never_holds_even_with_dirty_memory`:1956,
+     `test_autoname_against_dirty_memory_no_directive_at_all`:2026) keep
+     `stdout == ""` — R11.
   2. Content per cell, `test_closing_line_names_what_the_boundary_is_ready_for`,
-     parametrized: `("handoff", False)` contains `Ready to /clear`;
-     `("precompact", False)` contains `Ready to /compact`; `("handoff", True)`
-     and `("precompact", True)` contain `armed` and neither `Ready to` string.
-     All four open with `End on one line`.
+     parametrized over the four `(skill, typed)` cells and exercised through a
+     checkpoint run in each (not a direct call on the function), all
+     `without-commit` on a clean `make_gitlore_repo` so the sentinel is armed
+     and the closing line is the only part: `("handoff", False)` contains
+     `Ready to /clear`; `("precompact", False)` contains `Ready to /compact`;
+     `("handoff", True)` and `("precompact", True)` contain `armed` and neither
+     `Ready to` string. All four open with `End on one line`.
   3. `test_held_sentinel_prints_no_closing_line` — over phase 2 slice 1's
      fixture: asserts `End on one line` absent. Mutation check: print the
      closing line regardless of `held` ⟹ this row alone reds.
   4. `test_clause_refusal_is_followed_by_no_commit_or_arming` gains the
      assertion that `End on one line` is absent.
+  5. The refusal against an *armed* sentinel — the cell where slice 4's held
+     fixture proves nothing, since a held sentinel suppresses the closing line
+     on its own: `test_refusal_prints_alone_when_not_held` — untyped precompact
+     (`compact: false`, so the sentinel types nothing and is `armed`), dirty
+     memory, clause key unset, `with-commit`: asserts stdout is exactly the
+     refusal text plus one newline — no commit act, no closing line. Mutation
+     check: drop the `refusal` guard from the closing-line branch ⟹ this row
+     alone reds.
   Interfaces:
-  - `closing_directive(skill: str, typed: bool) -> str`
+  - `closing_directive(skill: str, typed: bool) -> str` — never `""`; opens
+    with `End on one line`
 
 - Item 3.2: `bin/handoff-approved`, `tests/checkpoint.bats` — after arming, print
   the existing status fact, a blank line, then the closing line for the kind:
   `rename` → the prepared-handoff line; `clear` → the driven-handoff line;
-  `compact` → the driven-precompact line. Requirements: R8.
-  Depends on: Item 3.1
+  `compact` → the driven-precompact line. The text is literal in the script's
+  final `printf`, per kind — `handoff-approved` calls no Python and keeps NFR1's
+  shape (one file rewritten, no git, no tmux); slice 3 is what holds the two
+  producers together. Requirements: R8. Depends on: Item 3.1
   Slices:
   1. `handoff-approved: rename prints the status fact then Ready to /clear` —
-     held `rename` sentinel: asserts output line 1 is
-     `handoff: rename armed; it runs at the end of this turn.` and the output
-     contains `Ready to /clear`.
+     a held `rename` sentinel written as three lines (`held
+     $CLAUDE_CODE_SESSION_ID`, `rename`, `/rename A Title`), run through the
+     existing `run_approved` helper, which separates stderr: asserts output
+     line 1 is `handoff: rename armed; it runs at the end of this turn.` and
+     the output contains `Ready to /clear`.
   2. `handoff-approved: clear and compact print the driven line` — one row per
-     kind: asserts the status fact on line 1, `End on one line` present,
-     `Ready to` absent.
+     kind, each over that kind's sentinel shape (`clear`: state, kind,
+     `/rename A Title`, `/clear`; `compact`: state, kind, `/compact`): asserts
+     the status fact on line 1, `End on one line` present, `Ready to` absent.
   3. `handoff-approved: closing line matches the checkpoint's, per kind` — for
      each of the three kinds, asserts everything after the blank line equals
-     what `python3` prints for `closing_directive` with the matching
-     `(skill, typed)`: `rename` → `("handoff", False)`, `clear` →
-     `("handoff", True)`, `compact` → `("precompact", True)`. This row is what
-     keeps the two producers from drifting.
+     what a `python3 -c` one-liner prints for `closing_directive` with the
+     matching `(skill, typed)`, run with `PYTHONPATH="$repo_root/scripts"`:
+     `rename` → `("handoff", False)`, `clear` → `("handoff", True)`, `compact`
+     → `("precompact", True)`. Assert that printed text is non-empty first.
+     This row is what keeps the two producers from drifting.
   Interfaces:
   - `bin/handoff-approved` stdout on success: the status fact
     `handoff: <kind> armed; it runs at the end of this turn.`, one blank line,
@@ -163,15 +241,38 @@ text, the two dangling wikilinks.
 - Item 4.1: `skills/handoff/SKILL.md` — rewrite the protocol to three steps:
   write durable learnings to memory; decide the payload and run
   `handoff-checkpoint` with no other tool call between; follow what it prints,
-  in order. Remove the tense clause (line 55), step 2's commit-placement
-  paragraphs, step 3 and its matrix. Keep the three deciding questions, the
-  templates, the seam section, and every anti-pattern. Body stays under 2000
-  words. Requirements: R9. Depends on: Item 3.2
+  in order. Remove: the tense clause inside **Capture memory** ("Under
+  `with-commit`, memory bodies state present-tense truth — the change described
+  as made rather than proposed", lines 53–55); step 2's commit-placement
+  paragraph ("When the ask includes a commit, make it **after** the
+  checkpoint…", lines 112–117); step 3 "Say what the boundary is ready for" and
+  its prepared/driven matrix (lines 119–125). Rewrite, do not keep, step 2's
+  opening claim that "`handoff-checkpoint` prints nothing when there is nothing
+  further to do" (line 103): at a boundary it now always prints at least the
+  closing line. Keep: the three decisions step 1
+  owns that the payload cannot derive (typed transition, continuation, commit
+  awareness), the "checkpoint owns the decision — do not re-derive or verify
+  it" prohibition, the non-zero-exit instruction (it names the offending field
+  on stderr; fix the payload and retry), the file templates, the seam section,
+  and every anti-pattern. Body stays under 2000 words. Requirements: R9.
+  Depends on: Item 3.2
   Model: opus
-- Item 4.2: `skills/precompact/SKILL.md` — the same three-step shape; remove the
-  tense clause (lines 41 and 47), step 4's commit placement, step 5. Keep its
-  deferral to `handoff/SKILL.md` for templates and the seam, and its
-  anti-patterns. Requirements: R9. Depends on: Item 3.2
+- Item 4.2: `skills/precompact/SKILL.md` — the same three-step shape. Remove:
+  the tense paragraph in step 1 ("Under `with-commit`, memory bodies state
+  present-tense truth…", lines 41–44) and the tense clause in step 2 ("in the
+  tense the commit answer sets", line 47); step **3**'s closing
+  commit-placement paragraph ("When the ask includes a commit, make it
+  **after** this call…", lines 104–108 — it sits at the end of step 3, not
+  step 4); step 5 and its matrix (lines 119–124). Rewrite, do not keep, the two
+  claims that the checkpoint can be silent at a boundary — "Nothing printed →
+  nothing further to do" (line 110) and "The normal case … is one silent
+  checkpoint call and one line of reply" (lines 126–127): the closing line is
+  now always printed, and the normal case is one checkpoint call whose output
+  is that one line. Keep: step 4's
+  do-not-re-derive prohibition and non-zero-exit instruction, the deferral to
+  `handoff/SKILL.md` for templates and the seam, and every anti-pattern —
+  including the one about padding the closing line into a summary, which now
+  guards text the checkpoint supplies. Requirements: R9. Depends on: Item 3.2
   Model: opus
 
 ## Phase 5: Records (type: general)
@@ -183,20 +284,37 @@ text, the two dangling wikilinks.
   rejected uniform predicate and the one cell where they differ, the
   refusal-alone rule, why memory leaves the deciding step one commit after
   entering it. The 2026-09-17 entry takes a `> **Superseded 2026-09-18**`
-  blockquote scoped as the outline's per-file section states, naming what
-  stands. Requirements: R10. Depends on: Item 4.2
+  blockquote scoped to exactly three things: the ordering reason ("after the
+  commit answer because that answer sets the tense"), the tense clause restored
+  to precompact, and the commit placement's home in skill prose ("It now sits
+  in Step 2"). It names what still stands — memory before the checkpoint, and
+  the commit after the checkpoint and before arming, same rule with a new
+  carrier. Requirements: R10. Depends on: Items 4.1, 4.2
   Model: opus
-- Item 5.2: `docs/design.md` — rewrite §"Held: a transition an approval has not
-  released" for the two-disjunct rule, and the directive-composition prose for
-  the five-part order and the two closing-line producers. Present tense, no
-  dated entry. Requirements: R10. Depends on: Item 5.1
+- Item 5.2: `docs/design.md` — four passages, all present tense, no dated
+  entry: **FR9** (line 156, "the memory gate and the SDD ledger nudge … memory
+  first") for the five-part order; §"Held: a transition an approval has not
+  released" (line 593) for the two-disjunct rule and for the arming
+  instruction no longer being composed onto the memory directive; the
+  closing line's two producers (checkpoint when not held, `handoff-approved`
+  when held) and the refusal-alone rule, stated where the directive
+  composition is described; and §"Deciding makes no tool call but the memory
+  writes" (line 926), whose "after the commit answer that sets their tense"
+  and its surrounding placement argument the tense clause's removal reverses.
+  Requirements: R10. Depends on: Item 5.1
   Model: opus
 - Item 5.3: `CLAUDE.md` — the `handoff` and `precompact` skill bullets (three
-  steps), the `checkpoint.py` paragraph stating the old `held` condition, the
-  `_checkpoint_lib.py` bullet (new functions; "Couples only to the two IPC
-  filenames" gains `gitlore.memoryApprovalClauseFile`), the `handoff-approved`
-  bullet, the `tests/test_checkpoint.py` count and the new mutation-checked
-  rows, the changelog pointers. Requirements: R10. Depends on: Item 5.2
+  steps), the `precompact` bullet's directive list (line 109), the
+  `checkpoint.py` paragraph stating the old `held` condition **and** its
+  sentence "with the arming instruction composed onto the memory directive when
+  the sentinel is held" (line 596), the `_checkpoint_lib.py` bullet (new
+  functions `commit_directive`/`closing_directive`, `memory_directive`'s
+  `MemoryPart` return, the dropped "Nothing further" sentence; "Couples only to
+  the two IPC filenames" (line 667) gains `gitlore.memoryApprovalClauseFile`),
+  the `handoff-approved` bullet, the `tests/test_checkpoint.py` count (line
+  848, currently "140 tests" — re-derive it by collecting the suite, do not
+  add to the stated figure) and the new mutation-checked rows, the changelog
+  pointers. Requirements: R10. Depends on: Item 5.2
   Model: opus
 
 ## After the last item
