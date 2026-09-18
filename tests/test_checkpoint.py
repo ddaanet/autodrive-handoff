@@ -2349,6 +2349,38 @@ def test_clause_refusal_is_followed_by_no_commit_or_arming(tmp_path: Path) -> No
 
 
 # ==========================================================================
+# Hold rule
+# ==========================================================================
+
+
+@pytest.mark.parametrize(
+    ("payload_fn", "typed_field"),
+    [(handoff_payload, "clear"), (precompact_payload, "compact")],
+)
+def test_typed_with_commit_clean_memory_is_held(
+    tmp_path: Path,
+    payload_fn: Callable[[str], dict[str, object]],
+    typed_field: str,
+) -> None:
+    repo = make_gitlore_repo(tmp_path)
+    assert lib.memory_directive(str(repo), "with-commit").text == ""
+    commit_act = lib.commit_directive()
+    arming = lib.arming_directive()
+    assert commit_act
+    assert arming
+    payload = payload_fn("with-commit")
+    payload[typed_field] = True
+    result = run_checkpoint(repo, payload)
+    assert result.returncode == 0
+    first_line = (repo / ".claude" / "autodrive").read_text().splitlines()[0]
+    assert first_line == "held sess-checkpoint"
+    out = result.stdout
+    commit_index = out.index(commit_act)
+    arming_index = out.index(arming)
+    assert commit_index < arming_index
+
+
+# ==========================================================================
 # Composition
 # ==========================================================================
 

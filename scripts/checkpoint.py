@@ -520,12 +520,18 @@ def write_manifest(root: Path, manifest_lines: list[str]) -> None:
     (root / ".claude" / "checkpoint-manifest").write_text(content, encoding="utf-8")
 
 
-def hold_decision(transition: Transition, *, memory: bool) -> bool:
+def hold_decision(transition: Transition, *, memory: bool, commit: bool) -> bool:
     """Return whether the transition is held pending an explicit release.
 
-    Held iff the sentinel types anything and a memory directive is owed.
+    Held iff the sentinel types anything and a memory directive is owed, or the
+    transition is typed and this turn carries a commit. The second disjunct is
+    scoped to `typed` rather than to "types anything": what it protects under a
+    commit is work from a transition that would run over a failed commit, and an
+    untyped handoff's only keystroke is `/rename`, whose misfire costs nothing —
+    holding that case too would add an approval call to the common "handoff and
+    commit" invocation for no protected state.
     """
-    return bool(transition.cmds) and memory
+    return (bool(transition.cmds) and memory) or (transition.typed and commit)
 
 
 def compose_sentinel(
@@ -644,7 +650,9 @@ def main() -> int:
     memory = lib.MemoryPart("", refusal=False)
     if skill in ("handoff", "precompact"):
         memory = lib.memory_directive(str(root), commit_mode)
-    held = hold_decision(transition, memory=bool(memory.text))
+    held = hold_decision(
+        transition, memory=bool(memory.text), commit=commit_mode == "with-commit"
+    )
     compose_sentinel(root, transition, continuation, held=held)
     parts = compose_directives(skill, root, commit_mode, memory, held=held)
     print_output(parts)
