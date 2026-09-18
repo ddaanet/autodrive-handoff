@@ -520,51 +520,10 @@ def write_manifest(root: Path, manifest_lines: list[str]) -> None:
     (root / ".claude" / "checkpoint-manifest").write_text(content, encoding="utf-8")
 
 
-def compose_directives(
-    skill: str, root: Path, commit_mode: str, memory: str, *, held: bool
-) -> list[str]:
-    """Return the ordered, non-empty directive parts for this boundary.
-
-    Print order: memory, then the todo boundary/SDD nudge, then the commit act
-    (present only under "with-commit"), then the arming instruction (present
-    only when held, and always last). "" for the second/commit parts under
-    autoname/restart, which carry no commit mode and no second-part source.
-    """
-    root_s = str(root)
-    if skill == "handoff":
-        second = lib.todo_boundary(root_s)
-    elif skill == "precompact":
-        second = lib.sdd_directive(root_s)
-    else:
-        second = ""
-    commit = lib.commit_directive() if commit_mode == "with-commit" else ""
-    parts = [part for part in (memory, second, commit) if part]
-    if held:
-        parts.append(lib.arming_directive())
-    return parts
-
-
-def _read_back_drive(drive_path: Path) -> tuple[bool, str]:
-    """Read the just-composed sentinel back through handoff_drive_read.
-
-    handoff_drive_read stays bash (unmoved) — the single implementation of the
-    sentinel grammar.
-    """
-    script = (
-        f"source {shlex.quote(str(_LIB_SH))}; "
-        f"handoff_drive_read {shlex.quote(str(drive_path))} && exit 0; "
-        'printf "%s" "$DRIVE_ERR" >&2; exit 1'
-    )
-    result = subprocess.run(
-        ["bash", "-c", script], capture_output=True, text=True, check=False
-    )
-    return result.returncode == 0, result.stderr
-
-
 def hold_decision(transition: Transition, *, memory: bool) -> bool:
     """Return whether the transition is held pending an explicit release.
 
-    Today's rule: a transition that types anything, with memory owed.
+    Held iff the sentinel types anything and a memory directive is owed.
     """
     return bool(transition.cmds) and memory
 
@@ -572,9 +531,10 @@ def hold_decision(transition: Transition, *, memory: bool) -> bool:
 def compose_sentinel(
     root: Path, transition: Transition, continuation: str, *, held: bool
 ) -> None:
-    """Write the sentinel and read it back through the bash parser.
+    """Write the sentinel, held or armed per `held`, and read it back.
 
-    Appends no text — the caller decides what to print, via compose_directives.
+    The read-back goes through the bash parser; a sentinel it rejects is removed
+    and reported as a transition error.
     """
     state = "armed"
     if held:
@@ -594,6 +554,47 @@ def compose_sentinel(
             "transition",
             f"composed a sentinel this version cannot read back — {drive_err}",
         )
+
+
+def _read_back_drive(drive_path: Path) -> tuple[bool, str]:
+    """Read the just-composed sentinel back through handoff_drive_read.
+
+    handoff_drive_read stays bash (unmoved) — the single implementation of the
+    sentinel grammar.
+    """
+    script = (
+        f"source {shlex.quote(str(_LIB_SH))}; "
+        f"handoff_drive_read {shlex.quote(str(drive_path))} && exit 0; "
+        'printf "%s" "$DRIVE_ERR" >&2; exit 1'
+    )
+    result = subprocess.run(
+        ["bash", "-c", script], capture_output=True, text=True, check=False
+    )
+    return result.returncode == 0, result.stderr
+
+
+def compose_directives(
+    skill: str, root: Path, commit_mode: str, memory: str, *, held: bool
+) -> list[str]:
+    """Return the ordered, non-empty directive parts for this boundary.
+
+    Print order: memory, then the todo boundary/SDD nudge, then the commit act
+    (present only under "with-commit"), then the arming instruction (present
+    only when held, and always last). [] under autoname/restart, which owe no
+    memory, carry no commit mode and are never held.
+    """
+    root_s = str(root)
+    if skill == "handoff":
+        second = lib.todo_boundary(root_s)
+    elif skill == "precompact":
+        second = lib.sdd_directive(root_s)
+    else:
+        second = ""
+    commit = lib.commit_directive() if commit_mode == "with-commit" else ""
+    parts = [part for part in (memory, second, commit) if part]
+    if held:
+        parts.append(lib.arming_directive())
+    return parts
 
 
 def print_output(parts: list[str]) -> None:
