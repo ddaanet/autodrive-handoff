@@ -2313,7 +2313,7 @@ def test_arming_instruction_follows_every_other_part(tmp_path: Path) -> None:
     assert "Once that is done" not in out
 
 
-def test_arming_text_refers_to_everything_above(tmp_path: Path) -> None:
+def test_arming_text_refers_to_everything_above() -> None:
     arming = lib.arming_directive()
     assert arming
     assert "everything above" in arming

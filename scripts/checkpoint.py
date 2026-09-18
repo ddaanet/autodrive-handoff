@@ -580,20 +580,19 @@ def compose_directives(
 
     Print order: memory, then the todo boundary/SDD nudge, then the commit act
     (present only under "with-commit"), then the arming instruction (present
-    only when held, and always last). [] under autoname/restart, which owe no
-    memory, carry no commit mode and are never held. The clause-file refusal
-    (`memory.refusal`) suppresses every other part — the checkpoint prints it
-    alone.
+    only when held, and always last). [] under autoname/restart. The clause-file
+    refusal (`memory.refusal`) suppresses every other part — the checkpoint
+    prints it alone.
     """
+    if skill not in ("handoff", "precompact"):
+        return []
     if memory.refusal:
         return [memory.text]
     root_s = str(root)
     if skill == "handoff":
         second = lib.todo_boundary(root_s)
-    elif skill == "precompact":
-        second = lib.sdd_directive(root_s)
     else:
-        second = ""
+        second = lib.sdd_directive(root_s)
     commit = lib.commit_directive() if commit_mode == "with-commit" else ""
     parts = [part for part in (memory.text, second, commit) if part]
     if held:

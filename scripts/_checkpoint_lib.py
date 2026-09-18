@@ -3,8 +3,9 @@
 
 Also reached via the --is-empty-body CLI by write-stage.sh (bash, unmoved). Port
 of _checkpoint-lib.sh — see docs/changelog/2026-08-10-python-split.md. Each
-directive function takes the git worktree root and returns its directive text,
-or "" when silent; the caller decides whether to print it.
+directive function returns its directive text, or "" when silent
+(`memory_directive` wraps its text in a `MemoryPart`); the caller decides
+whether to print it.
 """
 
 from __future__ import annotations
@@ -84,6 +85,9 @@ def _resolve_approval_clause(root: str) -> str | None:
 
 def memory_directive(root: str, mode: str) -> MemoryPart:
     """Return the gitlore memory-commit directive, or an empty part.
+
+    When memory is dirty but the approval clause cannot be read, the part is the
+    clause-file refusal instead, flagged `refusal=True`.
 
     `mode` ("with-commit"/"without-commit") selects which of gitlore's two
     commit paths the agent is told to take. The with-commit text never mentions
@@ -177,7 +181,9 @@ def commit_directive() -> str:
     Names no git verb: the request may call for an amend or a fresh commit, and
     the checkpoint does not know which.
     """
-    return _printf_lines("Now make the commit the request called for.")
+    return _printf_lines(
+        "Once everything above is done, make the commit the request called for."
+    )
 
 
 def arming_directive() -> str:
