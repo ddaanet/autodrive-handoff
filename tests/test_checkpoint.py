@@ -2286,6 +2286,41 @@ def test_precompact_parts_print_in_order(tmp_path: Path) -> None:
 
 
 # ==========================================================================
+# Arming
+# ==========================================================================
+
+
+def test_arming_instruction_follows_every_other_part(tmp_path: Path) -> None:
+    repo = make_gitlore_repo(tmp_path)
+    dirty_memory(repo)
+    add_sdd_ledger(repo)
+    todo_boundary = lib.todo_boundary(str(repo))
+    arming = lib.arming_directive()
+    assert todo_boundary
+    assert arming
+    payload = handoff_payload("without-commit")
+    payload["clear"] = True
+    result = run_checkpoint(repo, payload)
+    assert result.returncode == 0
+    first_line = (repo / ".claude" / "autodrive").read_text().splitlines()[0]
+    assert first_line == "held sess-checkpoint"
+    out = result.stdout
+    assert out.count(arming) == 1
+    todo_index = out.index(todo_boundary)
+    arming_index = out.index(arming)
+    assert todo_index < arming_index
+    assert out.rstrip("\n").endswith(arming.rstrip("\n"))
+    assert "Once that is done" not in out
+
+
+def test_arming_text_refers_to_everything_above(tmp_path: Path) -> None:
+    arming = lib.arming_directive()
+    assert arming
+    assert "everything above" in arming
+    assert "handoff-approved" in arming
+
+
+# ==========================================================================
 # Composition
 # ==========================================================================
 

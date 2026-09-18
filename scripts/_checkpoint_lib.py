@@ -167,7 +167,7 @@ def commit_directive() -> str:
 def arming_directive() -> str:
     """Return the instruction that releases a held transition."""
     return _printf_lines(
-        "Once that is done, run `handoff-approved` (Bash, no arguments)."
+        "Once everything above is done, run `handoff-approved` (Bash, no arguments)."
     )
 
 

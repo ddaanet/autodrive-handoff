@@ -521,25 +521,27 @@ def write_manifest(root: Path, manifest_lines: list[str]) -> None:
 
 
 def compose_directives(
-    skill: str, root: Path, commit_mode: str
-) -> tuple[str, str, str]:
-    """Return the (memory, second, commit) directive parts for this boundary.
+    skill: str, root: Path, commit_mode: str, memory: str, *, held: bool
+) -> list[str]:
+    """Return the ordered, non-empty directive parts for this boundary.
 
-    In print order: memory, then the todo boundary/SDD nudge, then the commit
-    act — present only under "with-commit". "" (never printed) for
-    autoname/restart, which carry no commit mode.
+    Print order: memory, then the todo boundary/SDD nudge, then the commit act
+    (present only under "with-commit"), then the arming instruction (present
+    only when held, and always last). "" for the second/commit parts under
+    autoname/restart, which carry no commit mode and no second-part source.
     """
     root_s = str(root)
     if skill == "handoff":
-        memory = lib.memory_directive(root_s, commit_mode)
         second = lib.todo_boundary(root_s)
     elif skill == "precompact":
-        memory = lib.memory_directive(root_s, commit_mode)
         second = lib.sdd_directive(root_s)
     else:
-        memory, second = "", ""
+        second = ""
     commit = lib.commit_directive() if commit_mode == "with-commit" else ""
-    return memory, second, commit
+    parts = [part for part in (memory, second, commit) if part]
+    if held:
+        parts.append(lib.arming_directive())
+    return parts
 
 
 def _read_back_drive(drive_path: Path) -> tuple[bool, str]:
@@ -559,19 +561,25 @@ def _read_back_drive(drive_path: Path) -> tuple[bool, str]:
     return result.returncode == 0, result.stderr
 
 
+def hold_decision(transition: Transition, *, memory: bool) -> bool:
+    """Return whether the transition is held pending an explicit release.
+
+    Today's rule: a transition that types anything, with memory owed.
+    """
+    return bool(transition.cmds) and memory
+
+
 def compose_sentinel(
-    root: Path, transition: Transition, continuation: str, memory: str
-) -> str:
+    root: Path, transition: Transition, continuation: str, *, held: bool
+) -> None:
     """Write the sentinel and read it back through the bash parser.
 
-    Returns the memory directive, with the arming instruction appended when the
-    sentinel holds.
+    Appends no text — the caller decides what to print, via compose_directives.
     """
     state = "armed"
-    if transition.cmds and memory:
+    if held:
         session_id = os.environ.get("CLAUDE_CODE_SESSION_ID", "")
         state = f"held {session_id}"
-        memory = memory + "\n\n" + lib.arming_directive()
 
     drive_path = root / HANDOFF_REL_DRIVE
     sentinel_lines = [state, transition.kind, *transition.cmds]
@@ -586,15 +594,14 @@ def compose_sentinel(
             "transition",
             f"composed a sentinel this version cannot read back — {drive_err}",
         )
-    return memory
 
 
-def print_output(memory: str, second: str, commit: str) -> None:
+def print_output(parts: list[str]) -> None:
     """Print the directive output (FR9).
 
-    The non-empty parts, in order, blank-line separated.
+    The non-empty parts, in order, blank-line separated. Writes nothing for an
+    empty list.
     """
-    parts = [part for part in (memory, second, commit) if part]
     if parts:
         sys.stdout.write("\n\n".join(parts) + "\n")
 
@@ -630,9 +637,13 @@ def main() -> int:
         manifest_lines = task_plan.manifest_lines + todo_plan.manifest_lines
     write_manifest(root, manifest_lines)
 
-    memory, second, commit = compose_directives(skill, root, commit_mode)
-    memory = compose_sentinel(root, transition, continuation, memory)
-    print_output(memory, second, commit)
+    memory = ""
+    if skill in ("handoff", "precompact"):
+        memory = lib.memory_directive(str(root), commit_mode)
+    held = hold_decision(transition, memory=bool(memory))
+    compose_sentinel(root, transition, continuation, held=held)
+    parts = compose_directives(skill, root, commit_mode, memory, held=held)
+    print_output(parts)
     return 0
 
 
