@@ -102,8 +102,8 @@ is omitting a key, or adding one inside an action object.
 
 `handoff-checkpoint` prints what is left to do at this boundary. Carry out
 each part in the order printed; each one waits for everything above it, and
-whatever you run may print the next part. The checkpoint owns the decision — do
-not re-derive or verify it. A non-zero exit names the offending field on
+whatever you run may print the next part. The checkpoint owns the decision —
+do not re-derive or verify it. A non-zero exit names the offending field on
 stderr — fix the payload and retry.
 
 ## File templates

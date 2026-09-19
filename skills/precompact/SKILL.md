@@ -14,7 +14,7 @@ itself, and the prompt that resumes the work on the far side.
 
 ### Step 1: Write durable learnings to memory
 
-If durable learnings surfaced this session, capture them in auto-memory now.
+If durable learnings surfaced this session, write them to auto-memory now.
 Skip if nothing durable surfaced — do not force. These writes are the only
 tool calls allowed before `handoff-checkpoint`.
 
