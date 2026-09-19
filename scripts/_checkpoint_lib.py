@@ -199,15 +199,16 @@ def closing_directive(skill: str, *, typed: bool) -> str:
     Prepared (untyped): the line names what the boundary is ready for. Driven
     (typed): the line says the transition is armed and runs when the turn ends.
     Quoted either way, so the agent relays the line rather than paraphrasing it.
+    Anchored like the commit act and the arming instruction, so it is not
+    appended to a reply still asking for the memory directive's approval.
     `bin/handoff-approved` prints the same text after its own status fact.
     """
+    lead = "Once everything above is done, end on one line:"
     if typed:
         name = "Clear" if skill == "handoff" else "Compaction"
-        return _printf_lines(
-            f"End on one line: `{name} armed — it runs when this turn ends.`"
-        )
+        return _printf_lines(f"{lead} `{name} armed — it runs when this turn ends.`")
     boundary = "/clear" if skill == "handoff" else "/compact"
-    return _printf_lines(f"End on one line: `Ready to {boundary}`.")
+    return _printf_lines(f"{lead} `Ready to {boundary}`.")
 
 
 def ledger_path(root: str) -> str | None:

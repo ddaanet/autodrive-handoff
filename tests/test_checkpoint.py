@@ -2367,7 +2367,7 @@ def test_clause_refusal_is_followed_by_no_commit_or_arming(tmp_path: Path) -> No
     assert boundary not in out
     assert commit_act not in out
     assert arming not in out
-    assert "End on one line" not in out
+    assert "end on one line" not in out.lower()
     first_line = (repo / ".claude" / "autodrive").read_text().splitlines()[0]
     assert first_line == "held sess-checkpoint"
 
@@ -2604,7 +2604,7 @@ def test_closing_line_names_what_the_boundary_is_ready_for(
     assert first_line == "armed"
     assert_stdout_is_closing(result, skill, typed=typed)
     out = result.stdout
-    assert out.startswith("End on one line")
+    assert out.startswith("Once everything above is done, end on one line: `")
     if typed:
         name = "Clear" if skill == "handoff" else "Compaction"
         assert f"{name} armed" in out
@@ -2632,7 +2632,7 @@ def test_held_sentinel_prints_no_closing_line(
     assert result.returncode == 0
     first_line = (repo / ".claude" / "autodrive").read_text().splitlines()[0]
     assert first_line == "held sess-checkpoint"
-    assert "End on one line" not in result.stdout
+    assert "end on one line" not in result.stdout.lower()
 
 
 def test_refusal_prints_alone_when_not_held(tmp_path: Path) -> None:

@@ -72,12 +72,12 @@ printf 'handoff: %s armed; it runs at the end of this turn.\n\n' "$DRIVE_KIND"
 # shellcheck disable=SC2016
 case "$DRIVE_KIND" in
     rename)
-        printf '%s\n' 'End on one line: `Ready to /clear`.'
+        printf '%s\n' 'Once everything above is done, end on one line: `Ready to /clear`.'
         ;;
     clear)
-        printf '%s\n' 'End on one line: `Clear armed — it runs when this turn ends.`'
+        printf '%s\n' 'Once everything above is done, end on one line: `Clear armed — it runs when this turn ends.`'
         ;;
     compact)
-        printf '%s\n' 'End on one line: `Compaction armed — it runs when this turn ends.`'
+        printf '%s\n' 'Once everything above is done, end on one line: `Compaction armed — it runs when this turn ends.`'
         ;;
 esac

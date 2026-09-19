@@ -224,6 +224,16 @@ text, the two dangling wikilinks.
   > ruff's five-parameter cap. Item 3.2 slice 2's one-liner calls
   > `closing_directive("<skill>", typed=<bool>)`.
 
+  > **Revised after the Phase 3 checkpoint, 2026-09-19.** The closing line
+  > opens `Once everything above is done, end on one line:` rather than
+  > `End on one line`, in both producers. Untyped precompact with dirty memory
+  > is armed, so its closing line follows a memory directive that asks for
+  > approval. Unanchored, it could end the reply that asks the question, while
+  > the commit act and the arming instruction both already wait for
+  > everything above them. Raised in `reports/phase-3-corrector.md`, taken by
+  > my human partner. The absence rows now match `end on one line`
+  > case-insensitively.
+
 - Item 3.2: `bin/handoff-approved`, `tests/checkpoint.bats` — after arming, print
   the existing status fact, a blank line, then the closing line for the kind:
   `rename` → the prepared-handoff line; `clear` → the driven-handoff line;
