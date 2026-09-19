@@ -1,5 +1,18 @@
 # Memory moves inside the deciding step (2026-09-17)
 
+> **Superseded 2026-09-18** (see [The directive owns the
+> procedure](2026-09-18-the-directive-owns-the-procedure.md)) — scoped to
+> three things. First, the ordering reason: memory no longer comes "after the
+> commit answer because that answer sets the tense". The tense clause is gone,
+> since `gitlore:memory-writing` owns that rule unconditionally, and memory is
+> now its own Step 1, ahead of every decision. Second, the memory-tense clause
+> this entry restored to precompact is removed again, from both skills. Third,
+> the commit placement's home in skill prose ("It now sits in Step 2"): the
+> checkpoint now prints the commit act, and a typed `with-commit` transition is
+> held until `handoff-approved`. Two things still stand. Memory is written
+> before the checkpoint. The commit lands after the checkpoint and before
+> arming: the rule is the same, only its carrier changed.
+
 `skills/handoff/SKILL.md` opened its protocol with "Make zero tool calls
 before invoking `handoff-checkpoint`", then placed Step 2, "Update memory",
 between the two deciding steps it governed. Writing memory is tool calls, so
