@@ -15,10 +15,15 @@ file — this skill's job is deciding what goes in them.
 
 ## Protocol
 
-### Step 1: Decide, then checkpoint
+### Step 1: Write durable learnings to memory
 
-**Make no tool call before `handoff-checkpoint` other than memory
-writes.**
+If durable learnings surfaced this session, write them to auto-memory now.
+Skip if nothing durable surfaced — do not force. These writes are the only
+tool calls allowed before `handoff-checkpoint`.
+
+### Step 2: Decide, then checkpoint
+
+**Make no tool call between deciding and `handoff-checkpoint`.**
 
 Decide the following from the request and the state of the work. None of
 them has a default: considering the question is the whole contribution.
@@ -49,11 +54,6 @@ visibly into the composer, so reprinting it in the reply shows it twice.
 The ask stops at the transition. A commit named in a continuation prompt is
 on the far side of it, where no live session owes it, so it is not evidence
 of `with-commit`.
-
-**Capture memory.** If durable learnings surfaced this session, write them
-to auto-memory now, before the checkpoint. Under `with-commit`, memory
-bodies state present-tense truth — the change described as made rather
-than proposed. Skip if nothing durable surfaced — do not force.
 
 Then decide the content:
 
@@ -98,31 +98,13 @@ untouched: a scratch list must survive a call that is silent about it, so
 `old_string` to appear in it exactly once. `null` is an error on both, as
 is omitting a key, or adding one inside an action object.
 
-### Step 2: Follow the directive
+### Step 3: Follow what it prints, in order
 
-`handoff-checkpoint` prints nothing when there is nothing further to do. If
-it prints a directive, follow it exactly; the directive carries its own
-instructions. The checkpoint owns the decision — do not re-derive or verify
-it. A non-zero exit names the offending field on stderr — fix the payload
-and retry.
-
-A driven transition whose directive needs an answer is written but not
-armed, and the directive says how to release it.
-
-When the ask includes a commit, make it **after** the checkpoint, so it
-carries the handoff files the checkpoint staged, and **before** the
-transition is armed: before the turn ends when no directive holds the
-transition, and before `handoff-approved` when one does. Arm first and the
-clear runs instead of the commit — under `with-commit`, stranding memory
-owed to a commit nobody makes.
-
-### Step 3: Say what the boundary is ready for
-
-Once nothing is left awaiting an answer, end on one line. Where the
-transition is prepared, name what comes next: under `with-commit` the
-commit then the clear — "Ready to commit, then /clear" — and under
-`without-commit` the clear alone. Where it is driven, one line saying the
-clear is armed, and the turn ends.
+`handoff-checkpoint` prints what is left to do at this boundary. Carry out
+each part in the order printed; each one waits for everything above it, and
+whatever you run may print the next part. The checkpoint owns the decision — do
+not re-derive or verify it. A non-zero exit names the offending field on
+stderr — fix the payload and retry.
 
 ## File templates
 
@@ -212,7 +194,7 @@ newline would submit it early.
 ## Anti-patterns
 
 - Reading `handoff-task.md`, `handoff-todo.md`, or any other file "to
-  check" before deciding what to write in Step 1. The decision
+  check" before deciding what to write in Step 2. The decision
   comes from the conversation already in context — re-reading duplicates
   what `handoff-checkpoint` does internally, against state that may be
   stale by the time it writes.
