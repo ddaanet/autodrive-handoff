@@ -95,8 +95,9 @@ turn), then a blank line, then the closing line as literal text for each kind.
 It chooses the text from `DRIVE_KIND` alone, which is enough: `autoname` never
 holds, so a held `rename` is always an untyped handoff, and a held `clear` or
 `compact` is always driven. The text is literal rather than composed in Python,
-so the command stays a single file rewrite (NFR1). A bats row compares it with
-`closing_directive()`, so the two producers cannot drift apart.
+so the command stays a single file rewrite (NFR1). One bats row per kind
+compares it with `closing_directive()`, so the two producers cannot drift
+apart.
 
 Both producers open the line with "Once everything above is done, end on one
 line: `…`". The anchor was added after the Phase 3 checkpoint review, with my

@@ -24,8 +24,13 @@ approval → write gitlore's message file, plus the trigger file only under
 `with-commit` the message file alone leaves the memory commit to the parent
 commit's pre-commit hook — one call instead of two, which is the whole gain,
 since both paths end with one parent commit carrying the source change and
-the gitlink bump. See `docs/changelog/2026-07-25-commit-awareness.md` and
-`docs/changelog/2026-07-27-one-channel-one-writer.md`.
+the gitlink bump. After the memory part the checkpoint prints the rest of
+the procedure for the one cell the call is in — the commit act under
+`with-commit`, then either the instruction to run `handoff-approved` (held)
+or the closing line the reply ends on — so the skills state none of it. See
+`docs/changelog/2026-07-25-commit-awareness.md`,
+`docs/changelog/2026-07-27-one-channel-one-writer.md` and
+`docs/changelog/2026-09-18-the-directive-owns-the-procedure.md`.
 
 **Two boundaries, two skills, one flow.** One skill per boundary — `handoff`
 for `/clear`, `precompact` for `/compact` — and the `skill` field names it,
@@ -235,7 +240,7 @@ empty and removed: see `docs/changelog/2026-07-22-a-place-for-the-todo-list.md`,
   and submitting a prompt into what it opens are separate decisions, and the
   payload carries them as separate fields. `held` alone carries an owner on
   line 1 (`held <session-id>`) — it is the one state that outlives the turn
-  that wrote it, and the approval it waits on arrives in that session or not at
+  that wrote it, and the release it waits on comes from that session or not at
   all; `armed` and `pending` reject one rather than ignoring it. Both ends
   check it: `handoff-approved` refuses another session's held file, and
   `report-watcher-failure.sh` sweeps it as abandoned. The state is reported,
@@ -472,11 +477,13 @@ empty and removed: see `docs/changelog/2026-07-22-a-place-for-the-todo-list.md`,
   is swept too — it describes no transition anyone can complete, which is what
   the bare-filename gate did before the states were content. `held` is exempt,
   which is why the sweep names the states it takes rather than taking anything
-  that is not `pending`: a held transition waits on an approval whose answer
-  arrives at this very hook, so outliving the turn boundary is what it is for.
-  The exemption reaches exactly as far as that reason — a `held` file whose
-  owner is not the session at the prompt is reclassified as abandoned before
-  the sweep, since the session that would approve it is gone and
+  that is not `pending`: a held transition waits on a release that can come in
+  a later turn — a memory approval whose answer arrives at this very hook, or
+  a commit that failed and is retried — so outliving the turn boundary is what
+  it is for. The exemption reaches exactly as far as that reason — a `held`
+  file whose owner is not the session at the prompt is reclassified as
+  abandoned before the sweep, since the session that would release it is gone
+  and
   `handoff-approved` would otherwise arm it into this conversation.
   `UserPromptSubmit` is the
   exact discriminator; it cannot fire between the write and that turn's own
@@ -516,8 +523,8 @@ empty and removed: see `docs/changelog/2026-07-22-a-place-for-the-todo-list.md`,
   `bin/handoff-memory-probe` and `bin/handoff-precompact-probe`.
 - `bin/handoff-approved` — the one command that leaves the sentinel's `held`
   state, invoked by bare name off PATH when the checkpoint's arming
-  instruction says so. No stdin, no arguments. The whole script rather than a shim over
-  `scripts/`: it is short enough to read at once, its only caller would be its
+  instruction says so. No stdin, no arguments. The whole script rather than
+  a shim over `scripts/`: it is short enough to read at once, its only caller would be its
   own shim, and `bin/*` is already inside the `shellcheck -x` line, so sourcing
   `../scripts/_lib.sh` from here lints as it does from `scripts/`. Takes its
   root from `HANDOFF_ROOT`, injected the same way and by the same hook as

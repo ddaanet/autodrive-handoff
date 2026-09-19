@@ -284,8 +284,9 @@ the same session. See
 The checkpoint applies the writes, removes any file whose resulting body is
 empty, composes `.claude/autodrive` from the transition fields, leaves
 `.claude/checkpoint-manifest` behind, and prints on stdout what the agent
-does next (see "What the checkpoint prints" below). It **changes no git state** and touches tmux not at all — it
-queries git read-only and stops there: it runs in the agent's
+does next (see "What the checkpoint prints" below). It **changes no git
+state** and touches tmux not at all — it queries git read-only and stops
+there: it runs in the agent's
 sandboxed Bash, where `git add` can leave `.git/index.lock` behind and fail
 the *next* command (which in the routine wrap-up is the user's `/commit`),
 and where tmux is unreachable. `PostToolUse(Bash)` (`bash-post.sh`) consumes
@@ -601,9 +602,9 @@ Both boundary skills end the same way: follow what the checkpoint printed,
 in order. Everything the procedure turns on after that call — whether memory
 is owed, the commit mode, whether the sentinel types anything, whether the
 transition is typed — is already an input to the checkpoint, so it prints
-the one cell of that cross product the call is in rather than leaving the
-agent to locate itself in a prose matrix. The parts, each present only under
-its own condition:
+the procedure for the one cell of that cross product the call is in, and the
+skill bodies state none of it. The parts, each present only under its own
+condition:
 
 1. the memory directive, when the memory submodule is dirty;
 2. the todo boundary (`handoff`) or the SDD ledger nudge (`precompact`),
@@ -669,9 +670,10 @@ no transition but still types `/rename`, into the same pane, racing the same
 answer — so it holds too. What is exempt is the sentinel that types nothing
 at all: the bare compact marker, which would otherwise lose the expectation
 `SessionStart(compact)` gates the frame's re-injection on to a gate it has
-no reason to wait on. Only the memory gate defers: the ledger nudge and the
-todo boundary are acts, not questions, and `Stop` comes after them either
-way.
+no reason to wait on. Of the other parts, the ledger nudge and the todo
+boundary never hold: they are acts, not questions, and `Stop` comes after
+them either way. The commit act is the one that can fail, which is the
+second disjunct.
 
 The second disjunct guards the commit. Armed, a driven transition runs at
 the next `Stop` whatever happened in between, and a commit that fails ends
@@ -680,21 +682,21 @@ or compact over uncommitted work. Held, it runs only once `handoff-approved`
 is called, which the printed order puts after the commit. The disjunct is
 scoped to a typed transition rather than to any keystroke: an untyped
 handoff's only line is `/rename`, which costs nothing when it fires over a
-failed commit, and with clean memory there is no question for it to race.
-Holding it would add a `handoff-approved` call to "handoff and commit", the
-most common invocation, for no protected state.
+failed commit, and with clean memory there is no question for it to race
+(see "One hold predicate" under Rejected alternatives).
 
-`held` is the one state that outlives the turn that wrote it, so it is the
-one that names its owner — the session whose approval it waits on, carried
-on line 1 as `held <session-id>`. That approval arrives in that session or
+`held` is the one state that outlives the turn that wrote it: the approval
+is answered in a later turn, and a failed commit is retried in one. So it is
+the one that names its owner, the session whose release it waits on, carried
+on line 1 as `held <session-id>`. That release comes from that session or
 not at all: once another session is taking prompts in the repo, the file is
 abandoned, and `report-watcher-failure.sh` sweeps it exactly as it sweeps a
 stale `armed` one. Without the name it would stay armable indefinitely, and
 `handoff-approved` — which verifies the state and nothing else — would drive
 a dead session's `/rename` and `/clear` into a live conversation.
 `handoff_drive_arm` replaces line 1 whole, so leaving `held` drops the owner
-with it, which is right: past the approval there is no outstanding one, and
-no state below `held` accepts an owner.
+with it, which is right: past the release nothing is outstanding, and no
+state below `held` accepts an owner.
 
 ### Scoping
 
@@ -983,8 +985,8 @@ unconditional, and it decides for itself whether memory or a ledger is in
 play. When memory *is* pending, the directive asks for approval — a user
 response, which ends the turn — and a driven transition is therefore held
 and released only in the turn after the answer, or it would compact or
-clear away the conversation the answer applies to. Any rebalancing of the gitlore
-seam must preserve both halves.
+clear away the conversation the answer applies to. Any rebalancing of the
+gitlore seam must preserve both halves.
 
 **A context-size nudge was tried and dropped.** `PostToolBatch` fired once a
 session's prompt crossed a fixed threshold, injecting a directive naming
@@ -1010,8 +1012,8 @@ checkpoints, phrased as an imperative on the next action, with the reason
 stated in the matching `## Anti-patterns` entry. Memory writes are not an
 exception to it, because they are not part of that step: they are the step
 before it, the skill's first, and nothing in them waits on a decision — how
-memory is written is gitlore's rule in every mode, so the commit answer no
-longer sets their tense. They still precede the checkpoint call, whose
+memory is written is gitlore's rule in every mode, so the commit answer
+does not set their tense. They still precede the checkpoint call, whose
 memory directive keys on a dirty submodule. A commit the ask implies is not
 an exception either, because it comes after the checkpoint, as the commit
 act the checkpoint prints: after it so it carries the handoff files the
@@ -1138,8 +1140,8 @@ with the harness's own threshold auto-compaction, a real named feature).
 **One hold predicate** — hold whenever the sentinel types anything and
 either memory is owed or the turn carries a commit. A typed transition
 always types something and an untyped precompact types nothing, so this
-differs from the rule in exactly one cell: an untyped handoff under `with-commit` with clean memory.
-There it would hold a sentinel whose only line is `/rename`, protecting no
+differs from the rule in exactly one cell: an untyped handoff under
+`with-commit` with clean memory. There it would hold a sentinel whose only line is `/rename`, protecting no
 state — the first disjunct's reason, a `/rename` typed into a pane showing
 the approval question, does not transfer, since clean memory asks nothing —
 and it would add a `handoff-approved` call to the most common invocation. A
