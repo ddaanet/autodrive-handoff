@@ -153,8 +153,12 @@ collided as numbers.
 - **FR8** — The checkpoint composes `.claude/autodrive` from the transition
   fields — every line that gets typed, including the `/rename` that sets the
   session title.
-- **FR9** — Directive output — the memory gate and the SDD ledger nudge — is
-  composed in a fixed order, memory first.
+- **FR9** — Everything the agent does after the checkpoint call is printed
+  by the checkpoint, in a fixed order, each part present only under its own
+  condition: the memory directive, the todo boundary (`handoff`) or the SDD
+  ledger nudge (`precompact`), the commit act, then either the arming
+  instruction or the closing line. The skill's last step is to follow it in
+  order.
 
 **The driven transition.**
 
@@ -279,7 +283,8 @@ the same session. See
 
 The checkpoint applies the writes, removes any file whose resulting body is
 empty, composes `.claude/autodrive` from the transition fields, leaves
-`.claude/checkpoint-manifest` behind, and prints a directive on stdout. It **changes no git state** and touches tmux not at all — it
+`.claude/checkpoint-manifest` behind, and prints on stdout what the agent
+does next (see "What the checkpoint prints" below). It **changes no git state** and touches tmux not at all — it
 queries git read-only and stops there: it runs in the agent's
 sandboxed Bash, where `git add` can leave `.git/index.lock` behind and fail
 the *next* command (which in the routine wrap-up is the user's `/commit`),
@@ -590,26 +595,94 @@ next opens in that directory drains `.claude/autodrive.failed` at its own
 first `UserPromptSubmit`, however much later that is. A deferred report, not
 a lost one.
 
+### What the checkpoint prints
+
+Both boundary skills end the same way: follow what the checkpoint printed,
+in order. Everything the procedure turns on after that call — whether memory
+is owed, the commit mode, whether the sentinel types anything, whether the
+transition is typed — is already an input to the checkpoint, so it prints
+the one cell of that cross product the call is in rather than leaving the
+agent to locate itself in a prose matrix. The parts, each present only under
+its own condition:
+
+1. the memory directive, when the memory submodule is dirty;
+2. the todo boundary (`handoff`) or the SDD ledger nudge (`precompact`),
+   when a live ledger exists;
+3. the commit act, under `with-commit` — make the commit the request called
+   for. It names no git verb: the request may be an amend or a fresh commit,
+   and the checkpoint cannot tell which;
+4. the arming instruction, when the sentinel is held — run
+   `handoff-approved`;
+5. the closing line, when it is not — an instruction to end the reply on one
+   quoted line: `Ready to /clear` or `Ready to /compact` when prepared, the
+   transition armed and running when the turn ends when driven.
+
+The commit act, the arming instruction and the closing line each open "Once
+everything above is done", so none of them lands in a reply that is still
+asking for the memory approval. The closing line is the one where this is
+not already implied by the hold: an untyped precompact with dirty memory
+types nothing, so it is armed rather than held, and its closing line
+follows the approval question directly. Ordering the commit before the
+arming instruction is what places a commit the ask implies after the
+checkpoint — it has to carry the handoff files the checkpoint staged — and
+before the transition is released.
+
+The closing line has one producer per path. Not held, the checkpoint prints
+it last. Held, `bin/handoff-approved` prints it after its own status fact
+(what is armed, and that it runs at the end of the turn), because the
+release comes a turn or more after the checkpoint's output. It picks the
+text from the sentinel's kind alone, which is enough: `autoname` never
+holds, so a held `rename` is an untyped handoff, and a held `clear` or
+`compact` is driven. The text is literal there rather than composed, so the
+command stays one file rewrite (NFR1), and a test compares it with
+`closing_directive()` so the two producers cannot drift. One hold decision
+writes the sentinel's state and selects between the arming instruction and
+the closing line, so the file and the printed ending cannot disagree.
+
+The clause-file refusal prints alone. When memory is dirty but gitlore's
+approval clause cannot be read — `gitlore.memoryApprovalClauseFile` unset,
+or its file missing — the memory part tells the agent to restart and retry,
+and a commit act, arming instruction or closing line after it would tell the
+agent to finish a boundary it has just been told cannot proceed. The
+sentinel is composed as usual; the retry composes it again.
+
+`autoname` and `restart` print nothing: neither is a boundary, neither owes
+a memory write, and neither has a procedure after the call.
+[The directive owns the
+procedure](changelog/2026-09-18-the-directive-owns-the-procedure.md)
+
 ### Held: a transition an approval has not released
 
-The hazard a memory approval creates is keystrokes reaching a pane whose
-turn is about to end on a question: a transition armed alongside that
-question clears or compacts away the very conversation the answer applies
-to. So the checkpoint writes a sentinel in `held` exactly when it **types
-anything at all** and a memory directive was emitted, and composes the
-instruction to release it onto the end of that directive.
-`bin/handoff-approved` is the one command that leaves the state, through the
-same `handoff_drive_arm` the `Stop` hook uses.
+The checkpoint writes the sentinel `held` when it **types anything at all**
+and a memory directive was emitted, or when the transition is **typed** and
+the mode is `with-commit`, and prints the instruction to release it as its
+own part, after the commit act. `bin/handoff-approved` is the one command
+that leaves the state, through the same `handoff_drive_arm` the `Stop` hook
+uses.
 
-The condition names the hazard rather than its trigger, and the hazard is
-the keystrokes, not which transition they carry. An untyped handoff types no
-transition but still types `/rename`, into the same pane, racing the same
+The first disjunct guards a memory approval: keystrokes reaching a pane
+whose turn is about to end on a question. A transition armed alongside that
+question clears or compacts away the very conversation the answer applies
+to. The condition names the hazard rather than its trigger, and the hazard
+is the keystrokes, not which transition they carry. An untyped handoff types
+no transition but still types `/rename`, into the same pane, racing the same
 answer — so it holds too. What is exempt is the sentinel that types nothing
 at all: the bare compact marker, which would otherwise lose the expectation
 `SessionStart(compact)` gates the frame's re-injection on to a gate it has
 no reason to wait on. Only the memory gate defers: the ledger nudge and the
 todo boundary are acts, not questions, and `Stop` comes after them either
 way.
+
+The second disjunct guards the commit. Armed, a driven transition runs at
+the next `Stop` whatever happened in between, and a commit that fails ends
+the turn too — the agent stops to report it — so the transition would clear
+or compact over uncommitted work. Held, it runs only once `handoff-approved`
+is called, which the printed order puts after the commit. The disjunct is
+scoped to a typed transition rather than to any keystroke: an untyped
+handoff's only line is `/rename`, which costs nothing when it fires over a
+failed commit, and with clean memory there is no question for it to race.
+Holding it would add a `handoff-approved` call to "handoff and commit", the
+most common invocation, for no protected state.
 
 `held` is the one state that outlives the turn that wrote it, so it is the
 one that names its owner — the session whose approval it waits on, carried
@@ -781,10 +854,12 @@ list](changelog/2026-07-17-task-frame-drops-transcript.md)
 **The agent supplies one fact; the code owns the branch.** Commit awareness
 — *does the ask this call serves imply a commit?* — is a fact about the
 conversation that no script can see, and everything downstream of the answer
-is deterministic. It changes what memory *says* (under `with-commit`, bodies
-state present-tense truth, because a body phrased as pending is false the
-moment the change exists and gets re-injected that way) and where the memory
-commit *lands*. The transition fields are the same shape, which is why they
+is deterministic. It changes where the memory commit *lands*, and whether
+the checkpoint prints a commit act and holds a typed transition behind it.
+It does not change what memory *says*: how memory bodies are written,
+present-tense truth included, is `gitlore:memory-writing`'s rule, which
+holds in every mode and which the memory directive invokes through gitlore's
+approval clause. The transition fields are the same shape, which is why they
 are fields and not skills.
 [Commit awareness](changelog/2026-07-25-commit-awareness.md),
 [Transitions become modes](changelog/2026-08-05-transitions-become-modes.md)
@@ -906,9 +981,9 @@ history) because that surplus is boundary-local.
 detection round-trip exists between deciding and writing: the checkpoint is
 unconditional, and it decides for itself whether memory or a ledger is in
 play. When memory *is* pending, the directive asks for approval — a user
-response, which ends the turn — and a driven skill therefore arms the
-sentinel only in the turn after the answer, or it would compact or clear
-away the conversation the answer applies to. Any rebalancing of the gitlore
+response, which ends the turn — and a driven transition is therefore held
+and released only in the turn after the answer, or it would compact or
+clear away the conversation the answer applies to. Any rebalancing of the gitlore
 seam must preserve both halves.
 
 **A context-size nudge was tried and dropped.** `PostToolBatch` fired once a
@@ -923,7 +998,7 @@ threshold](changelog/2026-08-01-context-threshold-trigger.md),
 it](changelog/2026-08-09-samples-are-scoped-to-the-compaction.md), and
 [the removal](changelog/2026-08-10-drop-context-threshold-nudge.md).
 
-**Deciding makes no tool call but the memory writes.** `handoff` decides
+**Deciding makes no tool call.** `handoff` decides
 from the conversation already in context — the agent already holds
 everything it needs, and a Read/Bash/Grep call there duplicates work
 `handoff-checkpoint` does internally while risking action on state gone
@@ -932,19 +1007,22 @@ still `cat`-ed both task files "to check": a general verify-before-acting
 habit overrode an instruction that read as descriptive rather than binding.
 The rule is one prohibition at the head of the one step that decides and
 checkpoints, phrased as an imperative on the next action, with the reason
-stated in the matching `## Anti-patterns` entry. The memory writes are its
-stated exception and sit inside that step, before the checkpoint call — whose
-memory directive keys on a dirty submodule — and after the commit answer that
-sets their tense: an unconditional "zero tool calls" with memory as a
-separate step between the two deciding ones was contradicted by its own
-protocol. A commit the ask implies is not an exception, because it comes
-after the checkpoint: it has to, to carry the handoff files the checkpoint
-staged, and it still lands before the transition is armed at `Stop` or
-released by `handoff-approved`.
+stated in the matching `## Anti-patterns` entry. Memory writes are not an
+exception to it, because they are not part of that step: they are the step
+before it, the skill's first, and nothing in them waits on a decision — how
+memory is written is gitlore's rule in every mode, so the commit answer no
+longer sets their tense. They still precede the checkpoint call, whose
+memory directive keys on a dirty submodule. A commit the ask implies is not
+an exception either, because it comes after the checkpoint, as the commit
+act the checkpoint prints: after it so it carries the handoff files the
+checkpoint staged, and before the arming instruction so the transition is
+released only once it has landed.
 [Deciding makes zero tool calls, stated
 once](changelog/2026-08-11-decide-with-zero-tool-calls.md),
 [Memory moves inside the deciding
-step](changelog/2026-09-17-memory-moves-inside-the-deciding-step.md)
+step](changelog/2026-09-17-memory-moves-inside-the-deciding-step.md),
+[The directive owns the
+procedure](changelog/2026-09-18-the-directive-owns-the-procedure.md)
 
 **Nothing about the exiting process is read.** A driven restart once
 identified it by a bounded parent-chain walk, to replay its argv — `$PPID`
@@ -1056,6 +1134,19 @@ so the short name is never available and the collision is paid for in every
 doc sentence), and **`autocompact`/`autoclear` as skill names** (collides
 with the harness's own threshold auto-compaction, a real named feature).
 [Driven transitions](changelog/2026-07-29-driven-transitions.md)
+
+**One hold predicate** — hold whenever the sentinel types anything and
+either memory is owed or the turn carries a commit. A typed transition
+always types something and an untyped precompact types nothing, so this
+differs from the rule in exactly one cell: an untyped handoff under `with-commit` with clean memory.
+There it would hold a sentinel whose only line is `/rename`, protecting no
+state — the first disjunct's reason, a `/rename` typed into a pane showing
+the approval question, does not transfer, since clean memory asks nothing —
+and it would add a `handoff-approved` call to the most common invocation. A
+forgotten call there is silent: a same-session `held` is exempt from the
+sweep, and nothing reports one, so the title is lost unnoticed.
+[The directive owns the
+procedure](changelog/2026-09-18-the-directive-owns-the-procedure.md)
 
 **Keeping the sentinel a skill-body write** once the transition became a
 payload field — a minimal diff, but the fields would then be advisory: the
