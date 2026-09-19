@@ -75,20 +75,19 @@ empty and removed: see `docs/changelog/2026-07-22-a-place-for-the-todo-list.md`,
   markdown templates of `handoff-task.md` and `handoff-todo.md`, plus the seam
   between what belongs in a file and what belongs in a continuation prompt
   (the seam lives here rather than in `precompact/SKILL.md` because that file
-  reads this one). Step 1 decides all three fields the payload cannot derive:
-  whether the transition is typed, whether a continuation follows it, and
-  commit awareness — **does the ask this call serves imply a commit** — which
-  makes it write memory as if the change has landed. Still in step 1, and
-  before the checkpoint, it captures memory — the only tool calls allowed
-  ahead of that call, since the checkpoint's memory directive keys on a dirty
-  submodule. It then decides the title/task/remainder and issues one
+  reads this one). Three steps. Step 1 writes durable learnings to memory —
+  the only tool calls allowed ahead of the checkpoint, since its memory
+  directive keys on a dirty submodule; nothing in them keys on the commit
+  answer, so they precede every decision. Step 2 decides the three fields the
+  payload cannot derive — whether the transition is typed, whether a
+  continuation follows it, and commit awareness, **does the ask this call
+  serves imply a commit** — then the title/task/remainder, and issues one
   `handoff-checkpoint` Bash call with the whole wrap-up as a JSON heredoc.
-  Step 2 follows whatever directive the checkpoint prints, which may be the
-  one naming `handoff-approved`, and places a commit the ask implies: after
-  the checkpoint, so it carries the staged handoff files, and before the
-  transition is armed. Step 3 reports what the boundary is ready for, in one
-  line. It writes no sentinel
-  itself — the checkpoint composes it.
+  Step 3 follows what the checkpoint prints, in order, without re-deriving
+  it: the checkpoint, not the skill, carries the memory approval, the commit
+  act, the `handoff-approved` call and the closing line, for the one cell the
+  call is in. It writes no sentinel itself — the checkpoint composes it. See
+  `docs/changelog/2026-09-18-the-directive-owns-the-procedure.md`.
 - `skills/autoname/SKILL.md` — the `/handoff:autoname` skill. Decides a
   session title from the conversation (no tool calls), then runs one
   `handoff-checkpoint` Bash call whose whole payload is
@@ -101,14 +100,15 @@ empty and removed: see `docs/changelog/2026-07-22-a-place-for-the-todo-list.md`,
   the main thread stays live. See
   `docs/changelog/2026-08-09-one-writer-for-the-sentinel.md`.
 - `skills/precompact/SKILL.md` — the compact boundary's full protocol
-  (`/handoff:precompact`), driven or not. Decide the same three fields as
-  handoff's step 1 (`compact` carries the focus directive when there is one),
-  capture durable learnings in auto-memory, decide the task/todo content, run
-  one `handoff-checkpoint` Bash call (`"skill": "precompact"`, no `rename` —
-  schema-forbidden there), follow whatever directive it prints (memory commit,
-  ledger flush, and/or the arming instruction), and report readiness in one
-  line. It defers the templates and the seam rules to `handoff/SKILL.md` and
-  writes no sentinel itself.
+  (`/handoff:precompact`), driven or not, in the same three steps as
+  handoff's: capture durable learnings in auto-memory; decide the same three
+  fields (`compact` carries the focus directive when there is one) and the
+  task/todo content, then run one `handoff-checkpoint` Bash call
+  (`"skill": "precompact"`, no `rename` — schema-forbidden there); follow
+  what it prints, in order — memory approval, ledger nudge, commit act, and
+  the arming instruction or the closing line the reply ends on. It defers the
+  templates and the seam rules to `handoff/SKILL.md` and writes no sentinel
+  itself.
 - `skills/handoff/references/design.md` — condensed design notes;
   full rationale is in `docs/design.md`
 - `skills/restart/SKILL.md` — the `/handoff:restart` skill. Decides only
@@ -515,8 +515,8 @@ empty and removed: see `docs/changelog/2026-07-22-a-place-for-the-todo-list.md`,
   the agent's Bash, so the shim is the entry point. Replaces
   `bin/handoff-memory-probe` and `bin/handoff-precompact-probe`.
 - `bin/handoff-approved` — the one command that leaves the sentinel's `held`
-  state, invoked by bare name off PATH when the checkpoint's memory directive
-  says so. No stdin, no arguments. The whole script rather than a shim over
+  state, invoked by bare name off PATH when the checkpoint's arming
+  instruction says so. No stdin, no arguments. The whole script rather than a shim over
   `scripts/`: it is short enough to read at once, its only caller would be its
   own shim, and `bin/*` is already inside the `shellcheck -x` line, so sourcing
   `../scripts/_lib.sh` from here lints as it does from `scripts/`. Takes its
@@ -526,8 +526,15 @@ empty and removed: see `docs/changelog/2026-07-22-a-place-for-the-todo-list.md`,
   `handoff_drive_arm`; exits 2 naming the state it found when the file is
   absent or not `held`, and naming the owner when the held file is another
   session's — the approval it speaks for is the one *this* session was asked
-  for, and the state alone does not say that. NFR1: no git, no tmux — it
-  rewrites one file.
+  for, and the state alone does not say that. On success it prints its status
+  fact (what is armed, and that it runs at the end of the turn), a blank line,
+  then the closing line — the held path's one producer of it, since the
+  release comes a turn or more after the checkpoint's output. The text is
+  picked from `DRIVE_KIND` alone (a held `rename` is always an untyped
+  handoff, a held `clear` or `compact` always driven) and is literal per
+  `case` arm rather than composed in Python; it must match
+  `closing_directive()` byte for byte. NFR1: no git, no tmux — it rewrites
+  one file.
 - `scripts/checkpoint.py` — the one write path for the handoff/precompact
   wrap-up (FR1). Python since 2026-08-10, ported from `checkpoint.sh` (see
   `docs/changelog/2026-08-10-python-split.md`). Takes its root from
@@ -571,11 +578,18 @@ empty and removed: see `docs/changelog/2026-07-22-a-place-for-the-todo-list.md`,
   way (`bash-post.sh` used to do that at consume time, and there is no consumer
   left to), then reads its own output back through `handoff_drive_read` so the
   composer and the parser cannot drift. The state it writes is `held <session>`
-  iff the sentinel types **anything at all** and a memory directive was emitted,
-  and `armed` otherwise; the gate is the keystrokes, not the transition, since
-  an untyped handoff types no transition but still types `/rename` into the pane
+  iff the sentinel types **anything at all** and a memory directive was
+  emitted, or the transition is **typed** and the mode is `with-commit`
+  (`(K ∧ M) ∨ (T ∧ C)` in the changelog's letters), and `armed` otherwise;
+  `hold_decision` computes it once.
+  The first disjunct gates the keystrokes, not the transition, since an
+  untyped handoff types no transition but still types `/rename` into the pane
   holding the approval question, and the one exemption is the sentinel that
-  types nothing (FR-G's marker, which holding would strand).
+  types nothing (FR-G's marker, which holding would strand). The second keeps
+  a driven transition from running over a commit that failed; it is scoped to
+  a typed transition because an untyped handoff's `/rename` costs nothing over
+  a failed commit, and holding it would add a `handoff-approved` call to
+  "handoff and commit", the most common invocation.
   `bin/handoff-approved` is the only thing that leaves
   `held`. `rename` is required wherever a title is decided — `skill: "handoff"`
   and `skill: "autoname"`, where it must be a **string**, checked before the
@@ -592,9 +606,17 @@ empty and removed: see `docs/changelog/2026-07-22-a-place-for-the-todo-list.md`,
   either, and the memory gate lives inside the boundary branch so neither
   call composes a directive at all — `restart` never implies a memory write,
   since the conversation is never lost, only the process. Then it prints the
-  directive output (FR9, via
-  `_checkpoint_lib.py`), with the arming instruction composed onto the memory
-  directive when the sentinel is held. NFR1: it does no `git` or `tmux` work
+  directive output (FR9, via `_checkpoint_lib.py`), for a boundary skill only:
+  `compose_directives` returns the ordered parts — memory directive, todo
+  boundary or SDD nudge, the commit act under `with-commit`, then the arming
+  instruction when held or the closing line when not — each present only
+  under its own condition, and `print_output` joins them. The same
+  `hold_decision` value writes the sentinel's state and picks that last part,
+  so the file and the printed ending cannot disagree. A memory part that is
+  the clause-file refusal is printed alone: anything after it would finish a
+  boundary the refusal has just said cannot proceed. See
+  `docs/changelog/2026-09-18-the-directive-owns-the-procedure.md`. NFR1: it
+  does no `git` or `tmux` work
   itself — see `bash-post.sh`. The `edit` action's exact string
   replacement (first occurrence, error if `old_string` is absent or
   ambiguous) needs no shell quoting for a multi-line `old_string`/`new_string`
@@ -660,11 +682,27 @@ empty and removed: see `docs/changelog/2026-07-22-a-place-for-the-todo-list.md`,
   routinely edits memory, so a rule pinning memory as final forbids what
   the gate is for. What is left is one act plus one clause saying this
   turn's commit carries the memory, so its absence is not read as a failure.
+  It used to close on "Nothing further is needed from you", which the commit
+  act printed two parts later contradicts, so that sentence is gone.
   Mechanism a reader cannot act on gets verified and narrated instead.
   That file-trigger IPC replaced the old
   `git config gitlore.commitCommand` + `commit-memory.sh -F -` Bash path:
   all file writes, so it sidesteps the sandbox and the auto-mode classifier.
-  Couples only to the two IPC filenames — never gitlore internals.
+  Couples only to the two IPC filenames and the
+  `gitlore.memoryApprovalClauseFile` config key, whose file it interpolates
+  as the approval clause — never gitlore internals. It returns a
+  `MemoryPart(text, refusal)`: empty text when nothing is owed, and
+  `refusal=True` only for the clause-file refusal (key unset or its file
+  missing — restart and retry), which `checkpoint.py` prints alone.
+  `commit_directive` is the commit act under `with-commit` — make the commit
+  the request called for, naming no git verb, since the request may be an
+  amend. `arming_directive` releases a held transition by naming
+  `handoff-approved`. `closing_directive(skill, typed=…)` is the instruction
+  to end the reply on one quoted line — `Ready to /clear` or
+  `Ready to /compact` prepared, the transition armed and running at the end
+  of the turn driven — and `bin/handoff-approved` carries the same text
+  literally. All three open "Once everything above is done", so none lands in
+  a reply still asking for the memory approval.
   `ledger_path` is the one-row registry of known workflow-owned
   progress ledgers (currently superpowers SDD), so the nudge and the
   boundary can never disagree about what exists — and both interpolate
@@ -682,7 +720,9 @@ empty and removed: see `docs/changelog/2026-07-22-a-place-for-the-todo-list.md`,
   naming the removal as well because it lands in the same turn as the writes
   — composed in
   `checkpoint.py`'s `skill: "handoff"` vs `skill: "precompact"` branch,
-  memory first, same order the two deleted probes used.
+  memory first, same order the two deleted probes used, with the commit act
+  and the ending after them. See
+  `docs/changelog/2026-09-18-the-directive-owns-the-procedure.md`.
 - `scripts/bash-post.sh` — `PostToolUse(Bash)` entry point. Fires on every
   Bash call in every session with the plugin installed (NFR2), so the
   negative case (manifest absent, which is nearly every call) stays cheap:
@@ -841,11 +881,17 @@ outright regardless of path.
   2026-08-10 Python split (see
   `docs/changelog/2026-08-10-python-split.md`): `inject-checkpoint-root.sh`,
   `bin/handoff-approved`, the `bin/handoff-checkpoint` shim, and
-  `scripts/bash-post.sh`. Everything it used to cover about `checkpoint.sh`
+  `scripts/bash-post.sh`. `handoff-approved`'s output is pinned whole, one
+  row per kind — status fact, blank line, then the closing line — against
+  `closing_directive()` itself, so the two producers cannot drift; each
+  producer's three arms were mutated separately and each mutation reds its own
+  row. `$(...)` strips trailing newlines on both sides, so their count is the
+  one difference these rows cannot see. Everything it used to cover about
+  `checkpoint.sh`
   itself — schema validation, write semantics, directive composition, the
   transition/sentinel matrix — moved with the port to
   `tests/test_checkpoint.py` (pytest), described below.
-  `tests/test_checkpoint.py` (140 tests) covers `scripts/checkpoint.py`'s own
+  `tests/test_checkpoint.py` (171 tests) covers `scripts/checkpoint.py`'s own
   behavior end-to-end via subprocess, ported from what was
   `tests/checkpoint.bats`'s exhaustive coverage of `checkpoint.sh` (merged,
   before that, from the deleted `tests/memory-probe.bats` +
@@ -927,6 +973,21 @@ outright regardless of path.
   sweep's own pair, where the dead-session row was green in the red phase (an
   owned state line did not parse yet) and is mutation-checked afterwards
   against the same-session row that must stay green.
+  The printed procedure (2026-09-18) adds its own load-bearing rows. The hold
+  rule's second disjunct is a pair over one fixture: typed + `with-commit` +
+  clean memory is `held` (drop the disjunct ⟹ that row alone reds), and the
+  untyped handoff in the same cell is `armed` (widen to "types anything and
+  `with-commit`", the rejected uniform predicate ⟹ that row reds, together
+  with the older rename-only row pinning the same cell's sentinel bytes).
+  Part order is pinned per skill, and the precompact row — the one armed cell
+  with parts ahead of the closing line — asserts that the closing line comes
+  last and ends stdout, mutation-checked by printing it first. The refusal
+  prints alone on two rows: a held fixture (no commit act, no arming
+  instruction) and an armed one, which alone catches a refusal branch that
+  still appends the closing line by the hold. The commit act is asserted
+  present under `with-commit` and absent without, on both skills, and every
+  boundary row that once asserted empty stdout now asserts stdout is exactly
+  the closing line, through one helper.
   Session-root drift is covered across all three: `tests/test_worktree_root.py`
   for the branch matrix (including the containment rule that keeps a submodule
   `inside`), `tests/hook-test.bats` for `handoff_root_read`'s labels, the fast
