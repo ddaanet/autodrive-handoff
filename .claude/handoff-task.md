@@ -1,3 +1,3 @@
 ## Current task
 
-The directive-owns-the-procedure deliverable review is done and its fixes have landed, together with the `docs/design.md` split into a hub plus eight nodes and its own review's fixes. Nothing is mid-edit; what is left is the independent follow-ups in the todo list, none blocking another.
+The four follow-ups from the directive-owns-the-procedure review and the README inbox brief are done. One thread is left: the driven restart's continuation that did not land is diagnosed but not fixed — the diagnosis is a plan file, and the fix waits on a live measurement that cannot run sandboxed and is a memory risk on this box alongside a live session.

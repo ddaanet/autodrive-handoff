@@ -15,17 +15,18 @@ Two skills sit on that seam, one per boundary:
 | **before `/compact`** | `/handoff:precompact` |
 
 Each one either prepares and stops — writing the task file and leaving you
-to type the command — or carries the transition out for you, typing the
-command and a one-line prompt that resumes the work on the far side. Which
-one you get is decided by what you ask for. `/handoff:autoname` is a third
-skill: the rename alone, for a session worth a title while the main
-thread stays live. `/handoff:restart` is a fourth: exit and relaunch with
-`--resume`, for when a plugin upgrade, a `hooks.json` edit, or any other
-config only a fresh process picks up needs adopting — the conversation
-carries over whole, so unlike `/clear` it costs no context at all.
-`/handoff:pending` is a fifth: it reports the task frame already sitting in
-context — current task, open decisions, remaining items — reading nothing
-and writing nothing.
+to type the command — or, under tmux, carries the transition out for you,
+typing the command and a one-line prompt that resumes the work on the far
+side. Which one you get is decided by what you ask for.
+`/handoff:autoname` is a third skill: the rename alone, for a session worth
+a title while the main thread stays live. `/handoff:restart` is a fourth:
+exit and relaunch with `--resume`, for when a plugin upgrade, a
+`hooks.json` edit, or any other config only a fresh process picks up needs
+adopting — the conversation carries over whole, so unlike `/clear` it costs
+no context at all.
+`/handoff:pending` is a fifth: it lists the pending items — open decisions
+and remaining todos — from the task frame injected at session start or
+after a compact, with no tool calls.
 
 Both write the same file; a `SessionStart` hook injects it back, verbatim,
 into whatever comes next.
@@ -163,9 +164,10 @@ this split.
 
 ### Choosing a handoff provider
 
-This is the lightweight, local pre-`/clear` snapshot. A separate plugin,
-`ddaa-handoff` (and its French `ddaa-passation`), provides a heavier
-end-of-session *summary* delivered to Notion when available. They share
+The two differ in what crosses the boundary. This plugin keeps a local task
+frame and re-injects it verbatim into the next session. A separate plugin,
+`ddaa-handoff` (and its French `ddaa-passation`), writes a full
+end-of-session *summary*, delivered to Notion when available. They share
 the same trigger phrases on purpose, so the same words work whichever you
 pick — therefore **enable exactly one handoff provider per project**.
 Enabling both reloads the collision this split was made to remove.

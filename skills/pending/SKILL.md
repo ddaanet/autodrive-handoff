@@ -5,9 +5,9 @@ description: List pending tasks from the session's already-injected context — 
 
 # pending — List Pending Tasks From Context
 
-Report the pending work already visible in context: the `## Current task`
-section and the `## Open decisions` / `## Remaining` sections that follow
-it in the task frame injected at session start (or after a compact). Make
+Report the pending work already visible in context: the `## Open decisions`
+and `## Remaining` sections of the task frame injected at session start (or
+after a compact), which sit under the `## Current task` they belong to. Make
 **no tool calls** — this is a read of what is already in context, not of
 the files on disk.
 

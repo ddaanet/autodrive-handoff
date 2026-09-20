@@ -2,6 +2,8 @@
 
 Part of [handoff — Design](../design.md).
 
+## The kinds and their lines
+
 A **driven transition** is a sequence of lines to type, plus the
 `SessionStart` source that confirms it happened:
 
@@ -12,6 +14,8 @@ A **driven transition** is a sequence of lines to type, plus the
 | `clear` | `/rename <title>`, `/clear` | continuation prose, if any | `clear` |
 | `compact` (prepared) | — | — | `compact` |
 | `restart` | `/exit`, `claude --resume <sid…>` | continuation prose, if any | `resume` |
+
+## The relaunch line
 
 `restart`'s shape mirrors `clear`'s exactly — two required before-lines, one
 optional after-line — but crosses a boundary neither other kind does: its
@@ -31,6 +35,8 @@ restore what is not on a command line at all: gitlore's shim `export`s
 `exec`s the real binary, so it occupies no process of its own and cannot be
 found by inspecting the tree — running it again is the only handle on it.
 
+### Why the argv replay went away
+
 Replaying the exiting process's argv is what this replaced, and the reason is
 that the two compose badly: that argv already contains what the shims
 injected, so replaying it hands them a line they then inject into again —
@@ -44,6 +50,8 @@ that existed only to read those flags.
 restart-specific act is to clear a stale `.claude/autodrive.exited` before it
 arms and spawns, so an earlier, only-partly-successful attempt's leftover
 cannot let this one's `/exit` confirmation false-positive.
+
+## The sentinel
 
 The after-line is optional on both driven kinds, because typing the
 transition and submitting a prompt into what it opens are separate
@@ -60,6 +68,8 @@ validation anchors it instead — the *n*th line of kind *k* must begin with
 the expected command literal, so the file cannot be made to type something
 else. One fact per line throughout.
 
+## Nothing is typed from inside a live turn
+
 Mid-turn input has four distinct classes, and prose — not the slash command
 — is the dangerous one: it is injected into the running turn's next model
 call. So no line is ever typed from inside a live turn. `Stop`
@@ -72,6 +82,8 @@ spawns the after-line. One walker,
 re-gate on idle, next line. A line that fails to confirm stops the sequence,
 which is what makes a `/rename` that never lands under kind `clear` cost a
 wrong title and nothing more.
+
+## Confirming a line dispatches on the command
 
 Confirmation dispatches on the **command**, not the kind — which is what
 lets `/rename` appear in two kinds with two different fates, and carries the
@@ -104,11 +116,15 @@ predicate comes to be tested against its own premise, which is what let
 green. [Composer predicates match the real
 pane](../changelog/2026-08-13-predicates-match-the-real-pane.md)
 
+## Submitting: press, retry, then wait
+
 Every TUI submit sends Enter, retries three times fast, then waits without
 pressing again — a registered Enter can take far longer than `VERIFY_DELAY`
 to reach its signal, and a composer that already took the first would submit
 the turn twice. Delivery and confirmation are one question there: the only
 evidence the keystroke arrived is the thing it caused.
+
+## The relaunch splits delivery from confirmation
 
 The relaunch line separates them, which is what a shell prompt allows. The
 pane's foreground leaving the shell says the line ran, and says it
@@ -143,6 +159,8 @@ mid-session, where the composer is already there. [The continuation waits for
 the composer to
 exist](../changelog/2026-08-15-continuation-waits-for-the-composer-to-exist.md)
 
+## Typing into a bare shell
+
 `claude --resume …` skips those composer checks entirely: it
 targets a bare shell once `/exit` is confirmed, where neither the `❯`
 composer glyph nor the "No commands match" text exist, and neither is a
@@ -156,6 +174,8 @@ as a bounded residual: the shell still redraws its prompt once it has the
 foreground back, and that part is not separately observable.
 [Restart drive repair](../changelog/2026-08-13-restart-drive-repair.md)
 
+## Recognizing the relaunch line
+
 Which line that is, the walker decides from the line itself — it is handed
 literal keystrokes and knows no kinds. It parses the line as a shell word list
 and matches argv[0]'s basename against `claude`, with `--resume` among the
@@ -166,6 +186,8 @@ a slash command — the prefix test recognized only the shape nothing typed. The
 `--resume` conjunct keeps a continuation prompt that opens with the word
 `claude` as prose.
 [Dispatch on the command, not the prefix](../changelog/2026-08-14-resume-line-dispatch.md)
+
+## Reporting a non-delivery, sweeping a stale sentinel
 
 A detached walker's exit status is read by nothing, so non-delivery is
 written to `.claude/autodrive.failed` and reported by
@@ -178,10 +200,14 @@ too — it describes no transition anyone can complete. `held` is exempt while
 it belongs to the session at the prompt, and that is why the sweep names its
 states rather than taking anything that is not `pending`.
 
+## The prepare-only compact
+
 The prepare-only compact path arms the kind line alone. Nothing is typed,
 but the transition is *expected*, and that expectation is what
 `SessionStart(compact)` gates the frame's re-injection on — otherwise a
 hand-typed `/compact` re-injects nothing.
+
+## A restart carries no frame
 
 `load-restart.sh` (`SessionStart(resume)`) never assembles or injects the
 task-frame the way `load-compact.sh` and `load-handoff.sh` do: `--resume`
@@ -189,6 +215,8 @@ already restores the full prior conversation on its own, so there is nothing
 for a frame to hand a summariser's paraphrase back to. The only effect there
 is firing whatever continuation was typed after the resume — which is the
 whole reason a restart costs no context at all.
+
+## A restart that fails partway
 
 A restart that fails partway has no live session to report into: if `/exit`
 itself never lands, the original session is still up and its own next
