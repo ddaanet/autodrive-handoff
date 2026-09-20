@@ -2131,6 +2131,11 @@ def test_clause_file_unset_names_key_and_restart(tmp_path: Path) -> None:
     assert result.returncode == 0
     assert "gitlore.memoryapprovalclausefile" in result.stdout.lower()
     assert "/handoff:restart" in result.stdout
+    # The checkpoint has already written the task file, the todo file, the
+    # manifest and the sentinel by the time this prints, so it claims no such
+    # thing — only that the memory changes are still pending.
+    assert "Nothing has been written" not in result.stdout
+    assert "The memory changes are still pending." in result.stdout
     assert str(repo / ".claude" / "gitlore-memory-message") not in result.stdout
     assert str(repo / ".claude" / "gitlore-commit-memory") not in result.stdout
 
@@ -2152,6 +2157,8 @@ def test_clause_file_missing_same_key_and_restart_report(tmp_path: Path) -> None
     assert result.returncode == 0
     assert "gitlore.memoryapprovalclausefile" in result.stdout.lower()
     assert "/handoff:restart" in result.stdout
+    assert "Nothing has been written" not in result.stdout
+    assert "The memory changes are still pending." in result.stdout
     assert str(repo / ".claude" / "gitlore-memory-message") not in result.stdout
 
 
@@ -2252,13 +2259,16 @@ def test_without_commit_prints_no_commit_act(
     assert commit_act not in result.stdout
 
 
-def test_commit_act_names_no_git_verb() -> None:
-    commit_act = lib.commit_directive()
-    assert commit_act
-    lowered = commit_act.lower()
-    assert "git commit" not in lowered
-    assert "--amend" not in lowered
-    assert "git add" not in lowered
+def test_commit_act_is_the_exact_no_git_verb_sentence() -> None:
+    """Pin the exact sentence rather than blacklisting verb spellings.
+
+    A reword naming a verb another way ("stage and commit", "`git ci`") passes
+    a substring blacklist; the design record quotes this sentence verbatim
+    (docs/changelog/2026-09-18-the-directive-owns-the-procedure.md).
+    """
+    assert lib.commit_directive() == (
+        "Once everything above is done, make the commit the request called for.\n"
+    )
 
 
 # ==========================================================================
@@ -2431,6 +2441,126 @@ def test_untyped_handoff_with_commit_clean_memory_is_armed(tmp_path: Path) -> No
     assert first_line == "armed"
     assert "handoff-approved" not in result.stdout
     assert commit_act in result.stdout
+
+
+def test_untyped_precompact_with_commit_clean_memory_is_armed(tmp_path: Path) -> None:
+    """The FR-G marker cell (¬K ∧ ¬T ∧ C) types nothing, so it never holds."""
+    repo = make_gitlore_repo(tmp_path)
+    assert lib.memory_directive(str(repo), "with-commit").text == ""
+    result = run_checkpoint(repo, precompact_payload("with-commit"))
+    assert result.returncode == 0
+    first_line = (repo / ".claude" / "autodrive").read_text().splitlines()[0]
+    assert first_line == "armed"
+
+
+def test_handoff_commit_precedes_closing_line_when_armed(tmp_path: Path) -> None:
+    """On the handoff side, the commit act precedes the closing line."""
+    repo = make_gitlore_repo(tmp_path)
+    commit_act = lib.commit_directive()
+    closing = lib.closing_directive("handoff", typed=False)
+    assert commit_act
+    assert closing
+    result = run_checkpoint(repo, handoff_payload("with-commit"))
+    assert result.returncode == 0
+    first_line = (repo / ".claude" / "autodrive").read_text().splitlines()[0]
+    assert first_line == "armed"
+    out = result.stdout
+    commit_index = out.index(commit_act)
+    closing_index = out.index(closing)
+    assert commit_index < closing_index
+    assert out.endswith(closing)
+
+
+# ==========================================================================
+# Held path validates CLAUDE_CODE_SESSION_ID before any write (finding 2)
+# ==========================================================================
+
+
+def _assert_nothing_written(repo: Path) -> None:
+    assert not (repo / ".claude" / "handoff-task.md").exists()
+    assert not (repo / ".claude" / "handoff-todo.md").exists()
+    assert not (repo / ".claude" / "checkpoint-manifest").exists()
+    assert not (repo / ".claude" / "autodrive").exists()
+
+
+def _run_checkpoint_no_session_id(
+    repo: Path, payload: Mapping[str, object]
+) -> subprocess.CompletedProcess[str]:
+    env = dict(os.environ)
+    env["HANDOFF_ROOT"] = str(repo)
+    env.pop("CLAUDE_CODE_SESSION_ID", None)
+    env.pop("CLAUDE_PROJECT_DIR", None)
+    return subprocess.run(
+        [sys.executable, str(CHECKPOINT)],
+        cwd=repo,
+        input=json.dumps(payload),
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def test_held_via_commit_session_id_unset_errors_before_any_write(
+    tmp_path: Path,
+) -> None:
+    """Held through (T ∧ C): a typed transition owing a commit, clean memory."""
+    repo = make_gitlore_repo(tmp_path)
+    payload = handoff_payload("with-commit")
+    payload["clear"] = True
+    result = _run_checkpoint_no_session_id(repo, payload)
+    assert result.returncode != 0
+    # Guard against a vacuous pass: today's message blames the composer
+    # ("composed a sentinel this version cannot read back") without naming
+    # the variable at all — rule that phrasing out explicitly.
+    assert "cannot read back" not in result.stderr
+    assert "CLAUDE_CODE_SESSION_ID" in result.stderr
+    _assert_nothing_written(repo)
+
+
+def test_held_via_memory_session_id_unset_errors_before_any_write(
+    tmp_path: Path,
+) -> None:
+    """Held through (K ∧ M): dirty memory behind an untyped handoff."""
+    repo = make_gitlore_repo(tmp_path)
+    dirty_memory(repo)
+    payload = handoff_payload("without-commit")
+    result = _run_checkpoint_no_session_id(repo, payload)
+    assert result.returncode != 0
+    assert "cannot read back" not in result.stderr
+    assert "CLAUDE_CODE_SESSION_ID" in result.stderr
+    _assert_nothing_written(repo)
+
+
+def test_held_session_id_set_still_succeeds_via_commit(tmp_path: Path) -> None:
+    """Paired positive for the (T ∧ C) row: same fixture, variable set."""
+    repo = make_gitlore_repo(tmp_path)
+    payload = handoff_payload("with-commit")
+    payload["clear"] = True
+    result = run_checkpoint(repo, payload)
+    assert result.returncode == 0
+    first_line = (repo / ".claude" / "autodrive").read_text().splitlines()[0]
+    assert first_line == "held sess-checkpoint"
+
+
+def test_armed_cell_succeeds_with_session_id_unset(tmp_path: Path) -> None:
+    """The validation is scoped to the held path — an armed cell needs no id."""
+    repo = make_gitlore_repo(tmp_path)
+    payload = handoff_payload("without-commit")
+    result = _run_checkpoint_no_session_id(repo, payload)
+    assert result.returncode == 0
+    first_line = (repo / ".claude" / "autodrive").read_text().splitlines()[0]
+    assert first_line == "armed"
+
+
+# ==========================================================================
+# closing_directive raises on an unknown skill (finding 4)
+# ==========================================================================
+
+
+def test_closing_directive_raises_on_unknown_skill() -> None:
+    with pytest.raises(ValueError, match="bogus"):
+        lib.closing_directive("bogus", typed=False)
 
 
 # ==========================================================================

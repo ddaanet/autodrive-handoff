@@ -118,8 +118,8 @@ def memory_directive(root: str, mode: str) -> MemoryPart:
                 "read the memory-approval wording: git config "
                 "gitlore.memoryApprovalClauseFile is unset or its file is missing. "
                 "gitlore pins that key at SessionStart — run /handoff:restart (or "
-                "exit and relaunch with --resume, by hand), then retry. Nothing has "
-                "been written and the memory changes are still pending."
+                "exit and relaunch with --resume, by hand), then retry. The "
+                "memory changes are still pending."
             ),
             refusal=True,
         )
@@ -203,6 +203,8 @@ def closing_directive(skill: str, *, typed: bool) -> str:
     appended to a reply still asking for the memory directive's approval.
     `bin/handoff-approved` prints the same text after its own status fact.
     """
+    if skill not in ("handoff", "precompact"):
+        raise ValueError(skill)
     lead = "Once everything above is done, end on one line:"
     if typed:
         name = "Clear" if skill == "handoff" else "Compaction"

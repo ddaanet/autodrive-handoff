@@ -531,8 +531,9 @@ empty and removed: see `docs/changelog/2026-07-22-a-place-for-the-todo-list.md`,
   `handoff-checkpoint`'s, and refuses on its absence with the same message;
   moves the file to `armed` through
   `handoff_drive_arm`; exits 2 naming the state it found when the file is
-  absent or not `held`, and naming the owner when the held file is another
-  session's — the approval it speaks for is the one *this* session was asked
+  absent or not `held`, naming the owner when the held file is another
+  session's, and naming the kind when it is none of `rename`, `clear` or
+  `compact` — checked ahead of the arm, so that file is left `held` — the approval it speaks for is the one *this* session was asked
   for, and the state alone does not say that. On success it prints its status
   fact (what is armed, and that it runs at the end of the turn), a blank line,
   then the closing line — the held path's one producer of it, since the
@@ -788,7 +789,33 @@ empty and removed: see `docs/changelog/2026-07-22-a-place-for-the-todo-list.md`,
   toolkit's `version-guard.sh` as a PreToolUse(Write|Edit) hook.
   Tracked in git so the guard applies to every clone.
 - `docs/design.md` — living design document: current architecture, standing
-  decisions, rejected alternatives. Present tense, no dated entries.
+  decisions, rejected alternatives. Present tense, no dated entries. It is
+  the **hub**: Problem, Research, Analysis, Requirements, the Architecture
+  routing table, one index line per design decision and per rejected
+  alternative, Non-goals, Relationship to `/ddaa:handoff`, Changelog and
+  References.
+- `docs/design/` — one node per mechanism or argument, linked from the hub's
+  routing table. Read the node before making a claim about, or changing, what
+  it argues. What you are touching → what to read first:
+  - `checkpoint.py`, `_checkpoint_lib.py`, `bash-post.sh`, `write-stage.sh`,
+    `write-guard.sh`, `handoff-checkpoint`, the manifest, `handoff-task.md`,
+    `handoff-todo.md`, FR1–FR8, NFR1–NFR3 → `the-write-path.md`
+  - any `skills/*/SKILL.md`, a `skill` value, the `clear`/`compact`/
+    `continue`/`commit` payload fields → `the-skills.md`
+  - `drive_when_idle.py`, `stop-drive.sh`, `load-handoff.sh`,
+    `load-compact.sh`, `load-restart.sh`, `.claude/autodrive` and its states,
+    `wait_for_idle`, `line_landed`, the `submit_*` primitives, FR-G, FR-H →
+    `driving-the-tui.md`
+  - `bin/handoff-approved`, `closing_directive`, `ledger_path`,
+    `handoff_drive_arm`, `held`, `with-commit`, the gitlore message and
+    trigger files, FR9, FR12 → `the-checkpoint-directive.md`
+  - `worktree_root.py`, `handoff_root_read`, `handoff_match_target`,
+    `inject-checkpoint-root.sh`, `session-pointer.sh`,
+    `report-watcher-failure.sh`, `HANDOFF_ROOT` → `scoping.md`
+  - `plugin-dev/`, `release.just`, `version-guard.sh`, `$MARKETPLACE_DIR` →
+    `release-infrastructure.md`
+  - weighing or adding a standing call → `decisions.md`; re-proposing
+    something ruled out → `rejected-alternatives.md`
 - `docs/changelog.md` — the index: one line per design change, newest first,
   `- [<date> — Title](changelog/<file>.md) — hook (vX.Y.Z)`, the version only
   when the entry maps onto one release.
@@ -798,8 +825,9 @@ empty and removed: see `docs/changelog/2026-07-22-a-place-for-the-todo-list.md`,
   reverses one heads the affected section with a
   `> **Superseded <date>** (see [<title>](<sibling>.md))` blockquote, scoped
   to what actually changed. A design change adds a file here plus its index
-  line, and rewrites whatever `docs/design.md` prose it invalidates — all
-  three in the same pass, not as an optional follow-up. Appending a dated
+  line, and rewrites whatever `docs/design.md` or `docs/design/` prose it
+  invalidates — the hub conclusion and the node argument change together —
+  all three in the same pass, not as an optional follow-up. Appending a dated
   subsection to the design doc instead was the earlier rule, and it grew
   that file to 2036 lines / 113 KB of mostly superseded machinery.
 - `plans/` — prospective content: specs, design proposals, implementation
@@ -904,7 +932,7 @@ outright regardless of path.
   itself — schema validation, write semantics, directive composition, the
   transition/sentinel matrix — moved with the port to
   `tests/test_checkpoint.py` (pytest), described below.
-  `tests/test_checkpoint.py` (171 tests) covers `scripts/checkpoint.py`'s own
+  `tests/test_checkpoint.py` covers `scripts/checkpoint.py`'s own
   behavior end-to-end via subprocess, ported from what was
   `tests/checkpoint.bats`'s exhaustive coverage of `checkpoint.sh` (merged,
   before that, from the deleted `tests/memory-probe.bats` +
@@ -1042,7 +1070,7 @@ outright regardless of path.
   The walker and the pane predicates that used to be `tests/watcher-test.bats`
   ported whole to pytest with the 2026-08-10 split (see
   `docs/changelog/2026-08-10-python-split.md`), never trimmed:
-  `tests/test_watcher_lib.py` (49 tests) covers the pure predicates
+  `tests/test_watcher_lib.py` covers the pure predicates
   (`is_busy`, `line_landed`, `composer_has_user_text`, `composer_start_column`,
   `is_unknown_command`), `transcript_prompt_count`,
   `transcript_title_count`, `pane_foreground` +
@@ -1054,7 +1082,7 @@ outright regardless of path.
   live TUI, spelled with an explicit `\N{NO-BREAK SPACE}` for the composer
   gap — a hand-written one is how a predicate comes to be tested against its
   own premise, which is the whole defect of 2026-08-13.
-  `tests/test_tui_conformance.py` (11 tests, `live` marker, deselected from
+  `tests/test_tui_conformance.py` (`live` marker, deselected from
   `just precommit` and run by `just tui-conformance`) is the other half: it
   boots a real TUI on a private tmux socket and asserts those captures still
   describe it. It submits nothing, so it costs no tokens, and it cannot run
@@ -1066,7 +1094,7 @@ outright regardless of path.
   `live_pane` runs `claude` as the pane command itself and so has no shell
   for the foreground to revert to, and it triggers the release with a signal
   — the gate polls the reverting, and `submit_exited` owns `/exit` itself.
-  `tests/test_drive_when_idle.py` (30 tests) drives `drive_when_idle.py`
+  `tests/test_drive_when_idle.py` drives `drive_when_idle.py`
   end-to-end via subprocess against the tmux stub (`tests/conftest.py`'s
   `TmuxStub` fixture, replacing the bats `make_stub`/`on_enter` helpers):
   the recognition read-back, the unrecognized-command clear, the

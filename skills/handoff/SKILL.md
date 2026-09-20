@@ -11,7 +11,8 @@ rather than prepared, this skill drives it too — the rename, the `/clear`,
 and the prompt that resumes the work on the far side.
 
 `handoff-checkpoint` handles the writes, the staging and the transition
-file — this skill's job is deciding what goes in them.
+file, and prints what is left to do after the call — this skill's job is
+deciding what goes in them, then following what it prints.
 
 ## Protocol
 
@@ -84,10 +85,10 @@ handoff-checkpoint <<'JSON'
 JSON
 ```
 
-Both keys are required, each carrying content as a string or an object
-naming an action. `{"action": "clear"}` removes that file — for `task`, this
-is how a boundary with nothing to carry says so; for `todo`, it says every
-item landed. Content that is empty once headings and blank lines are
+`task` and `todo` are both required, each carrying content as a string or an
+object naming an action. `{"action": "clear"}` removes that file — for
+`task`, this is how a boundary with nothing to carry says so; for `todo`, it
+says every item landed. Content that is empty once headings and blank lines are
 stripped removes the file too, on either key — a `## Remaining` with no
 items stands the list down as surely as `clear` does. When the call has
 nothing to say about the list, send `{"action": "keep"}`, which leaves it

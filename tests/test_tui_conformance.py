@@ -402,6 +402,6 @@ def test_foreground_command_distinguishes_the_tui_from_the_shell(
         "the pane's foreground still reads `claude` 10s after the process was "
         "terminated, so wait_for_foreground_change can never fire and every "
         "driven restart fails closed. The #{pane_pid} alternative recorded in "
-        "docs/design.md's rejected alternatives is the fallback."
+        "docs/design/rejected-alternatives.md is the fallback."
     )
     assert released == "sh"

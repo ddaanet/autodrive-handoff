@@ -49,6 +49,59 @@ HANDOFF_REL_DRIVE = ".claude/autodrive"
 _LIB_SH = Path(__file__).resolve().parent / "_lib.sh"
 
 
+def main() -> int:
+    """Run the checkpoint.
+
+    Validate the payload, apply writes, compose the sentinel and directives,
+    print them.
+    """
+    payload = read_payload()
+    root = validate_root()
+    skill = validate_skill(payload)
+    validate_top_level_keys(payload)
+
+    if skill == "autoname":
+        validate_autoname_forbidden_fields(payload)
+    if skill == "restart":
+        validate_restart_forbidden_fields(payload)
+    commit_mode = validate_commit_mode(payload, skill)
+    title = validate_rename(payload, skill)
+    transition = build_transition(payload, skill, title)
+    continuation = validate_continuation(payload, skill, typed=transition.typed)
+
+    memory = lib.MemoryPart("", refusal=False)
+    if skill in ("handoff", "precompact"):
+        memory = lib.memory_directive(str(root), commit_mode)
+    held = hold_decision(
+        transition, memory=bool(memory.text), commit=commit_mode == "with-commit"
+    )
+    if held:
+        # Resolving before anything is written (task/todo/manifest/sentinel),
+        # matching _build_restart_transition's own check of this variable —
+        # a held sentinel's first line names the session, and there is
+        # nothing else this run could do with it unset.
+        require_session_id(
+            "transition", "cannot compose a held sentinel naming the session holding it"
+        )
+
+    manifest_lines: list[str] = []
+    if skill in ("handoff", "precompact"):
+        task_action, task_content = validate_task(payload)
+        todo_action, todo_content, todo_old, todo_new = validate_todo(payload)
+        task_plan = plan_task(root, task_action, task_content)
+        todo_plan = plan_todo(root, todo_action, todo_content, todo_old, todo_new)
+        apply_plan(task_plan)
+        apply_plan(todo_plan)
+        manifest_lines = task_plan.manifest_lines + todo_plan.manifest_lines
+    write_manifest(root, manifest_lines)
+
+    compose_sentinel(root, transition, continuation, held=held)
+    ending = Ending(held=held, typed=transition.typed)
+    parts = compose_directives(skill, root, commit_mode, memory, ending)
+    print_output(parts)
+    return 0
+
+
 class Transition(NamedTuple):
     """The sentinel's kind, its command lines, and whether it is typed."""
 
@@ -234,13 +287,16 @@ def build_transition(payload: JSONDict, skill: str, title: str) -> Transition:
     return _build_precompact_transition(payload)
 
 
-def _build_restart_transition() -> Transition:
+def require_session_id(field: str, reason: str) -> str:
+    """Return CLAUDE_CODE_SESSION_ID, or error naming field with reason."""
     session_id = os.environ.get("CLAUDE_CODE_SESSION_ID", "")
     if not session_id:
-        err(
-            "restart",
-            "CLAUDE_CODE_SESSION_ID is unset — cannot compose the resume command",
-        )
+        err(field, f"CLAUDE_CODE_SESSION_ID is unset — {reason}")
+    return session_id
+
+
+def _build_restart_transition() -> Transition:
+    session_id = require_session_id("restart", "cannot compose the resume command")
     return Transition("restart", ["/exit", f"claude --resume {session_id}"], typed=True)
 
 
@@ -630,50 +686,6 @@ def print_output(parts: list[str]) -> None:
     """
     if parts:
         sys.stdout.write("\n\n".join(part.rstrip("\n") for part in parts) + "\n")
-
-
-def main() -> int:
-    """Run the checkpoint.
-
-    Validate the payload, apply writes, compose the sentinel and directives,
-    print them.
-    """
-    payload = read_payload()
-    root = validate_root()
-    skill = validate_skill(payload)
-    validate_top_level_keys(payload)
-
-    if skill == "autoname":
-        validate_autoname_forbidden_fields(payload)
-    if skill == "restart":
-        validate_restart_forbidden_fields(payload)
-    commit_mode = validate_commit_mode(payload, skill)
-    title = validate_rename(payload, skill)
-    transition = build_transition(payload, skill, title)
-    continuation = validate_continuation(payload, skill, typed=transition.typed)
-
-    manifest_lines: list[str] = []
-    if skill in ("handoff", "precompact"):
-        task_action, task_content = validate_task(payload)
-        todo_action, todo_content, todo_old, todo_new = validate_todo(payload)
-        task_plan = plan_task(root, task_action, task_content)
-        todo_plan = plan_todo(root, todo_action, todo_content, todo_old, todo_new)
-        apply_plan(task_plan)
-        apply_plan(todo_plan)
-        manifest_lines = task_plan.manifest_lines + todo_plan.manifest_lines
-    write_manifest(root, manifest_lines)
-
-    memory = lib.MemoryPart("", refusal=False)
-    if skill in ("handoff", "precompact"):
-        memory = lib.memory_directive(str(root), commit_mode)
-    held = hold_decision(
-        transition, memory=bool(memory.text), commit=commit_mode == "with-commit"
-    )
-    compose_sentinel(root, transition, continuation, held=held)
-    ending = Ending(held=held, typed=transition.typed)
-    parts = compose_directives(skill, root, commit_mode, memory, ending)
-    print_output(parts)
-    return 0
 
 
 if __name__ == "__main__":

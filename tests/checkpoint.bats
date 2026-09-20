@@ -185,6 +185,21 @@ pick up per the task file" ]
     [ "$(head -n1 "$repo/.claude/autodrive")" = "armed" ]
 }
 
+# finding 3: no `*)` arm meant a held sentinel of an unreachable-through-the-
+# checkpoint kind (restart never holds today) still armed silently and exited
+# 0 with no closing line. handoff_drive_read itself accepts `held` for any
+# kind — the state check is independent of the kind check — so this fixture is
+# a shape handoff_drive_read reads back cleanly, exercising the gap.
+@test "handoff-approved: a held sentinel of an unexpected kind -> exit 2, left held, naming the kind" {
+    repo="$(make_repo)"
+    printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" restart "/exit" "claude --resume sess-other" \
+        > "$repo/.claude/autodrive"
+    run_approved "$repo"
+    [ "$status" -eq 2 ]
+    [[ "$stderr" == *"restart"* ]]
+    [ "$(head -n1 "$repo/.claude/autodrive")" = "held $CLAUDE_CODE_SESSION_ID" ]
+}
+
 @test "handoff-approved: HANDOFF_ROOT unset -> refuses, naming the unrecognised invocation" {
     repo="$(make_repo)"
     # shellcheck disable=SC2016   # $1/$2 are the inner bash -c's own positional params

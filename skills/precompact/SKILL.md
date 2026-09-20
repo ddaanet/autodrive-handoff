@@ -108,7 +108,7 @@ do not re-derive or verify it. A non-zero exit names the offending field on
 stderr — fix the payload and retry.
 
 The normal case — nothing durable, clean memory, no commit — is one
-checkpoint call, and its output is the one line you end on.
+checkpoint call, and its output is one part, naming the line to end on.
 
 ## Anti-patterns
 
@@ -126,5 +126,5 @@ checkpoint call, and its output is the one line you end on.
   `/handoff:autoname`'s job when wanted, and the checkpoint rejects it here.
 - Forcing a memory write to have something to show. An empty flush is the
   normal case.
-- Padding the closing line into a summary of the session. The compaction is
-  about to produce one.
+- Padding the line the checkpoint tells you to end on into a summary of the
+  session. The compaction is about to produce one.
