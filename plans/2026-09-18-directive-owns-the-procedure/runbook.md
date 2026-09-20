@@ -129,6 +129,17 @@ text, the two dangling wikilinks.
     is byte-identical to today's output in the memory-only, second-only and
     memory+second cases
 
+> **Corrected at review, 2026-09-19.** "the parts joined by two newlines plus
+> one trailing newline, which is byte-identical to today's output" was wrong
+> when written: every part ends in a newline of its own, so that join printed
+> *two* blank lines at each seam and a trailing one. The bash it replaced was
+> byte-different — `memory="$(checkpoint_memory_directive …)"` stripped the
+> trailing newline before `printf '%s\n\n%s\n'`, giving one blank line. The
+> dogfood run of 2026-09-19 observed the doubling on both the memory+second
+> and the commit-act+closing seams; `print_output` now strips each part's
+> trailing newline before joining. The rest of the bullet stands: the
+> empty-list case and the four silent boundary rows are unaffected.
+
 ## Phase 2: Hold rule (type: tdd)
 
 - Item 2.1: `scripts/checkpoint.py:hold_decision`, `tests/test_checkpoint.py` —

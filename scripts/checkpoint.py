@@ -624,10 +624,12 @@ def print_output(parts: list[str]) -> None:
     """Print the directive output (FR9).
 
     The non-empty parts, in order, blank-line separated. Writes nothing for an
-    empty list.
+    empty list. Each part already ends in a newline of its own, so the trailing
+    one is stripped before joining: otherwise the separator lands on top of it
+    and every gap is two blank lines rather than one.
     """
     if parts:
-        sys.stdout.write("\n\n".join(parts) + "\n")
+        sys.stdout.write("\n\n".join(part.rstrip("\n") for part in parts) + "\n")
 
 
 def main() -> int:

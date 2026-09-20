@@ -814,6 +814,12 @@ empty and removed: see `docs/changelog/2026-07-22-a-place-for-the-todo-list.md`,
   evidence, and says what still stands, so a later session reading the report
   instead of re-running it is not misled and loses nothing the report got
   right.
+- `inbox/` — what arrives from outside: a brief, note or finding dropped by a
+  session working in *another* repository. Never the repo root, where it reads
+  as a tracked project document, and never `plans/`, which is this repo's own
+  prospective work. Triage means acting on it and deleting it, or promoting it
+  into `plans/`. A brief's recommendation is input, not a decision. See
+  `inbox/README.md`.
 
 ## Conventions
 

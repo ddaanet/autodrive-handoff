@@ -2066,14 +2066,14 @@ def precompact_payload(commit: str) -> dict[str, object]:
 def assert_stdout_is_closing(
     result: subprocess.CompletedProcess[str], skill: str, *, typed: bool
 ) -> None:
-    """Assert stdout is exactly the closing line plus one newline.
+    """Assert stdout is exactly the closing line.
 
     First asserts the line itself is non-empty, so this cannot pass against an
     unwritten closing_directive.
     """
     closing = lib.closing_directive(skill, typed=typed)
     assert closing != ""
-    assert result.stdout == closing + "\n"
+    assert result.stdout == closing
 
 
 def test_not_gitlore_managed_closing_only(tmp_path: Path) -> None:
@@ -2283,6 +2283,21 @@ def test_handoff_parts_print_in_order(tmp_path: Path) -> None:
     assert memory_index < todo_index < commit_index
 
 
+def test_parts_are_separated_by_one_blank_line(tmp_path: Path) -> None:
+    """Every gap between parts is one blank line, never two.
+
+    Each part ends in a newline of its own, so a join that does not strip it
+    prints a second blank line at every seam.
+    """
+    repo = make_gitlore_repo(tmp_path)
+    dirty_memory(repo)
+    add_sdd_ledger(repo)
+    result = run_checkpoint(repo, precompact_payload("with-commit"))
+    assert result.returncode == 0
+    assert "\n\n\n" not in result.stdout
+    assert result.stdout.endswith("`Ready to /compact`.\n")
+
+
 def test_precompact_parts_print_in_order(tmp_path: Path) -> None:
     repo = make_gitlore_repo(tmp_path)
     dirty_memory(repo)
@@ -2305,7 +2320,7 @@ def test_precompact_parts_print_in_order(tmp_path: Path) -> None:
     commit_index = out.index(commit_act)
     closing_index = out.index(closing)
     assert memory_index < sdd_index < commit_index < closing_index
-    assert out.endswith(closing + "\n")
+    assert out.endswith(closing)
 
 
 # ==========================================================================
@@ -2650,4 +2665,4 @@ def test_refusal_prints_alone_when_not_held(tmp_path: Path) -> None:
     assert result.returncode == 0
     first_line = (repo / ".claude" / "autodrive").read_text().splitlines()[0]
     assert first_line == "armed"
-    assert result.stdout == refusal.text + "\n"
+    assert result.stdout == refusal.text
