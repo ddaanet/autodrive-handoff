@@ -94,6 +94,7 @@ PANE="$TMUX_PANE"
 # Hand it the path to drop a reason at; report-watcher-failure.sh picks it up.
 # The hook owns the path — the watcher stays ignorant of the layout.
 export HANDOFF_FAIL_FILE="$cwd/$HANDOFF_REL_DRIVE_FAILED"
+export HANDOFF_LOG_FILE="$cwd/$HANDOFF_REL_DRIVE_LOG"
 # Same arrangement for the other direction, one export per confirmation
 # primitive the walker may need: /compact and /clear confirm by this file
 # disappearing, which the transition's own SessionStart is what does, and

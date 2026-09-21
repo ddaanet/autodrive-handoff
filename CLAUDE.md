@@ -303,10 +303,12 @@ empty and removed: see `docs/changelog/2026-07-22-a-place-for-the-todo-list.md`,
   the transition's own `SessionStart` loader for the lines typed after it. One
   argument per line, and the lines are the literal keystrokes — it never learns
   which command belongs to which kind. Per line: `wait_for_composer` (the
-  glyph's mere presence — a no-op mid-session, load-bearing only for
-  `restart`'s continuation, the one line a freshly-exec'd process's boot can
-  still be rendering when the walker starts; see
-  `docs/changelog/2026-08-15-continuation-waits-for-the-composer-to-exist.md`),
+  cursor sitting in the composer, twice in a row, plus a `BOOT_SETTLE`
+  residual when it was not already there — a no-op mid-session, load-bearing
+  only for `restart`'s continuation, the one line a freshly-exec'd process's
+  boot can still be rendering when the walker starts; see
+  `docs/changelog/2026-08-15-continuation-waits-for-the-composer-to-exist.md`
+  and `docs/changelog/2026-09-20-the-boot-gate-asks-where-the-cursor-is.md`),
   then `wait_for_idle`, bail if
   `composer_has_user_text`, `send-keys -l`, then a `VERIFY_DELAY` gap that is
   the recognition read-back for a `/` line and the paste-window settle for
@@ -348,11 +350,20 @@ empty and removed: see `docs/changelog/2026-07-22-a-place-for-the-todo-list.md`,
   tunables, `snap` (visible-pane capture — never scrollback), `capture_full` +
   `cursor_position` (untruncated frame and cursor, which must index the same
   frame), `wait_for_landing` (poll for delivery — a single read at
-  `VERIFY_DELAY` races a composer that has not repainted), `wait_for_composer`
-  (poll for the glyph's mere presence, ahead of every other check — a fresh
-  process's boot shows no busy chrome for `wait_for_idle` to catch, so without
-  this gate a line typed during boot lands in a screen nothing is reading
-  yet), `wait_for_idle`
+  `VERIFY_DELAY` races a composer that has not repainted), `cursor_in_composer`
+  (the cursor at or past the composer's start column — the complement of
+  `composer_has_user_text` one column along) and `wait_for_composer`
+  (poll for it, two consecutive readings, ahead of every other check — a fresh
+  process's boot shows no busy chrome for `wait_for_idle` to catch, and the
+  `❯` this used to gate on is on screen from the first moment under
+  `--resume`, which carries the exited session's frame and the replayed
+  conversation, so without this gate a line typed during boot lands in a
+  screen nothing is reading yet; `HANDOFF_WATCHER_BOOT_SETTLE` covers the
+  painted-but-not-reading window the pane cannot distinguish — measured at 3
+  to 9 seconds past the cursor over four resumes, so its 10s default is a
+  bound on this box's load rather than on the mechanism — and is paid only
+  when the composer was absent on the first reading), `composer_excerpt` (the composer's first rows, which the
+  landing failure quotes instead of naming a cause), `wait_for_idle`
   (stable-idle poll loop), `pane_foreground` + `wait_for_foreground_change`
   (`#{pane_current_command}`, and the poll that waits for it to stop reading
   as the baseline — two consecutive differing readings, so a teardown
@@ -397,6 +408,13 @@ empty and removed: see `docs/changelog/2026-07-22-a-place-for-the-todo-list.md`,
   `submit_exited` confirms `/exit` by `$HANDOFF_EXIT_FILE` appearing (then
   consumes it) — the opposite polarity of `submit_consumed`, since
   `SessionEnd` can only ever create that marker.
+  `watcher_log` is `watcher_fail`'s success-side sibling: `_drive_line` ends
+  by appending one JSON row to `$HANDOFF_LOG_FILE` (`.claude/autodrive.log`,
+  exported by the four spawning hooks; unset is tolerated) — `gate`, `idle`,
+  `landed`, `confirmed`, each the time its own step took, plus the `settle`
+  in force, so `gate` minus `settle` is how long a real boot took to start
+  reading. Read by nothing, kept to its last 50 rows, and a failed write is
+  swallowed, the line being already delivered.
 - `scripts/write-stage.sh` — PostToolUse(Write|Edit) entry point: matches
   writes/edits that resolve to `$cwd/.claude/handoff-todo.md` — the one path
   the checkpoint never sees, since the agent edits that scratch list directly
@@ -414,8 +432,8 @@ empty and removed: see `docs/changelog/2026-07-22-a-place-for-the-todo-list.md`,
   prompt. Leaves `armed` **before** spawning: `handoff_drive_arm` to `pending`
   for a kind with a confirming source, `rm` for `rename`, which no loader would
   ever clear. Then spawns the walker with
-  the before-lines, exporting `HANDOFF_FAIL_FILE`, `HANDOFF_PENDING_FILE`,
-  `HANDOFF_EXIT_FILE` and
+  the before-lines, exporting `HANDOFF_FAIL_FILE`, `HANDOFF_LOG_FILE`,
+  `HANDOFF_PENDING_FILE`, `HANDOFF_EXIT_FILE` and
   `HANDOFF_TRANSCRIPT` (this session's, from `Stop`'s own payload — what a
   `/rename` line confirms against): the hook owns the paths, the walker stays
   ignorant of the layout. An empty before-sequence (FR-G) leaves the file
@@ -1071,7 +1089,8 @@ outright regardless of path.
   ported whole to pytest with the 2026-08-10 split (see
   `docs/changelog/2026-08-10-python-split.md`), never trimmed:
   `tests/test_watcher_lib.py` covers the pure predicates
-  (`is_busy`, `line_landed`, `composer_has_user_text`, `composer_start_column`,
+  (`is_busy`, `line_landed`, `composer_has_user_text`, `cursor_in_composer`,
+  `composer_start_column`, `composer_excerpt`,
   `is_unknown_command`), `transcript_prompt_count`,
   `transcript_title_count`, `pane_foreground` +
   `wait_for_foreground_change` (opening, timing out, and refusing to open on
@@ -1094,6 +1113,14 @@ outright regardless of path.
   `live_pane` runs `claude` as the pane command itself and so has no shell
   for the foreground to revert to, and it triggers the release with a signal
   — the gate polls the reverting, and `submit_exited` owns `/exit` itself.
+  Two rows (2026-09-20) boot `claude --resume` in a shell pane instead, on an
+  80-column pane: one *measures* rather than asserts — first `❯`, first
+  cursor-in-composer, first keystroke the session keeps, printed under
+  `pytest -s`, since a pinned threshold would red on a faster or slower box —
+  and that number is what sizes `HANDOFF_WATCHER_BOOT_SETTLE`; the other
+  types a 93-character line into a pane narrower than it, closing the one
+  `line_landed` residual no offline fixture can reach, the wrap being
+  composed there rather than captured.
   `tests/test_drive_when_idle.py` drives `drive_when_idle.py`
   end-to-end via subprocess against the tmux stub (`tests/conftest.py`'s
   `TmuxStub` fixture, replacing the bats `make_stub`/`on_enter` helpers):
@@ -1111,7 +1138,17 @@ outright regardless of path.
   covers `wait_for_composer`: a pane with no glyph at all for 0.3s, then one
   appears — reproduces the driven-restart continuation failure, red against
   `_drive_line` without the gate (a 0.1s landing window elapses before the
-  composer exists), green with it in front. Every shell-line row
+  composer exists), green with it in front. An eighth row (2026-09-20) covers
+  the same gate one predicate along: a pane whose `❯` sits in replayed
+  transcript text with the cursor at the screen's origin, then a real
+  composer — red against the glyph-presence gate with the exact `did not
+  land` reason the production failure recorded, and mutation-checked by
+  restoring that gate, which reds that row alone. A ninth row (2026-09-20)
+  stages the same 0.3s boot and reads the timing record back — the line, the
+  settle in force, a `gate` that saw the staged delay, and a pre-filled
+  60-row file cut to its last 50. The hooks' `HANDOFF_LOG_FILE` export has no
+  row of its own: they spawn the walker detached, and no synchronous seam
+  shows what it was handed. Every shell-line row
   stages its flip through `TmuxStub.foreground_changes_to` (one more reading
   of the current value, then the new one) rather than a thread, which races
   `main`'s baseline read. Three rows there

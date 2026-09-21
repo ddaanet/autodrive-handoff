@@ -156,6 +156,54 @@ def test_composer_has_user_text_false_with_no_composer_at_all() -> None:
     assert not wl.composer_has_user_text("some-shell$ \n", 12, 0)
 
 
+def test_cursor_in_composer_true_with_the_cursor_at_the_start() -> None:
+    """An idle composer reading input: the cursor parked at its start column."""
+    assert wl.cursor_in_composer(REAL_EMPTY, 2, _glyph_row(REAL_EMPTY))
+
+
+def test_cursor_in_composer_true_when_typed_text_wrapped_below() -> None:
+    typed = _composer("half a prompt")
+    assert wl.cursor_in_composer(typed, 3, _glyph_row(typed) + 1)
+
+
+def test_cursor_in_composer_false_with_the_cursor_above_the_glyph() -> None:
+    """The 2026-09-20 case: a ❯ on screen the cursor is nowhere near.
+
+    Under ``claude --resume`` the pane carries the exited session's frame and
+    the replayed conversation, either of which can hold the glyph while the
+    process reads no input at all. This is the reading that keeps the boot gate
+    shut through it.
+    """
+    assert not wl.cursor_in_composer(REAL_EMPTY, 40, 0)
+
+
+def test_cursor_in_composer_false_with_no_composer_at_all() -> None:
+    assert not wl.cursor_in_composer("some-shell$ \n", 12, 0)
+
+
+def test_cursor_in_composer_false_on_an_unreadable_cursor() -> None:
+    """cursor_position's (-1, -1) must read as "not reading input" here.
+
+    The opposite polarity to composer_has_user_text's tolerance of it: there an
+    unreadable cursor must not abort a line, here it must not open a gate on no
+    evidence. Both fail towards not typing.
+    """
+    assert not wl.cursor_in_composer(REAL_EMPTY, -1, -1)
+
+
+def test_composer_excerpt_quotes_the_composer_and_not_the_scrollback() -> None:
+    """What a non-delivery report carries: the composer, not the
+    conversation."""
+    echoed = f"● I will continue with the thing you were doing\n{REAL_PROSE}"
+    tail = wl.composer_excerpt(echoed)
+    assert "continue with the thing you were doing" in tail
+    assert "● I will" not in tail
+
+
+def test_composer_excerpt_is_empty_when_there_is_no_composer() -> None:
+    assert wl.composer_excerpt("some-shell$ \n") == ""
+
+
 def test_is_busy_true_on_captured_spinner_under_a_minute() -> None:
     assert wl.is_busy(REAL_SPINNER_UNDER_A_MINUTE)
 

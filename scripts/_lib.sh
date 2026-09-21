@@ -33,6 +33,11 @@ HANDOFF_REL_DRIVE_FAILED=".claude/autodrive.failed"
 # attempt: stop-drive.sh clears any stale copy before spawning the walker).
 # shellcheck disable=SC2034
 HANDOFF_REL_DRIVE_EXITED=".claude/autodrive.exited"
+# Where the walker records the timings of each line it delivered — the
+# success-side sibling of HANDOFF_REL_DRIVE_FAILED. Read by nothing; it is
+# there for whoever next asks how long a boot gate actually waited.
+# shellcheck disable=SC2034
+HANDOFF_REL_DRIVE_LOG=".claude/autodrive.log"
 
 # Where the drift report records the last destination it announced. A literal
 # directory rather than $TMPDIR: it used to also be where session-pointer.sh

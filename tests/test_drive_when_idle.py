@@ -38,6 +38,7 @@ def walk(
         "HANDOFF_WATCHER_CONSUME_TIMEOUT": str(consume),
         "HANDOFF_WATCHER_RECOGNITION_DELAY": "0.05",
         "HANDOFF_WATCHER_LANDING_DELAY": "0.5",
+        "HANDOFF_WATCHER_BOOT_SETTLE": "0.01",
     }
     if env:
         full_env.update(env)
@@ -792,6 +793,117 @@ def test_composer_boot_is_waited_for_not_typed_into_a_screen_with_none(
     assert result.returncode == 0
     assert elapsed >= 0.3
     assert "-l|continue with task 3|" in tmux_stub.sent_text()
+
+
+def test_a_glyph_that_is_not_a_live_composer_does_not_open_the_boot_gate(
+    tmux_stub: TmuxStub, tmp_path: Path
+) -> None:
+    """A ❯ on screen is not the same thing as a composer reading input.
+
+    Reproduces the 2026-09-20 driven-restart continuation failure, which the
+    2026-08-15 gate above did not catch: the pane under `claude --resume`
+    carries the exited session's last frame and the replayed transcript, so a
+    ❯ is on screen from the first moment — here inside replayed text about
+    this very module. The gate opened on it, the line was typed into a screen
+    nothing was reading, and the keystrokes were lost for good. Fixed code
+    asks where the terminal cursor is, which chrome and replayed text never
+    answer for.
+    """
+    booting = "● the glyph is ❯ in _watcher_lib\n╭─ Claude Code ─╮\n│  resuming...  │\n"
+    ready = "──── x ──\n❯ \n"
+    idle = tmux_stub.stubdir / "pane_idle.txt"
+    after_l = tmux_stub.stubdir / "pane_after_l.txt"
+    idle.write_text(booting)
+    after_l.write_text(booting)
+    # Nowhere near the replayed glyph — a repaint parks the cursor at the
+    # screen's origin, never inside the conversation it just drew.
+    tmux_stub.compose(0, 0)
+
+    def boot_completes() -> None:
+        time.sleep(0.3)
+        idle.write_text(ready)
+        after_l.unlink()  # falls back to the stub's normal send-keys echo
+        tmux_stub.compose(2, 1)  # the composer, cursor at its start column
+
+    threading.Thread(target=boot_completes, daemon=True).start()
+    tr = tmp_path / "t.jsonl"
+    tr.write_text("")
+    submitted = {
+        "type": "user",
+        "message": {"role": "user", "content": "continue with task 3"},
+    }
+    tmux_stub.on_enter(f"printf '{json.dumps(submitted)}\\n' >> '{tr}'")
+
+    result = walk(
+        tmux_stub,
+        "continue with task 3",
+        env={
+            "HANDOFF_TRANSCRIPT": str(tr),
+            "HANDOFF_WATCHER_LANDING_DELAY": "0.1",
+            "HANDOFF_WATCHER_BOOT_TIMEOUT": "2",
+        },
+    )
+
+    assert result.returncode == 0
+    assert "-l|continue with task 3|" in tmux_stub.sent_text()
+
+
+def test_a_delivered_line_records_its_gate_timings(
+    tmux_stub: TmuxStub, tmp_path: Path
+) -> None:
+    """A delivery leaves its timings behind, since nothing else can say them.
+
+    The walker is detached and its output goes nowhere, so the first dogfood
+    of the 2026-09-20 boot gate could only be read off transcript timestamps:
+    36s from Stop to the continuation, with no way to split boot from settle.
+    The composer is absent for 0.3s here, so the gate's share is measurable
+    and the settle is the one the walker was given.
+    """
+    idle = tmux_stub.stubdir / "pane_idle.txt"
+    after_l = tmux_stub.stubdir / "pane_after_l.txt"
+    idle.write_text("╭─ Claude Code ─╮\n│  resuming...  │\n")
+    after_l.write_text(idle.read_text())
+    tmux_stub.compose(0, 0)
+
+    def boot_completes() -> None:
+        time.sleep(0.3)
+        idle.write_text("──── x ──\n❯ \n")
+        after_l.unlink()
+        tmux_stub.compose(2, 1)
+
+    threading.Thread(target=boot_completes, daemon=True).start()
+    tr = tmp_path / "t.jsonl"
+    tr.write_text("")
+    submitted = {
+        "type": "user",
+        "message": {"role": "user", "content": "continue with task 3"},
+    }
+    tmux_stub.on_enter(f"printf '{json.dumps(submitted)}\\n' >> '{tr}'")
+    log = tmp_path / "autodrive.log"
+    log.write_text("".join(f'{{"line": "old {n}"}}\n' for n in range(60)))
+
+    result = walk(
+        tmux_stub,
+        "continue with task 3",
+        env={
+            "HANDOFF_TRANSCRIPT": str(tr),
+            "HANDOFF_LOG_FILE": str(log),
+            "HANDOFF_WATCHER_BOOT_TIMEOUT": "2",
+        },
+    )
+
+    assert result.returncode == 0
+    records = [json.loads(row) for row in log.read_text().splitlines()]
+    last = records[-1]
+    assert last["line"] == "continue with task 3"
+    assert last["settle"] == 0.01
+    # The 0.3s clock starts before the walker's interpreter does, so the gate
+    # sees less of it than was staged; an already-present composer costs 0.03.
+    assert last["gate"] >= 0.15
+    assert {"at", "idle", "landed", "confirmed"} <= last.keys()
+    # Bounded: a file nothing consumes must not grow with every transition.
+    assert len(records) == 50
+    assert records[0]["line"] == "old 11"
 
 
 def test_sequence_re_gates_on_idle_between_lines(

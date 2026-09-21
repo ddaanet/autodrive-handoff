@@ -39,6 +39,15 @@ it.
 
 ## Fix
 
+> **Superseded 2026-09-20** (see [The boot gate asks where the cursor
+> is](2026-09-20-the-boot-gate-asks-where-the-cursor-is.md)) — scoped to the
+> predicate this section describes. The gate stays first in `_drive_line` and
+> stays a no-op mid-session, but the glyph's mere presence is not the
+> question: under `--resume` the pane carries the exited session's frame and
+> the replayed conversation, either of which can hold a `❯` while nothing
+> reads input. It now asks where the terminal cursor is, plus a bounded
+> settle. The diagnosis and the 3.9s measurement below stand.
+
 `_watcher_lib.wait_for_composer` polls for the `❯` glyph's mere presence —
 not idleness, not this line's content, just that a composer exists at all —
 before `_drive_line` runs its existing `wait_for_idle` → send → verify →

@@ -113,6 +113,25 @@ def composer_has_user_text(text: str, cursor_x: int, cursor_y: int) -> bool:
     return cursor_x > composer_start_column(lines[index])
 
 
+def cursor_in_composer(text: str, cursor_x: int, cursor_y: int) -> bool:
+    """Report whether the terminal cursor sits in a composer reading input.
+
+    The same frame and the same two indices composer_has_user_text reads, one
+    column along: that predicate asks whether the cursor is *past* the start
+    column, this one whether it is in the composer at all. A ❯ in replayed
+    transcript text, in the previous session's last frame, or in boot chrome
+    never has the cursor parked in it; a composer the TUI is actually reading
+    does, at the start column when nothing is typed yet.
+    """
+    lines = strip(text).split("\n")
+    index = _composer_index(lines)
+    if index is None:
+        return False
+    if cursor_y != index:
+        return cursor_y > index
+    return cursor_x >= composer_start_column(lines[index])
+
+
 def composer_start_column(line: str) -> int:
     """Return where composer content begins, derived from the line itself.
 
@@ -134,6 +153,19 @@ def _composer_region(text: str) -> str:
     lines = strip(text).split("\n")
     index = _composer_index(lines)
     return "\n".join(lines[index:]) if index is not None else ""
+
+
+def composer_excerpt(text: str, rows: int = 3) -> str:
+    """Return the composer's first non-blank ``rows``, for a failure to quote.
+
+    A non-delivery is reported once, into a file nobody can re-run, so the
+    report carries what a reader would otherwise reconstruct from transcript
+    archaeology: what the composer held at the moment the line was given up
+    on. Counted from the glyph row down, which is where a typed line and its
+    wraps are — the rows below it are the box rule and the status chrome.
+    """
+    lines = [line for line in _composer_region(text).split("\n") if line.strip()]
+    return "\n".join(lines[:rows])
 
 
 def _composer_index(lines: list[str]) -> int | None:
@@ -195,26 +227,56 @@ def cursor_position(pane: str) -> tuple[int, int]:
 
 
 def wait_for_composer(pane: str, timeout: float | None = None) -> bool:
-    """Poll until the composer glyph is on screen at all, up to ``timeout``.
+    """Poll until the pane holds a composer reading input, up to ``timeout``.
 
     A freshly exec'd process — the state `restart`'s continuation walker
     always finds the pane in, since `SessionStart(resume)` fires at the very
-    start of a new process's boot — has no composer for the first several
+    start of a new process's boot — reads no input for the first several
     seconds: SessionStart hooks, a --resume transcript replay, an
-    autoMemoryDirectory settings load all run before anything renders one.
-    wait_for_idle only reads the busy spinner's absence, which a boot screen
-    satisfies at once, so without this gate a line got typed into a screen
-    nothing was reading and lost for good — the fixed verify+landing budget
-    elapsed before the composer ever existed to hold it. A no-op mid-session,
-    where the composer the caller is about to type into is already there.
+    autoMemoryDirectory settings load all run before anything reads a
+    keystroke. wait_for_idle only reads the busy spinner's absence, which a
+    boot screen satisfies at once, so without this gate a line got typed into
+    a screen nothing was reading and lost for good.
+
+    The glyph's mere presence answered a different question, which is how a
+    continuation was lost a second time on 2026-09-20: under `claude --resume`
+    the pane still carries the exited session's frame and the replayed
+    conversation, so a ❯ is on screen from the first moment. The cursor is the
+    discriminator — replayed text and boot chrome never have it parked in
+    them — and two consecutive readings are asked for, so a mid-boot repaint
+    that flashes the right shape does not open the gate, the same rule
+    wait_for_foreground_change uses.
+
+    BOOT_SETTLE is the bounded residual after that, and it is paid only when
+    the composer was not already there on the first reading — mid-session,
+    where the caller is about to type into a composer that has been reading
+    for minutes, this whole gate costs one poll. It is sized from live
+    measurement (`just tui-conformance`) rather than a guess: resuming a 2.8MB
+    transcript on the author's box, the cursor sat in the composer 3.6-11.3s
+    after the relaunch line ran, and the first keystroke the session actually
+    kept landed 3.2s, 5.2s, 8.6s and 7.4s after *that* over four runs. Nothing
+    on the pane distinguishes those two moments, which is what makes this a
+    residual rather than another gate, and nothing bounds it either — the
+    spread tracks the box's load — so the default sits above the slowest of
+    the four rather than near their middle.
     """
     if timeout is None:
         timeout = _env_float("HANDOFF_WATCHER_BOOT_TIMEOUT", 30.0)
     poll = _env_float("HANDOFF_WATCHER_POLL", 0.1)
+    settle = _env_float("HANDOFF_WATCHER_BOOT_SETTLE", 10.0)
     deadline = time.monotonic() + timeout
+    seen = 0
+    was_absent = False
     while time.monotonic() < deadline:
-        if PROMPT_GLYPH in strip(capture_full(pane)):
-            return True
+        if cursor_in_composer(capture_full(pane), *cursor_position(pane)):
+            seen += 1
+            if seen >= 2:
+                if was_absent:
+                    time.sleep(settle)
+                return True
+        else:
+            seen = 0
+            was_absent = True
         time.sleep(poll)
     return False
 
@@ -452,3 +514,29 @@ def watcher_fail(reason: str) -> None:
     if fail_file:
         Path(fail_file).write_text(reason + "\n", encoding="utf-8")
     raise SystemExit(1)
+
+
+def watcher_log(record: dict[str, Any]) -> None:
+    """Append one delivered line's timings to HANDOFF_LOG_FILE, newest last.
+
+    The success-side sibling of watcher_fail: the walker is detached and its
+    output goes nowhere, so without this a delivery can only be timed by
+    reading transcript timestamps around it. Nothing consumes the file, so it
+    is kept to its last LOG_ROWS rows rather than left to grow, and a failure
+    to write it is swallowed — the line is already delivered, and a record of
+    that is never worth failing it for. Unset is tolerated, as there.
+    """
+    log_file = os.environ.get("HANDOFF_LOG_FILE", "")
+    if not log_file:
+        return
+    stamp = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+    try:
+        path = Path(log_file)
+        rows = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+        rows.append(json.dumps({"at": stamp, **record}, ensure_ascii=False))
+        path.write_text("\n".join(rows[-LOG_ROWS:]) + "\n", encoding="utf-8")
+    except OSError:
+        pass
+
+
+LOG_ROWS = 50

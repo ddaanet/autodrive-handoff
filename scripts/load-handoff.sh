@@ -48,6 +48,7 @@ if [[ "$hook_source" == "clear" && -f "$drive" ]]; then
                 # The walker is detached, so a failed delivery has no way back
                 # to the agent; this hook owns the path it records at.
                 export HANDOFF_FAIL_FILE="$cwd/$HANDOFF_REL_DRIVE_FAILED"
+                export HANDOFF_LOG_FILE="$cwd/$HANDOFF_REL_DRIVE_LOG"
                 export HANDOFF_TRANSCRIPT="$hook_transcript"
                 handoff_spawn_detached drive_when_idle.py "$TMUX_PANE" "${after[@]}"
                 notes+=("cleared — will resume with \"${after[0]}\" once the prompt is idle (tmux pane $TMUX_PANE)")

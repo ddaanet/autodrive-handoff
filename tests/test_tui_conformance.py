@@ -405,3 +405,187 @@ def test_foreground_command_distinguishes_the_tui_from_the_shell(
         "docs/design/rejected-alternatives.md is the fallback."
     )
     assert released == "sh"
+
+
+# The continuation line of the 2026-09-20 restart that lost its keystrokes,
+# verbatim. Longer than the 80-column pane below, so it wraps for real — the
+# one residual the offline wrap fixture cannot close, since that one is a
+# capture split by hand rather than a capture of a wrap.
+LONG_LINE = (
+    "re-check whether the masking bind mounts are gone and remove the "
+    "leftover phantom files if so"
+)
+
+# Typed repeatedly from the first glyph on. Nothing the TUI paints by itself
+# contains it, so a landing reading cannot come from the idle placeholder.
+PROBE_MARKER = "zqxjv"
+
+# A resume large enough to exercise the boot the walker races, small enough
+# not to OOM a 2GB box next to the session running the probe.
+MAX_RESUME_BYTES = 3_000_000
+
+RESUME_TIMEOUT = 120.0
+
+
+def _resumable_session_id() -> str:
+    """Pick a past session of this project to resume: the largest stale one.
+
+    Stale by an hour and never the session running the probe: resuming a live
+    conversation would have two processes writing one transcript.
+    """
+    project = Path.home() / ".claude" / "projects" / str(PROBE_CWD).replace("/", "-")
+    live = os.environ.get("CLAUDE_CODE_SESSION_ID", "")
+    cutoff = time.time() - 3600
+    candidates = [
+        path
+        for path in project.glob("*.jsonl")
+        if path.stem != live
+        and path.stat().st_mtime < cutoff
+        and path.stat().st_size <= MAX_RESUME_BYTES
+    ]
+    if not candidates:
+        pytest.skip(f"no stale session transcript under {project} to resume")
+    return max(candidates, key=lambda path: path.stat().st_size).stem
+
+
+@pytest.fixture
+def resuming_pane() -> Iterator[tuple[str, str, float]]:
+    """Launch ``claude --resume`` in a shell pane; yield (sock, pane, t_zero).
+
+    The arrangement a driven restart leaves behind, reproduced: a shell pane
+    whose scrollback already carries a literal ``❯`` from the session that just
+    exited, with the relaunch line typed into it. Yields at once, before
+    anything has rendered — the measurement below starts from ``t_zero`` and the
+    boot is the thing under observation.
+
+    80 columns, not the 200 the other fixtures use, so ``LONG_LINE`` wraps.
+    """
+    for tool in ("tmux", "claude", "script"):
+        if not shutil.which(tool):
+            pytest.skip(f"{tool} not on PATH — conformance probe needs a real TUI")
+    session = _resumable_session_id()
+
+    sock = f"handoff-resume-{os.getpid()}"
+    conf = Path(tempfile.gettempdir()) / f"{sock}.conf"
+    conf.write_text("set -g focus-events on\nset -g status off\n", encoding="utf-8")
+
+    client: subprocess.Popen[bytes] | None = None
+    try:
+        _tmux(
+            sock, "-f", str(conf), "new-session", "-d",
+            "-x", "80", "-y", "50", "-c", str(PROBE_CWD), "/bin/sh",
+        )  # fmt: skip
+        pane = _tmux(sock, "list-panes", "-t", "0", "-F", "#{pane_id}").split("\n")[0]
+        if not pane:
+            pytest.fail("tmux reported no pane — the probe server never started")
+
+        client = subprocess.Popen(
+            [
+                "script",
+                "-q",
+                "-c",
+                f"stty rows 50 cols 80; tmux -L {sock} attach -t 0",
+                "/dev/null",
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        time.sleep(1)
+        # The exited session's last frame, as the pane would still hold it.
+        _tmux(sock, "send-keys", "-t", pane, "-l", "printf '%s\\n' '❯ /exit'")
+        _tmux(sock, "send-keys", "-t", pane, "Enter")
+        time.sleep(0.5)
+        _tmux(sock, "send-keys", "-t", pane, "-l", f"claude --resume {session}")
+        _tmux(sock, "send-keys", "-t", pane, "Enter")
+        yield sock, pane, time.monotonic()
+    finally:
+        if client is not None:
+            client.kill()
+        _tmux(sock, "kill-server")
+        conf.unlink(missing_ok=True)
+
+
+def test_the_first_composer_glyph_is_not_yet_accepting_input(
+    resuming_pane: tuple[str, str, float],
+) -> None:
+    """Measure the gap the boot gate has to cover, and print it.
+
+    ``wait_for_composer`` used to open on the glyph's mere presence anywhere in
+    the pane, and a restart's continuation was lost through that gate on
+    2026-09-20: the glyph was there, the keystrokes were not read by anything.
+    This is the only place the two moments can be told apart — the first glyph
+    on screen, and the first keystroke a resuming process actually keeps.
+
+    It asserts the ordering and prints the interval rather than pinning a
+    threshold: the number sizes the gate's settle on this box, and a pinned one
+    would red on a faster or slower machine without anything being wrong.
+    """
+    sock, pane, t_zero = resuming_pane
+
+    deadline = time.monotonic() + RESUME_TIMEOUT
+    t_glyph: float | None = None
+    while time.monotonic() < deadline:
+        if "❯" in _capture(sock, pane):
+            t_glyph = time.monotonic() - t_zero
+            break
+        time.sleep(0.05)
+    assert t_glyph is not None, (
+        f"no ❯ on the pane within {RESUME_TIMEOUT}s of the relaunch line"
+    )
+
+    t_input: float | None = None
+    cursor_open: float | None = None
+    while time.monotonic() < deadline:
+        full = _tmux(sock, "capture-pane", "-p", "-t", pane)
+        x, y = _cursor(sock, pane)
+        if cursor_open is None and wl.cursor_in_composer(full, x, y):
+            cursor_open = time.monotonic() - t_zero
+        _tmux(sock, "send-keys", "-t", pane, "-l", PROBE_MARKER)
+        time.sleep(0.25)
+        if wl.line_landed(_capture(sock, pane), PROBE_MARKER):
+            t_input = time.monotonic() - t_zero
+            break
+    assert t_input is not None, (
+        f"nothing typed in the {RESUME_TIMEOUT}s after the relaunch ever "
+        f"landed in the composer.\nPane:\n{_capture(sock, pane)}"
+    )
+
+    print(
+        f"\nresume boot on this box: first ❯ at {t_glyph:.2f}s, "
+        f"cursor in composer at "
+        f"{'never' if cursor_open is None else f'{cursor_open:.2f}s'}, "
+        f"first keystroke kept at {t_input:.2f}s "
+        f"(glyph → input {t_input - t_glyph:.2f}s)"
+    )
+    assert t_input >= t_glyph
+
+
+def test_line_landed_survives_a_real_wrap_of_a_long_line(
+    resuming_pane: tuple[str, str, float],
+) -> None:
+    """The wrap fixture offline is a capture split by hand; this is a wrap.
+
+    If today's composer wrapped inside a bordered box, or right-padded each row
+    with a border glyph, ``_squash`` would stop matching and every driven
+    continuation longer than the pane would abort having been delivered.
+
+    Retried to the deadline rather than sent once, because a resuming session
+    keeps a keystroke and then drops the next one — a boot repaint takes the
+    composer back. That intermittency is the subject of the row above and is
+    not what this row is measuring, and a retry cannot make this assertion
+    vacuous: a send that concatenates onto an earlier one still contains the
+    line, so a wrap that broke ``_squash`` would red either way.
+    """
+    sock, pane, _ = resuming_pane
+    assert len(LONG_LINE) > 80, "the line must exceed the pane width to wrap"
+
+    deadline = time.monotonic() + RESUME_TIMEOUT
+    captured = _capture(sock, pane)
+    while time.monotonic() < deadline and not wl.line_landed(captured, LONG_LINE):
+        _tmux(sock, "send-keys", "-t", pane, "C-u")
+        captured = _type(sock, pane, LONG_LINE)
+    _clear(sock, pane)
+    assert wl.line_landed(captured, LONG_LINE), (
+        f"a {len(LONG_LINE)}-character line did not read as landed once "
+        f"wrapped.\nPane:\n{captured}"
+    )

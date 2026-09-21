@@ -28,6 +28,7 @@ from pathlib import Path
 from _watcher_lib import (
     _env_float,
     capture_full,
+    composer_excerpt,
     composer_has_user_text,
     cursor_position,
     is_unknown_command,
@@ -44,6 +45,7 @@ from _watcher_lib import (
     wait_for_idle,
     wait_for_landing,
     watcher_fail,
+    watcher_log,
 )
 
 
@@ -96,17 +98,21 @@ def _drive_line(pane: str, line: str, verify_delay: float) -> None:
     See the module docstring for the dispatch rules per command kind.
     """
     # A pane driven right after a fresh process exec (restart's continuation)
-    # may have no composer at all yet — wait_for_idle's spinner-absence check
-    # is trivially true during boot, which is not the same as ready.
+    # may be reading no input yet — wait_for_idle's spinner-absence check is
+    # trivially true during boot, and so is a composer painted on screen.
+    started = time.monotonic()
     if not wait_for_composer(pane):
         watcher_fail(
-            f"`{line}` was never typed: no composer appeared before boot timeout"
+            f"`{line}` was never typed: no composer was reading input before "
+            "boot timeout"
         )
+    gate_opened = time.monotonic()
 
     # FR-H: every line re-gates. Confirming the previous one can take
     # minutes and the pane is live throughout, so idleness established
     # before it says nothing about now.
     wait_for_idle(pane)
+    idle = time.monotonic()
 
     # Load-bearing, not defensive: send-keys concatenates onto
     # half-typed user text. A bail is a non-delivery like any other.
@@ -122,13 +128,18 @@ def _drive_line(pane: str, line: str, verify_delay: float) -> None:
     # the TUI's paste window and is absorbed as a line break).
     time.sleep(verify_delay)
 
-    # A dead pane or a pane in copy mode swallows the literal send: the
-    # composer looks untouched. Polled, not read once — see wait_for_landing.
+    # A pane that is not reading the send swallows it and looks untouched.
+    # Polled, not read once — see wait_for_landing. The report quotes the
+    # composer and the elapsed time rather than naming a cause: the two causes
+    # this used to assert (a dead pane, copy mode) were both false the two
+    # times it has fired in production.
     if not wait_for_landing(pane, line):
         watcher_fail(
-            f"`{line}` did not land in the composer — a dead pane or copy "
-            "mode may have swallowed it"
+            f"`{line}` did not land in the composer "
+            f"{time.monotonic() - gate_opened:.1f}s after it started reading "
+            f"input. The composer held:\n{composer_excerpt(capture_full(pane))}"
         )
+    landed = time.monotonic()
 
     if line.startswith("/") and _was_rejected(pane):
         # Clear the composer and leave the pane as we found it. Never
@@ -137,6 +148,20 @@ def _drive_line(pane: str, line: str, verify_delay: float) -> None:
         watcher_fail(f"the TUI did not recognize `{line}`, so it was cleared unrun")
 
     _confirm_line(pane, line)
+
+    # Each figure is the time its own step took, so `gate` minus `settle` is
+    # how long the composer took to start reading — the number BOOT_SETTLE is
+    # sized against, and one only a real boot can supply.
+    watcher_log(
+        {
+            "line": line,
+            "gate": round(gate_opened - started, 2),
+            "settle": _env_float("HANDOFF_WATCHER_BOOT_SETTLE", 10.0),
+            "idle": round(idle - gate_opened, 2),
+            "landed": round(landed - idle, 2),
+            "confirmed": round(time.monotonic() - landed, 2),
+        }
+    )
 
 
 def _was_rejected(pane: str) -> bool:

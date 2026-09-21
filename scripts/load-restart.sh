@@ -63,6 +63,7 @@ fi
 
 PANE="$TMUX_PANE"
 export HANDOFF_FAIL_FILE="$cwd/$HANDOFF_REL_DRIVE_FAILED"
+export HANDOFF_LOG_FILE="$cwd/$HANDOFF_REL_DRIVE_LOG"
 HANDOFF_TRANSCRIPT="$(jq -r '.transcript_path // ""' <<<"$input")"
 export HANDOFF_TRANSCRIPT
 handoff_spawn_detached drive_when_idle.py "$PANE" "${after[@]}"

@@ -84,6 +84,7 @@ PANE="$TMUX_PANE"
 # See stop-drive.sh: the detached walker's exit status goes nowhere, so give it
 # somewhere to record a non-delivery.
 export HANDOFF_FAIL_FILE="$cwd/$HANDOFF_REL_DRIVE_FAILED"
+export HANDOFF_LOG_FILE="$cwd/$HANDOFF_REL_DRIVE_LOG"
 # The walker confirms delivery by watching this session's transcript for the
 # accepted prompt (submit_prompted), which tolerates a queued submit that shows
 # no spinner yet. Every hook payload carries transcript_path.

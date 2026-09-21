@@ -98,8 +98,8 @@ user-prompt transcript entry for prose, and `.claude/autodrive.exited`
 appearing for `/exit` — the one primitive with the opposite polarity, since
 `SessionEnd` can only ever create that marker, never remove one that
 predates the attempt. The walker reads the pane only where the pane is the
-sole witness — gating *typing into* the composer (`composer_has_user_text`,
-`line_landed`, `is_unknown_command`). Nothing that asks whether an action
+sole witness — gating *typing into* the composer (`cursor_in_composer`,
+`composer_has_user_text`, `line_landed`, `is_unknown_command`). Nothing that asks whether an action
 *took effect* looks at it. Each carries no opinion about the chrome around
 what it reads: `line_landed` asks whether the composer holds the line just
 typed, rather than whether it holds anything — an idle composer is never
@@ -152,12 +152,46 @@ line — driven by a second, separate walker that `load-restart.sh` spawns at
 a TUI that is already running, true for `/compact`/`/clear`'s continuations
 since their `SessionStart` fires on a live process, but `restart`'s
 continuation is the one case that budget faces a process that has just exec'd
-and has no composer yet — measured at 3.9s for a bare launch of this plugin's
-own hook chain to render one. `wait_for_composer` polls for the `❯` glyph's
-mere presence, ahead of every other check in `_drive_line`, and is a no-op
-mid-session, where the composer is already there. [The continuation waits for
-the composer to
+and is reading nothing yet — measured at 3.9s for a bare launch of this
+plugin's own hook chain to render a composer. `wait_for_composer` runs ahead
+of every other check in `_drive_line` for that reason, and is a no-op
+mid-session, where the composer has been reading for minutes. [The
+continuation waits for the composer to
 exist](../changelog/2026-08-15-continuation-waits-for-the-composer-to-exist.md)
+
+What that gate asks is where the terminal **cursor** is, not whether a `❯` is
+on screen. The glyph's presence lost a continuation a second time on
+2026-09-20: under `claude --resume` the pane still carries the exited
+session's last frame and the replay of the conversation being resumed, so a
+glyph is there from the first moment and the gate opened on a screen nothing
+was reading. `cursor_in_composer` is the complement of
+`composer_has_user_text` one column along — same frame, same two indices —
+and replayed text and boot chrome never have the cursor parked in them. Two
+consecutive readings, `wait_for_foreground_change`'s rule, so a mid-boot
+repaint that flashes the right shape does not open it.
+
+The cursor is not the whole answer, and the measurement is what says so:
+resuming a 2.8MB transcript, the cursor sat in the composer 0.05s after the
+first glyph on every run, and the first keystroke the session *kept* landed 3
+to 9 seconds after that — a spread that tracks the box's load, not the pane.
+A composer that is painted, holds the cursor and is not yet reading is
+indistinguishable on the pane, so what covers it is
+`HANDOFF_WATCHER_BOOT_SETTLE` — a bounded residual, the shape
+`HANDOFF_WATCHER_SHELL_SETTLE` already has below, paid only when the composer
+was absent on the first reading. Widening `LANDING_DELAY` instead would only
+wait longer for keystrokes already discarded: the composer was still empty a
+minute later, so nothing was pending a late repaint. [The boot gate asks
+where the cursor is](../changelog/2026-09-20-the-boot-gate-asks-where-the-cursor-is.md)
+
+A delivered line records what each step cost. The walker is detached and its
+output goes nowhere, so `watcher_log` — the success-side sibling of
+`watcher_fail` — appends one JSON row per line to `.claude/autodrive.log`
+(`HANDOFF_LOG_FILE`, exported beside `HANDOFF_FAIL_FILE`): `gate`, `idle`,
+`landed` and `confirmed`, each the time its own step took, and the `settle`
+in force. `gate` minus `settle` is how long a real boot took to start
+reading, which is the number the settle is sized against. Nothing consumes
+the file, so it keeps its last 50 rows, and a failed write is swallowed —
+the line is already delivered.
 
 ## Typing into a bare shell
 
