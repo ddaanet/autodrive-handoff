@@ -101,7 +101,8 @@ def _drive_line(pane: str, line: str, verify_delay: float) -> None:
     # may be reading no input yet — wait_for_idle's spinner-absence check is
     # trivially true during boot, and so is a composer painted on screen.
     started = time.monotonic()
-    if not wait_for_composer(pane):
+    opened, booting = wait_for_composer(pane)
+    if not opened:
         watcher_fail(
             f"`{line}` was never typed: no composer was reading input before "
             "boot timeout"
@@ -121,7 +122,11 @@ def _drive_line(pane: str, line: str, verify_delay: float) -> None:
 
     # Send literally so nothing in the line is read as tmux key names;
     # Enter is always a separate keystroke, sent by confirmation below.
+    # Sent the moment the gate opens, booting or not: the composer takes the
+    # keystrokes as soon as the cursor is in it, and waiting on the paint
+    # first would only move the same wait in front of the send.
     _send_literal(pane, line)
+    sent = time.monotonic()
 
     # Type-verify-submit gap for a `/` line (recognition), settle for
     # prose (an Enter sent right after a long literal send lands inside
@@ -129,15 +134,16 @@ def _drive_line(pane: str, line: str, verify_delay: float) -> None:
     time.sleep(verify_delay)
 
     # A pane that is not reading the send swallows it and looks untouched.
-    # Polled, not read once — see wait_for_landing. The report quotes the
-    # composer and the elapsed time rather than naming a cause: the two causes
-    # this used to assert (a dead pane, copy mode) were both false the two
-    # times it has fired in production.
-    if not wait_for_landing(pane, line):
+    # Polled, not read once, and for as long as this pane's own paint can
+    # take — see wait_for_landing. The report quotes the composer and states
+    # only what was observed rather than naming a cause: the two causes this
+    # used to assert (a dead pane, copy mode) were both false the two times it
+    # has fired in production.
+    if not wait_for_landing(pane, line, booting=booting):
         watcher_fail(
             f"`{line}` did not land in the composer "
-            f"{time.monotonic() - gate_opened:.1f}s after it started reading "
-            f"input. The composer held:\n{composer_excerpt(capture_full(pane))}"
+            f"{time.monotonic() - sent:.1f}s after it was typed. "
+            f"The composer held:\n{composer_excerpt(capture_full(pane))}"
         )
     landed = time.monotonic()
 
@@ -149,14 +155,15 @@ def _drive_line(pane: str, line: str, verify_delay: float) -> None:
 
     _confirm_line(pane, line)
 
-    # Each figure is the time its own step took, so `gate` minus `settle` is
-    # how long the composer took to start reading — the number BOOT_SETTLE is
-    # sized against, and one only a real boot can supply.
+    # Each figure is the time its own step took, and nothing sleeps between
+    # them: `gate` alone is how long the boot took to put the cursor in the
+    # composer, and `landed` is how long the session then took to paint a line
+    # it had already taken — the number BOOT_LANDING_DELAY is sized against,
+    # and one only a real boot can supply.
     watcher_log(
         {
             "line": line,
             "gate": round(gate_opened - started, 2),
-            "settle": _env_float("HANDOFF_WATCHER_BOOT_SETTLE", 10.0),
             "idle": round(idle - gate_opened, 2),
             "landed": round(landed - idle, 2),
             "confirmed": round(time.monotonic() - landed, 2),

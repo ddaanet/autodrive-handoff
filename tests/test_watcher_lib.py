@@ -8,6 +8,8 @@ docs/changelog/2026-08-10-python-split.md.
 from __future__ import annotations
 
 import json
+import threading
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -419,6 +421,53 @@ def test_pane_foreground_reads_the_tmux_format(
     tmux_stub.set_foreground("fish")
 
     assert wl.pane_foreground("%9") == "fish"
+
+
+def test_wait_for_composer_reports_no_boot_when_it_is_already_reading(
+    tmux_stub: TmuxStub, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mid-session the gate opens at once, and says the pane was not booting.
+
+    That second half is what the caller sizes the landing window on, so a
+    session that has been reading input for minutes must not read as a boot:
+    there the window is how long a genuinely swallowed keystroke goes
+    unreported.
+    """
+    monkeypatch.setenv("PATH", tmux_stub.path_env())
+    monkeypatch.setenv("HANDOFF_WATCHER_POLL", "0.01")
+
+    assert wl.wait_for_composer("%9", timeout=2.0) == (True, False)
+
+
+def test_wait_for_composer_reports_a_boot_when_the_composer_arrives_late(
+    tmux_stub: TmuxStub, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Absent on the first reading is the whole evidence that this is a boot."""
+    monkeypatch.setenv("PATH", tmux_stub.path_env())
+    monkeypatch.setenv("HANDOFF_WATCHER_POLL", "0.01")
+    idle = tmux_stub.stubdir / "pane_idle.txt"
+    idle.write_text("╭─ Claude Code ─╮\n│  resuming...  │\n")
+    tmux_stub.compose(0, 0)
+
+    def boot_completes() -> None:
+        time.sleep(0.2)
+        idle.write_text("──── x ──\n❯ \n")
+        tmux_stub.compose(2, 1)
+
+    threading.Thread(target=boot_completes, daemon=True).start()
+
+    assert wl.wait_for_composer("%9", timeout=5.0) == (True, True)
+
+
+def test_wait_for_composer_reports_a_composer_that_never_appears(
+    tmux_stub: TmuxStub, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("PATH", tmux_stub.path_env())
+    monkeypatch.setenv("HANDOFF_WATCHER_POLL", "0.01")
+    (tmux_stub.stubdir / "pane_idle.txt").write_text("│  resuming...  │\n")
+    tmux_stub.compose(0, 0)
+
+    assert wl.wait_for_composer("%9", timeout=0.2) == (False, True)
 
 
 def test_wait_for_foreground_change_times_out_while_claude_holds_the_pane(

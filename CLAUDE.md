@@ -303,17 +303,20 @@ empty and removed: see `docs/changelog/2026-07-22-a-place-for-the-todo-list.md`,
   the transition's own `SessionStart` loader for the lines typed after it. One
   argument per line, and the lines are the literal keystrokes — it never learns
   which command belongs to which kind. Per line: `wait_for_composer` (the
-  cursor sitting in the composer, twice in a row, plus a `BOOT_SETTLE`
-  residual when it was not already there — a no-op mid-session, load-bearing
+  cursor sitting in the composer, twice in a row, returning `(opened,
+  booting)` — a no-op mid-session, load-bearing
   only for `restart`'s continuation, the one line a freshly-exec'd process's
   boot can still be rendering when the walker starts; see
-  `docs/changelog/2026-08-15-continuation-waits-for-the-composer-to-exist.md`
-  and `docs/changelog/2026-09-20-the-boot-gate-asks-where-the-cursor-is.md`),
+  `docs/changelog/2026-08-15-continuation-waits-for-the-composer-to-exist.md`,
+  `docs/changelog/2026-09-20-the-boot-gate-asks-where-the-cursor-is.md` and
+  `docs/changelog/2026-09-21-the-landing-window-is-sized-by-the-boot.md`),
   then `wait_for_idle`, bail if
-  `composer_has_user_text`, `send-keys -l`, then a `VERIFY_DELAY` gap that is
+  `composer_has_user_text`, `send-keys -l` the moment the gate opens —
+  booting or not, since the composer takes the keystrokes as soon as the
+  cursor is in it — then a `VERIFY_DELAY` gap that is
   the recognition read-back for a `/` line and the paste-window settle for
-  prose, then `wait_for_landing` before confirming by the command's own
-  primitive. A line that fails to confirm
+  prose, then `wait_for_landing(…, booting=…)` before confirming by the
+  command's own primitive. A line that fails to confirm
   ends the sequence, so a `/rename` that never lands under kind `clear` costs a
   wrong title and nothing more. The re-gate at the top of each iteration is
   FR-H: confirming a line can take `CONSUME_TIMEOUT` (300s) and the pane is
@@ -350,19 +353,31 @@ empty and removed: see `docs/changelog/2026-07-22-a-place-for-the-todo-list.md`,
   tunables, `snap` (visible-pane capture — never scrollback), `capture_full` +
   `cursor_position` (untruncated frame and cursor, which must index the same
   frame), `wait_for_landing` (poll for delivery — a single read at
-  `VERIFY_DELAY` races a composer that has not repainted), `cursor_in_composer`
+  `VERIFY_DELAY` races a composer that has not repainted — over a window the
+  caller picks through its keyword-only `booting`: `BOOT_LANDING_DELAY` (30s)
+  wide enough for a paint nothing bounds, or `LANDING_DELAY` (3s) everywhere
+  else, which is also how long the walker waits before reporting a keystroke
+  it believes was swallowed, so the two are not one window widened),
+  `cursor_in_composer`
   (the cursor at or past the composer's start column — the complement of
   `composer_has_user_text` one column along) and `wait_for_composer`
-  (poll for it, two consecutive readings, ahead of every other check — a fresh
-  process's boot shows no busy chrome for `wait_for_idle` to catch, and the
-  `❯` this used to gate on is on screen from the first moment under
-  `--resume`, which carries the exited session's frame and the replayed
-  conversation, so without this gate a line typed during boot lands in a
-  screen nothing is reading yet; `HANDOFF_WATCHER_BOOT_SETTLE` covers the
-  painted-but-not-reading window the pane cannot distinguish — measured at 3
-  to 9 seconds past the cursor over four resumes, so its 10s default is a
-  bound on this box's load rather than on the mechanism — and is paid only
-  when the composer was absent on the first reading), `composer_excerpt` (the composer's first rows, which the
+  (poll for it, two consecutive readings, ahead of every other check,
+  returning `(opened, booting)` — a fresh
+  process's boot shows no busy chrome for `wait_for_idle` to catch, and a `❯`
+  can be on screen under `--resume` without anything reading it, from the
+  replayed conversation's own text; the exited session's frame is *not* a
+  source, Claude Code running on the alternate screen and a real `/exit`
+  leaving no `❯` on the restored one — probed on CC 2.1.278, which the
+  2026-09-20 entry's "on screen from the first moment" reading predates.
+  Nothing is owed after the gate: the loss window closes before it opens — a
+  discrete ~1–1.5s band 1.7–3.3s into a resume, ending ~2s ahead of the
+  alternate-screen switch and 2.5–3.7s ahead of the gate — and input from the
+  cursor onward is buffered and painted late rather than lost, so `booting`
+  buys the line a landing window instead of a sleep. Open residual:
+  `cursor_in_composer` fires for a cursor below *any* `❯` row, which is what
+  lets it work on a scrolled composer, so a shell prompt or scrollback
+  carrying one opens the gate at the shell with `booting` false),
+  `composer_excerpt` (the composer's first rows, which the
   landing failure quotes instead of naming a cause), `wait_for_idle`
   (stable-idle poll loop), `pane_foreground` + `wait_for_foreground_change`
   (`#{pane_current_command}`, and the poll that waits for it to stop reading
@@ -411,9 +426,11 @@ empty and removed: see `docs/changelog/2026-07-22-a-place-for-the-todo-list.md`,
   `watcher_log` is `watcher_fail`'s success-side sibling: `_drive_line` ends
   by appending one JSON row to `$HANDOFF_LOG_FILE` (`.claude/autodrive.log`,
   exported by the four spawning hooks; unset is tolerated) — `gate`, `idle`,
-  `landed`, `confirmed`, each the time its own step took, plus the `settle`
-  in force, so `gate` minus `settle` is how long a real boot took to start
-  reading. Read by nothing, kept to its last 50 rows, and a failed write is
+  `landed`, `confirmed` and nothing else, each the time its own step took.
+  Nothing sleeps between them, so `gate` alone is how long a boot took to put
+  the cursor in the composer and `landed` is how long the session then took to
+  paint a line it had already taken — the number `BOOT_LANDING_DELAY` is sized
+  against. Read by nothing, kept to its last 50 rows, and a failed write is
   swallowed, the line being already delivered.
 - `scripts/write-stage.sh` — PostToolUse(Write|Edit) entry point: matches
   writes/edits that resolve to `$cwd/.claude/handoff-todo.md` — the one path
@@ -1095,7 +1112,12 @@ outright regardless of path.
   `transcript_title_count`, `pane_foreground` +
   `wait_for_foreground_change` (opening, timing out, and refusing to open on
   a single transient reading — that last one mutation-checked by relaxing
-  `seen >= 2`), and the `watcher_fail` recording, plus that the
+  `seen >= 2`), `wait_for_composer`'s return pair on all three of its
+  outcomes (already reading → `(True, False)`, absent then present →
+  `(True, True)`, never appears → `(False, True)`; the second boolean is what
+  the landing window is picked from, so a mid-session pane reading as a boot
+  would buy `BOOT_LANDING_DELAY` of silence on a swallowed keystroke),
+  and the `watcher_fail` recording, plus that the
   four confirmation primitives (`submit_exited` since 2026-08-10) return
   rather than raise on a non-delivery. Its fixtures are **captures** from a
   live TUI, spelled with an explicit `\N{NO-BREAK SPACE}` for the composer
@@ -1113,14 +1135,28 @@ outright regardless of path.
   `live_pane` runs `claude` as the pane command itself and so has no shell
   for the foreground to revert to, and it triggers the release with a signal
   — the gate polls the reverting, and `submit_exited` owns `/exit` itself.
-  Two rows (2026-09-20) boot `claude --resume` in a shell pane instead, on an
-  80-column pane: one *measures* rather than asserts — first `❯`, first
-  cursor-in-composer, first keystroke the session keeps, printed under
+  Three rows boot `claude --resume` in a shell pane instead, on an
+  80-column pane, over a `resuming_pane` fixture whose staged previous screen
+  is a parameter: one *measures* rather than asserts — first `❯`, first
+  cursor-in-composer, first keystroke the session keeps, plus how many of the
+  markers sent meanwhile are in the composer beside it, which is what says the
+  gap is a paint and not a loss, printed under
   `pytest -s`, since a pinned threshold would red on a faster or slower box —
-  and that number is what sizes `HANDOFF_WATCHER_BOOT_SETTLE`; the other
+  and that number is what sizes `HANDOFF_WATCHER_BOOT_LANDING_DELAY`; one
   types a 93-character line into a pane narrower than it, closing the one
   `line_landed` residual no offline fixture can reach, the wrap being
-  composed there rather than captured.
+  composed there rather than captured; and
+  `test_only_keystrokes_ahead_of_the_boot_gate_are_lost[post-exit-screen]`
+  streams a distinct marker every ~0.35s from the moment the relaunch line
+  runs and asserts the gate's own promise — the condition held for at least
+  one send, every marker sent while it held is in the composer afterwards, and
+  in order — printing the loss band, the screen switch and a `+`/`-` trace
+  rather than pinning them, since a run that loses nothing is not a failure.
+  That row is parametrized onto a glyph-free screen because the fixture's
+  default `printf '❯ /exit'` staging reproduces the open residual instead of
+  the platform (the gate opens at the shell in 0.43s and the band then falls
+  behind it), and the default is kept for the other two, where it stands in
+  for a `❯` the fixture cannot otherwise produce. Nothing is ever submitted.
   `tests/test_drive_when_idle.py` drives `drive_when_idle.py`
   end-to-end via subprocess against the tmux stub (`tests/conftest.py`'s
   `TmuxStub` fixture, replacing the bats `make_stub`/`on_enter` helpers):
@@ -1143,9 +1179,20 @@ outright regardless of path.
   transcript text with the cursor at the screen's origin, then a real
   composer — red against the glyph-presence gate with the exact `did not
   land` reason the production failure recorded, and mutation-checked by
-  restoring that gate, which reds that row alone. A ninth row (2026-09-20)
-  stages the same 0.3s boot and reads the timing record back — the line, the
-  settle in force, a `gate` that saw the staged delay, and a pre-filled
+  restoring that gate, which reds that row alone. Two rows (2026-09-21) cover
+  the landing window the gate hands the line: a pane that is absent for a
+  second and then paints the send half a second late is delivered and the run
+  finishes well inside a deliberately large `BOOT_SETTLE` override, which is
+  the evidence that the deleted tunable is inert and that nothing sleeps
+  before the send; and its guard, a pane with the same late paint but a
+  composer present from the first reading, which must still fail with `did not
+  land` and never Enter. The guard is mutation-checked by making the boot
+  window unconditional — it alone reds, the line landing inside the widened
+  window and the failure moving past `did not land` to the confirmation stage.
+  An eleventh row (2026-09-20)
+  stages the same 0.3s boot and reads the timing record back — an exact key
+  set of `at`, `line`, `gate`, `idle`, `landed`, `confirmed` and no `settle`,
+  a `gate` that saw the staged delay, and a pre-filled
   60-row file cut to its last 50. The hooks' `HANDOFF_LOG_FILE` export has no
   row of its own: they spawn the walker detached, and no synchronous seam
   shows what it was handed. Every shell-line row

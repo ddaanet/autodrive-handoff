@@ -46,7 +46,11 @@ it.
 > question: under `--resume` the pane carries the exited session's frame and
 > the replayed conversation, either of which can hold a `❯` while nothing
 > reads input. It now asks where the terminal cursor is, plus a bounded
-> settle. The diagnosis and the 3.9s measurement below stand.
+> settle. The diagnosis and the 3.9s measurement below stand. Superseded again
+> 2026-09-21 (see [The landing window is sized by the boot, not a
+> settle](2026-09-21-the-landing-window-is-sized-by-the-boot.md)) on the settle
+> alone, which is gone: the wait it bought sits behind the send instead, as the
+> landing window a booting pane's line is given.
 
 `_watcher_lib.wait_for_composer` polls for the `❯` glyph's mere presence —
 not idleness, not this line's content, just that a composer exists at all —

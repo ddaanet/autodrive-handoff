@@ -31,6 +31,7 @@ import tempfile
 import time
 from collections.abc import Iterator
 from pathlib import Path
+from typing import NamedTuple
 
 import _watcher_lib as wl
 import pytest
@@ -448,18 +449,30 @@ def _resumable_session_id() -> str:
     return max(candidates, key=lambda path: path.stat().st_size).stem
 
 
+# What the pane already holds when the relaunch line is typed into it. The
+# default stages a literal ``❯`` above the shell's cursor — the arrangement the
+# glyph-presence gate was fooled by. Overridden per row through `indirect`,
+# because what a real ``/exit`` leaves behind is a question with an answer:
+# Claude Code runs on the alternate screen (`#{alternate_on}` flips to 1 part
+# way through boot), so the exited session's frame is discarded and the restored
+# normal screen carries no ``❯`` at all — measured 2026-09-21 on CC 2.1.278.
+PREVIOUS_SCREEN = "❯ /exit"
+EXITED_SCREEN = "session exited"
+
+
 @pytest.fixture
-def resuming_pane() -> Iterator[tuple[str, str, float]]:
+def resuming_pane(request: pytest.FixtureRequest) -> Iterator[tuple[str, str, float]]:
     """Launch ``claude --resume`` in a shell pane; yield (sock, pane, t_zero).
 
     The arrangement a driven restart leaves behind, reproduced: a shell pane
-    whose scrollback already carries a literal ``❯`` from the session that just
-    exited, with the relaunch line typed into it. Yields at once, before
-    anything has rendered — the measurement below starts from ``t_zero`` and the
-    boot is the thing under observation.
+    whose screen already carries the line the parametrizing row asked for, with
+    the relaunch line typed into it. Yields at once, before anything has
+    rendered — the measurement below starts from ``t_zero`` and the boot is the
+    thing under observation.
 
     80 columns, not the 200 the other fixtures use, so ``LONG_LINE`` wraps.
     """
+    previous: str = getattr(request, "param", PREVIOUS_SCREEN)
     for tool in ("tmux", "claude", "script"):
         if not shutil.which(tool):
             pytest.skip(f"{tool} not on PATH — conformance probe needs a real TUI")
@@ -491,8 +504,8 @@ def resuming_pane() -> Iterator[tuple[str, str, float]]:
             stderr=subprocess.DEVNULL,
         )
         time.sleep(1)
-        # The exited session's last frame, as the pane would still hold it.
-        _tmux(sock, "send-keys", "-t", pane, "-l", "printf '%s\\n' '❯ /exit'")
+        # The screen the relaunch is typed over, per PREVIOUS_SCREEN.
+        _tmux(sock, "send-keys", "-t", pane, "-l", f"printf '%s\\n' '{previous}'")
         _tmux(sock, "send-keys", "-t", pane, "Enter")
         time.sleep(0.5)
         _tmux(sock, "send-keys", "-t", pane, "-l", f"claude --resume {session}")
@@ -517,8 +530,10 @@ def test_the_first_composer_glyph_is_not_yet_accepting_input(
     on screen, and the first keystroke a resuming process actually keeps.
 
     It asserts the ordering and prints the interval rather than pinning a
-    threshold: the number sizes the gate's settle on this box, and a pinned one
-    would red on a faster or slower machine without anything being wrong.
+    threshold: the number sizes BOOT_LANDING_DELAY on this box, and a pinned
+    one would red on a faster or slower machine without anything being wrong.
+    The marker count beside it is what says the gap is a paint and not a loss —
+    a session that buffers shows every marker sent since the cursor opened.
     """
     sock, pane, t_zero = resuming_pane
 
@@ -596,4 +611,269 @@ def test_line_landed_survives_a_real_wrap_of_a_long_line(
     assert wl.line_landed(captured, LONG_LINE), (
         f"a {len(LONG_LINE)}-character line did not read as landed once "
         f"wrapped.\nPane:\n{captured}"
+    )
+
+
+class _Send(NamedTuple):
+    """One marker keystroke, and what the pane read like at the moment of it."""
+
+    marker: str
+    at: float
+    in_composer: bool
+    gated: bool
+
+
+def _marker(index: int) -> str:
+    """Spell the ``index``-th marker: distinct, ordered, self-delimiting.
+
+    One send per marker, each carrying its own ordinal, so the composer says
+    *which* sends survived rather than how many. Concatenated they stay
+    parseable — ``zq007v`` cannot abut into a neighbour's spelling — and
+    ``_squash`` rejoins a row wrap, so an 80-column pane cannot hide one.
+    """
+    return f"zq{index:03d}v"
+
+
+# Sent every MARKER_PERIOD plus the three tmux reads that precede each one,
+# from before the relaunch has painted anything until the resumed session is
+# demonstrably reading and painting. LIMIT bounds a boot that never gets there.
+MARKER_PERIOD = 0.3
+MARKER_LIMIT = 200
+POST_READING_WINDOW = 4.0
+
+# The keystrokes are painted seconds after they are kept, so the composer is
+# polled to stillness rather than read after a guessed sleep.
+PAINT_SETTLE_STABLE = 6
+PAINT_SETTLE_POLL = 0.5
+PAINT_SETTLE_TIMEOUT = 30.0
+
+
+def _composer_text(sock: str, pane: str) -> str:
+    """Squash the composer's rows — where a marker either is or is not."""
+    return _squash_composer(_tmux(sock, "capture-pane", "-p", "-t", pane))
+
+
+def _squash_composer(full: str) -> str:
+    return wl._squash(wl._composer_region(full))
+
+
+def _pane_state(sock: str, pane: str) -> tuple[int, int, bool]:
+    """Read the cursor and whether the pane is on the alternate screen.
+
+    One display-message for all three: the alternate-screen flag is the
+    terminal's own account of the switch, which is where the hand test's lost
+    characters went — onto the normal screen the TUI was about to replace. The
+    shell's echo of the relaunch line is the alternative and a worse one, since
+    the resumed conversation can paint the phrase straight back.
+    """
+    out = _tmux(
+        sock,
+        "display-message",
+        "-p",
+        "-t",
+        pane,
+        "#{cursor_x},#{cursor_y},#{alternate_on}",
+    )
+    x, y, alt = [*out.strip().split(","), "", "", ""][:3]
+    return int(x or -1), int(y or -1), alt == "1"
+
+
+def _at(moment: float | None) -> str:
+    return "never" if moment is None else f"{moment:.2f}s"
+
+
+class _Boot(NamedTuple):
+    """The five moments of a resume boot, each relative to the relaunch."""
+
+    switch: float | None
+    painted: float | None
+    cursor: float | None
+    gate: float | None
+    reading: float | None
+
+
+def _stream_markers(sock: str, pane: str, t_zero: float) -> tuple[list[_Send], _Boot]:
+    """Type ordered markers across the boot, recording the pane at each send.
+
+    Runs from before anything has rendered until POST_READING_WINDOW past the
+    first proof that the resumed session is reading and painting — a marker
+    sent *after* the screen switch showing up in the composer. Anchored there
+    rather than on the gate, which is the thing under observation and can open
+    early: a stop condition derived from it would end the run inside the very
+    window the row exists to straddle.
+    """
+    deadline = time.monotonic() + RESUME_TIMEOUT
+    switch: float | None = None
+    painted: float | None = None
+    cursor: float | None = None
+    gate: float | None = None
+    reading: float | None = None
+    sends: list[_Send] = []
+    post_switch: list[str] = []
+    previous_in = False
+    stop_at: float | None = None
+
+    while len(sends) < MARKER_LIMIT and time.monotonic() < deadline:
+        full = _tmux(sock, "capture-pane", "-p", "-t", pane)
+        x, y, alternate = _pane_state(sock, pane)
+        now = time.monotonic() - t_zero
+        if switch is None and alternate:
+            switch = now
+        if switch is not None and painted is None and wl.PROMPT_GLYPH in wl.strip(full):
+            painted = now
+        if reading is None and post_switch:
+            composer = _squash_composer(full)
+            if any(marker in composer for marker in post_switch):
+                reading = now
+                stop_at = time.monotonic() + POST_READING_WINDOW
+
+        in_composer = wl.cursor_in_composer(full, x, y)
+        # Two consecutive readings is wait_for_composer's own rule: the first
+        # keystroke it lets through is the one after the second of them.
+        gated = in_composer and previous_in
+        if in_composer and cursor is None:
+            cursor = now
+        if gated and gate is None:
+            gate = now
+        previous_in = in_composer
+
+        marker = _marker(len(sends))
+        _tmux(sock, "send-keys", "-t", pane, "-l", marker)
+        sends.append(_Send(marker, now, in_composer, gated))
+        if switch is not None:
+            post_switch.append(marker)
+
+        if stop_at is not None and time.monotonic() >= stop_at:
+            break
+        time.sleep(MARKER_PERIOD)
+    return sends, _Boot(switch, painted, cursor, gate, reading)
+
+
+def _settled_composer(sock: str, pane: str) -> str:
+    """Poll the composer to stillness and return it, squashed.
+
+    The keystrokes are kept well before they are painted, so a single read after
+    the last send would report a loss the pane is merely late about.
+    """
+    landed = _composer_text(sock, pane)
+    deadline = time.monotonic() + PAINT_SETTLE_TIMEOUT
+    stable = 0
+    while time.monotonic() < deadline and stable < PAINT_SETTLE_STABLE:
+        time.sleep(PAINT_SETTLE_POLL)
+        current = _composer_text(sock, pane)
+        stable = stable + 1 if current == landed else 0
+        landed = current
+    return landed
+
+
+def _report_sends(sends: list[_Send], landed: str, boot: _Boot) -> None:
+    """Print where the loss window fell on this run — the row's measurement."""
+    lost = [send for send in sends if send.marker not in landed]
+    switch_at = next(
+        (i for i, send in enumerate(sends) if send.at >= (boot.switch or float("inf"))),
+        None,
+    )
+    gate_at = next((i for i, send in enumerate(sends) if send.gated), None)
+    trace = ""
+    for index, send in enumerate(sends):
+        trace += "/" if index == switch_at else ""
+        trace += "|" if index == gate_at else ""
+        trace += "+" if send.marker in landed else "-"
+    cadence = (sends[-1].at - sends[0].at) / (len(sends) - 1) if len(sends) > 1 else 0
+    window = (
+        "nothing lost on this run"
+        if not lost
+        else f"{lost[0].at:.2f}s → {lost[-1].at:.2f}s"
+    )
+    detail = (
+        "none"
+        if not lost
+        else ", ".join(
+            f"{send.marker}@{send.at:.2f}s{'*' if send.in_composer else ''}"
+            for send in lost
+        )
+        + "   (* cursor read as in the composer at send time)"
+    )
+    print(
+        f"\nresume boot: screen switch at {_at(boot.switch)}, composer painted "
+        f"at {_at(boot.painted)}, cursor in composer at {_at(boot.cursor)}, "
+        f"gate open at {_at(boot.gate)}, session reading at {_at(boot.reading)}"
+        f"\n{len(sends)} markers sent every {cadence:.2f}s on average: "
+        f"{len(sends) - len(lost)} in the composer, {len(lost)} lost"
+        f"\nloss window: {window}"
+        f"\n{trace}   (+ kept, - lost, / screen switch, | gate opens)"
+        f"\nlost: {detail}"
+    )
+
+
+@pytest.mark.parametrize(
+    "resuming_pane", [EXITED_SCREEN], indirect=True, ids=["post-exit-screen"]
+)
+def test_only_keystrokes_ahead_of_the_boot_gate_are_lost(
+    resuming_pane: tuple[str, str, float],
+) -> None:
+    """The loss window, reproduced, and the gate's promise asserted over it.
+
+    Typed by hand across a resume boot, ``aoeuidhtnsaoe`` arrived as
+    ``aoeunsaoe``: the characters sent partway through the boot were echoed onto
+    the terminal's own screen and reached no composer, while those either side
+    of that window all arrived. That window is the whole reason
+    ``wait_for_composer`` exists, and since ``BOOT_SETTLE`` was removed the gate
+    is the only thing standing between it and a driven restart's continuation —
+    nothing sleeps behind it any more.
+
+    So one claim is asserted: every marker sent while the gate's own condition
+    held — the cursor in the composer on this reading and the one before it —
+    is in the composer afterwards, in order. Everything else is printed. Where
+    the loss window falls, and how much of it a given boot loses, is a property
+    of this box's load on the day; pinning it would red on a faster or slower
+    one without anything being wrong, and a run that loses nothing at all is
+    not a failure either.
+
+    Runs over ``EXITED_SCREEN`` rather than the fixture's default, and the
+    difference is the whole assertion. A screen carrying a ``❯`` above the
+    shell's cursor satisfies ``cursor_in_composer`` outright — the glyph row is
+    found, the cursor is below it — so the gate opens within half a second of
+    the relaunch, before the resumed process has rendered anything, and the
+    loss window then falls *behind* an open gate (measured 2026-09-21: gate at
+    0.43s, keystrokes lost 3.83s → 6.07s). That is a real residual of the
+    predicate, and it is not what a restart meets: Claude Code runs on the
+    alternate screen, so ``/exit`` restores a normal screen with no ``❯`` on it
+    at all. Asserting the gate's promise over the staged glyph would be
+    asserting it over an arrangement the platform does not produce.
+
+    Nothing is ever submitted: no Enter is sent after the relaunch line, so
+    whatever the markers land in — the composer, or the shell's line while it
+    still owns the tty — dies with the pane in teardown.
+    """
+    sock, pane, t_zero = resuming_pane
+
+    sends, boot = _stream_markers(sock, pane, t_zero)
+    landed = _settled_composer(sock, pane)
+    _report_sends(sends, landed, boot)
+
+    gated_sends = [send for send in sends if send.gated]
+    assert gated_sends, (
+        "the boot gate never opened in the "
+        f"{sends[-1].at if sends else 0:.0f}s of this run, so the row asserts "
+        "nothing. Either the resume never finished booting or "
+        "cursor_in_composer has stopped recognising a live composer."
+    )
+    positions = [landed.find(send.marker) for send in gated_sends]
+    missing = [
+        send.marker
+        for send, index in zip(gated_sends, positions, strict=True)
+        if index < 0
+    ]
+    assert not missing, (
+        f"{len(missing)} of {len(gated_sends)} markers sent with the walker's "
+        f"boot gate open never reached the composer: {', '.join(missing)}. "
+        "The gate is what keeps a driven restart's continuation out of the "
+        "loss window, and nothing waits behind it since BOOT_SETTLE was "
+        f"removed.\nComposer:\n{landed}"
+    )
+    assert positions == sorted(positions), (
+        "markers sent behind the open gate reached the composer out of "
+        f"order: {list(zip([s.marker for s in gated_sends], positions, strict=True))}"
+        f"\nComposer:\n{landed}"
     )

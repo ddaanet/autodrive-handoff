@@ -72,16 +72,30 @@ def line_landed(text: str, line: str) -> bool:
     return bool(wanted) and wanted in _squash(_composer_region(text))
 
 
-def wait_for_landing(pane: str, line: str) -> bool:
-    """Poll until ``line`` is in the composer, up to ``LANDING_DELAY``.
+def wait_for_landing(pane: str, line: str, *, booting: bool) -> bool:
+    """Poll until ``line`` is in the composer, for a window the caller picks.
 
     A single read at VERIFY_DELAY is a race the pane loses often enough to
     matter: the composer had still not repainted 0.5s after the send on one
     run in four of the conformance probe, showing its idle placeholder where
     the line should have been. Read once, that is indistinguishable from a
     swallowed keystroke, and the walker aborts a line it successfully typed.
+
+    How long that race can run depends on which pane this is. A booting
+    process takes the keystrokes and paints them seconds later — measured at 3
+    to 9s past the cursor over four resumes, the spread tracking the box's
+    load — so BOOT_LANDING_DELAY is wide enough to cover a paint nobody can
+    bound. Mid-session the composer has been reading for as long as the
+    session has, and a line that has not appeared in it is not one that will,
+    so LANDING_DELAY stays short: this window is also how long the walker
+    waits before reporting a keystroke it believes was swallowed.
     """
-    deadline = time.monotonic() + _env_float("HANDOFF_WATCHER_LANDING_DELAY", 3.0)
+    delay = (
+        _env_float("HANDOFF_WATCHER_BOOT_LANDING_DELAY", 30.0)
+        if booting
+        else _env_float("HANDOFF_WATCHER_LANDING_DELAY", 3.0)
+    )
+    deadline = time.monotonic() + delay
     poll = _env_float("HANDOFF_WATCHER_POLL", 0.1)
     while time.monotonic() < deadline:
         if line_landed(snap(pane), line):
@@ -119,9 +133,13 @@ def cursor_in_composer(text: str, cursor_x: int, cursor_y: int) -> bool:
     The same frame and the same two indices composer_has_user_text reads, one
     column along: that predicate asks whether the cursor is *past* the start
     column, this one whether it is in the composer at all. A ❯ in replayed
-    transcript text, in the previous session's last frame, or in boot chrome
-    never has the cursor parked in it; a composer the TUI is actually reading
-    does, at the start column when nothing is typed yet.
+    transcript text or in boot chrome never has the cursor parked in it; a
+    composer the TUI is actually reading does, at the start column when
+    nothing is typed yet.
+
+    Residual: a cursor on any row *below* the glyph counts, which is what
+    makes this work on a composer that has scrolled, and also means a bare
+    shell whose prompt or scrollback carries a ❯ reads as a live composer.
     """
     lines = strip(text).split("\n")
     index = _composer_index(lines)
@@ -226,8 +244,14 @@ def cursor_position(pane: str) -> tuple[int, int]:
         return -1, -1
 
 
-def wait_for_composer(pane: str, timeout: float | None = None) -> bool:
+def wait_for_composer(pane: str, timeout: float | None = None) -> tuple[bool, bool]:
     """Poll until the pane holds a composer reading input, up to ``timeout``.
+
+    Returns ``(opened, booting)``: whether a composer ever appeared, and
+    whether it was absent on the first reading. The second is the caller's
+    only evidence that this pane is a process still booting rather than a
+    session that has been reading input for minutes, and it is what sizes the
+    landing window the line is then given — see wait_for_landing.
 
     A freshly exec'd process — the state `restart`'s continuation walker
     always finds the pane in, since `SessionStart(resume)` fires at the very
@@ -247,23 +271,22 @@ def wait_for_composer(pane: str, timeout: float | None = None) -> bool:
     that flashes the right shape does not open the gate, the same rule
     wait_for_foreground_change uses.
 
-    BOOT_SETTLE is the bounded residual after that, and it is paid only when
-    the composer was not already there on the first reading — mid-session,
-    where the caller is about to type into a composer that has been reading
-    for minutes, this whole gate costs one poll. It is sized from live
-    measurement (`just tui-conformance`) rather than a guess: resuming a 2.8MB
-    transcript on the author's box, the cursor sat in the composer 3.6-11.3s
-    after the relaunch line ran, and the first keystroke the session actually
-    kept landed 3.2s, 5.2s, 8.6s and 7.4s after *that* over four runs. Nothing
-    on the pane distinguishes those two moments, which is what makes this a
-    residual rather than another gate, and nothing bounds it either — the
-    spread tracks the box's load — so the default sits above the slowest of
-    the four rather than near their middle.
+    What the cursor buys is the whole loss window, and nothing is owed after
+    it. A resuming process loses input over a discrete band, measured at 1 to
+    1.5s wide and 1.7-3.3s after the relaunch line runs, with keystrokes
+    either side of it kept — typed by hand, `aoeuidhtnsaoe` arrived as
+    `aoeunsaoe`. What bounds that band is not identified; it closes about 2s
+    before the alternate-screen switch and 2.5-3.7s before this gate opens.
+    From the cursor onward input is kept whatever the pane shows: it is
+    buffered and painted seconds later, in full and in order. So the gate ends
+    here, and the wait for the paint belongs to the line, after it is typed.
+
+    Mid-session, where the caller is about to type into a composer that has
+    been reading for minutes, this whole gate costs one poll.
     """
     if timeout is None:
         timeout = _env_float("HANDOFF_WATCHER_BOOT_TIMEOUT", 30.0)
     poll = _env_float("HANDOFF_WATCHER_POLL", 0.1)
-    settle = _env_float("HANDOFF_WATCHER_BOOT_SETTLE", 10.0)
     deadline = time.monotonic() + timeout
     seen = 0
     was_absent = False
@@ -271,14 +294,12 @@ def wait_for_composer(pane: str, timeout: float | None = None) -> bool:
         if cursor_in_composer(capture_full(pane), *cursor_position(pane)):
             seen += 1
             if seen >= 2:
-                if was_absent:
-                    time.sleep(settle)
-                return True
+                return True, was_absent
         else:
             seen = 0
             was_absent = True
         time.sleep(poll)
-    return False
+    return False, was_absent
 
 
 def wait_for_idle(pane: str) -> None:

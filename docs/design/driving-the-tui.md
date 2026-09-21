@@ -160,38 +160,63 @@ continuation waits for the composer to
 exist](../changelog/2026-08-15-continuation-waits-for-the-composer-to-exist.md)
 
 What that gate asks is where the terminal **cursor** is, not whether a `❯` is
-on screen. The glyph's presence lost a continuation a second time on
-2026-09-20: under `claude --resume` the pane still carries the exited
-session's last frame and the replay of the conversation being resumed, so a
-glyph is there from the first moment and the gate opened on a screen nothing
-was reading. `cursor_in_composer` is the complement of
-`composer_has_user_text` one column along — same frame, same two indices —
-and replayed text and boot chrome never have the cursor parked in them. Two
-consecutive readings, `wait_for_foreground_change`'s rule, so a mid-boot
-repaint that flashes the right shape does not open it.
+on screen. A glyph is not evidence of a live composer: the conversation a
+`--resume` replays can hold one as text once the TUI is up, and a shell's own
+prompt or scrollback can carry one before Claude Code starts at all.
+`cursor_in_composer` is the complement of `composer_has_user_text` one column
+along — same frame, same two indices — over two consecutive readings, which is
+`wait_for_foreground_change`'s rule, so a mid-boot repaint that flashes the
+right shape does not open it.
 
-The cursor is not the whole answer, and the measurement is what says so:
-resuming a 2.8MB transcript, the cursor sat in the composer 0.05s after the
-first glyph on every run, and the first keystroke the session *kept* landed 3
-to 9 seconds after that — a spread that tracks the box's load, not the pane.
-A composer that is painted, holds the cursor and is not yet reading is
-indistinguishable on the pane, so what covers it is
-`HANDOFF_WATCHER_BOOT_SETTLE` — a bounded residual, the shape
-`HANDOFF_WATCHER_SHELL_SETTLE` already has below, paid only when the composer
-was absent on the first reading. Widening `LANDING_DELAY` instead would only
-wait longer for keystrokes already discarded: the composer was still empty a
-minute later, so nothing was pending a late repaint. [The boot gate asks
-where the cursor is](../changelog/2026-09-20-the-boot-gate-asks-where-the-cursor-is.md)
+The gate rests on two grounds. The glyph is one. The other is that the window
+in which a resuming process actually *loses* input closes before the gate can
+open: measured against a real resume, that loss is a discrete band roughly
+1–1.5s wide, 1.7–3.3s after the relaunch line runs, with keystrokes either
+side of it kept — it ends about 2s before the alternate-screen switch and
+2.5–3.7s before the gate opens, and what bounds it is not identified. From
+the cursor onward input is kept whatever the pane shows: it is buffered and
+painted seconds later, in full and in order. So nothing is owed after the
+gate, and the line is typed the moment it opens. [The landing window is sized
+by the boot, not a
+settle](../changelog/2026-09-21-the-landing-window-is-sized-by-the-boot.md)
+
+`cursor_in_composer` is true for a cursor anywhere below a `❯` row, which is
+what lets it work on a composer that has scrolled, and is an open residual: a
+bare shell whose prompt or scrollback carries one opens the gate at the shell
+within half a second, with `booting` false, so the continuation is typed ahead
+of or into the loss band and given the short window below. Requiring
+`#{alternate_on}` — Claude Code runs on the alternate screen — or requiring
+the glyph row to carry the composer's U+00A0 gap would each close it. Neither
+is taken.
+
+## Two landing windows
+
+The wait for a paint belongs behind the keystroke, not in front of it.
+`wait_for_composer` returns `(opened, booting)`: whether a composer ever
+appeared, and whether it was absent on the first reading. The second is the
+caller's only evidence that this is a process still starting rather than a
+session that has been reading input for minutes, and it picks the window
+`wait_for_landing` polls for — `HANDOFF_WATCHER_BOOT_LANDING_DELAY` (30s),
+wide enough for a paint nothing bounds, or `HANDOFF_WATCHER_LANDING_DELAY`
+(3s) everywhere else.
+
+Not one window widened, because the short one is also how long the walker
+waits before reporting a keystroke it believes was swallowed. Mid-session the
+composer has been reading for as long as the session has, and a line that has
+not appeared in it is not one that will, so granting the boot window there
+would buy half a minute of silence on the one report that says a line was
+lost.
 
 A delivered line records what each step cost. The walker is detached and its
 output goes nowhere, so `watcher_log` — the success-side sibling of
 `watcher_fail` — appends one JSON row per line to `.claude/autodrive.log`
 (`HANDOFF_LOG_FILE`, exported beside `HANDOFF_FAIL_FILE`): `gate`, `idle`,
-`landed` and `confirmed`, each the time its own step took, and the `settle`
-in force. `gate` minus `settle` is how long a real boot took to start
-reading, which is the number the settle is sized against. Nothing consumes
-the file, so it keeps its last 50 rows, and a failed write is swallowed —
-the line is already delivered.
+`landed` and `confirmed`, each the time its own step took. Nothing sleeps
+between them, so `gate` alone is how long a boot took to put the cursor in the
+composer and `landed` is how long the session then took to paint a line it had
+already taken — the number `BOOT_LANDING_DELAY` is sized against, and one only
+a real boot supplies. Nothing consumes the file, so it keeps its last 50 rows,
+and a failed write is swallowed — the line is already delivered.
 
 ## Typing into a bare shell
 

@@ -14,7 +14,7 @@ argument; read the node before making a claim about, or changing, what it
 argues. The routing table under Architecture, and the two indexes under
 Design decisions and Rejected alternatives, are the entry points.
 
-Last updated: 2026-09-20.
+Last updated: 2026-09-21.
 
 ## Problem
 

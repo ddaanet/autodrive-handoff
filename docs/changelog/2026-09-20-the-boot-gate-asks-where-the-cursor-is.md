@@ -40,6 +40,14 @@ post-gate budget — `wait_for_idle` resolving at once, `VERIFY_DELAY` 0.5s,
 
 ## What was measured
 
+> **Superseded 2026-09-21** (see [The landing window is sized by the boot, not
+> a settle](2026-09-21-the-landing-window-is-sized-by-the-boot.md)) — scoped to
+> the reading of the table, not the table. The row recorded when the *first*
+> marker appeared in the composer and stopped; it never counted the markers
+> sent before that moment, and counted, they are all there. So the pane does
+> not discard keystrokes for 3 to 9 seconds past the cursor — it keeps them and
+> paints them late. The four timings below stand as timings of the *paint*.
+
 Sized from an observation rather than a guess, since nobody had measured a
 `--resume`. A new `live` row in `tests/test_tui_conformance.py` boots
 `claude --resume <sid>` in a shell pane on a private socket, then types a
@@ -63,6 +71,15 @@ which nothing on the pane tells apart at all.
 
 ## The fix
 
+> **Superseded 2026-09-21** (see [The landing window is sized by the boot, not
+> a settle](2026-09-21-the-landing-window-is-sized-by-the-boot.md)) — scoped to
+> `HANDOFF_WATCHER_BOOT_SETTLE`, which is deleted. There was nothing for it to
+> cover: input from the cursor onward is buffered, so the wait belongs behind
+> the send, as `HANDOFF_WATCHER_BOOT_LANDING_DELAY`. `wait_for_composer` now
+> returns `(opened, booting)` and the second is what picks that window. The
+> cursor predicate this section describes, and its two-consecutive-readings
+> rule, are unchanged.
+
 `wait_for_composer` now requires `cursor_in_composer` — the terminal cursor
 on the last glyph row at or past the composer's start column, or on a row
 below it — over one frame, twice in a row. It is the complement of
@@ -81,6 +98,16 @@ driven kinds — the first reading already shows a live composer, and the whole
 gate costs one poll.
 
 ## Alternatives weighed
+
+> **Superseded 2026-09-21** (see [The landing window is sized by the boot, not
+> a settle](2026-09-21-the-landing-window-is-sized-by-the-boot.md)) — scoped to
+> the three bullets that turn on the settle. Raising `LANDING_DELAY` is what
+> landed, for the boot branch alone and at 30s; the argument against it below
+> is a true reading of *this* incident, where the line was typed into the loss
+> window, and not a general argument against waiting for a paint. "Wait for the
+> cursor and nothing else" is what the gate now does. The readiness probe stays
+> parked, but not as the answer to a settle proving too short. The retype
+> refusal is untouched.
 
 **Raise `LANDING_DELAY`.** Necessary-looking and not sufficient. The composer
 was empty 65s later, so there was no late repaint to wait for; a wider window
@@ -108,6 +135,14 @@ below records it as the next move if the settle proves too short.
 it did not time out. Left at 30s.
 
 ## Dogfooded
+
+> **Superseded 2026-09-21** (see [The landing window is sized by the boot, not
+> a settle](2026-09-21-the-landing-window-is-sized-by-the-boot.md)) — scoped to
+> the record's `settle` key, which is gone with the tunable. Nothing sleeps
+> between the steps now, so `gate` alone is the boot and `landed` is how long
+> the session took to paint a line it had already taken — the number
+> `BOOT_LANDING_DELAY` is sized against. `watcher_log` itself, its four other
+> figures, the bounded file and the untested exports all stand.
 
 A driven restart with a continuation, run against this working tree the same
 night (the dev shim launches with `--plugin-dir <repo root>`, and hook scripts
@@ -140,6 +175,15 @@ and no synchronous seam shows what it was handed. A dropped export costs the
 record and nothing else.
 
 ## Residual
+
+> **Superseded 2026-09-21** (see [The landing window is sized by the boot, not
+> a settle](2026-09-21-the-landing-window-is-sized-by-the-boot.md)) — scoped to
+> the two paragraphs about the settle's sizing. There is no settle to outrun; a
+> slow box costs a longer paint, which `BOOT_LANDING_DELAY` waits out. The
+> keep-one-drop-the-next observation was the uncounted reading again: the
+> markers either side of the one that first painted were in the composer with
+> it. The report's wording, the printed-not-pinned rule and the wrap row below
+> stand.
 
 The settle is a fixed number sized on one box, and the four observations
 spread by a factor of nearly three, so it is a bound on load rather than on

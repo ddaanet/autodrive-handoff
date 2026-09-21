@@ -38,7 +38,7 @@ def walk(
         "HANDOFF_WATCHER_CONSUME_TIMEOUT": str(consume),
         "HANDOFF_WATCHER_RECOGNITION_DELAY": "0.05",
         "HANDOFF_WATCHER_LANDING_DELAY": "0.5",
-        "HANDOFF_WATCHER_BOOT_SETTLE": "0.01",
+        "HANDOFF_WATCHER_BOOT_LANDING_DELAY": "0.5",
     }
     if env:
         full_env.update(env)
@@ -848,6 +848,123 @@ def test_a_glyph_that_is_not_a_live_composer_does_not_open_the_boot_gate(
     assert "-l|continue with task 3|" in tmux_stub.sent_text()
 
 
+def test_a_booting_pane_is_typed_into_at_once_and_given_time_to_paint(
+    tmux_stub: TmuxStub, tmp_path: Path
+) -> None:
+    """A resuming session buffers the keystrokes and paints them seconds later.
+
+    The gate above is sized on the premise that a resuming session *discards*
+    input for a stretch after the cursor reaches the composer, and pays a flat
+    settle before typing. Measured, the input is kept — it simply does not show
+    for 3-9s, tracking the box's load. So the settle costs that delay on every
+    restart and buys nothing, while the mid-session landing window it hands the
+    line to is far shorter than the paint it must wait for: the walker abandons
+    a line the session already has, and reports a non-delivery that did not
+    happen.
+
+    The line is therefore sent as soon as the gate opens, and the window it
+    gets afterwards is the boot-sized one. BOOT_SETTLE is set high here on
+    purpose: a run that finishes well inside it is the evidence that nothing
+    slept.
+    """
+    idle = tmux_stub.stubdir / "pane_idle.txt"
+    after_l = tmux_stub.stubdir / "pane_after_l.txt"
+    idle.write_text("╭─ Claude Code ─╮\n│  resuming...  │\n")
+    after_l.write_text("──── x ──\n❯ \n")
+    tmux_stub.compose(0, 0)
+
+    def boot_completes() -> None:
+        # A full second, not the 0.3s the gate rows use: this row's subject is
+        # what happens on the boot branch, so the walker's own ~0.4s of
+        # interpreter startup must not be able to swallow the absence that
+        # selects it.
+        time.sleep(1.0)
+        idle.write_text("──── x ──\n❯ \n")
+        tmux_stub.compose(2, 1)
+
+    def paint_late() -> None:
+        # Anchored to the send, not to wall-clock from here: the whole subject
+        # is how long after the keystroke the composer shows it.
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline and "-l|" not in tmux_stub.sent_text():
+            time.sleep(0.01)
+        time.sleep(0.5)
+        after_l.write_text("──── x ──\n❯ continue with task 3\n")
+
+    threading.Thread(target=boot_completes, daemon=True).start()
+    threading.Thread(target=paint_late, daemon=True).start()
+    tr = tmp_path / "t.jsonl"
+    tr.write_text("")
+    submitted = {
+        "type": "user",
+        "message": {"role": "user", "content": "continue with task 3"},
+    }
+    tmux_stub.on_enter(f"printf '{json.dumps(submitted)}\\n' >> '{tr}'")
+    fail_file = tmp_path / "autodrive.failed"
+
+    start = time.monotonic()
+    result = walk(
+        tmux_stub,
+        "continue with task 3",
+        env={
+            "HANDOFF_TRANSCRIPT": str(tr),
+            "HANDOFF_FAIL_FILE": str(fail_file),
+            "HANDOFF_WATCHER_LANDING_DELAY": "0.1",
+            "HANDOFF_WATCHER_BOOT_LANDING_DELAY": "5",
+            "HANDOFF_WATCHER_BOOT_SETTLE": "5",
+            "HANDOFF_WATCHER_BOOT_TIMEOUT": "5",
+        },
+    )
+    elapsed = time.monotonic() - start
+
+    assert result.returncode == 0, (
+        fail_file.read_text() if fail_file.exists() else result.stderr
+    )
+    assert not fail_file.exists()
+    assert "-l|continue with task 3|" in tmux_stub.sent_text()
+    # Typed the moment the gate opened: a 5s settle would dominate the run.
+    assert elapsed < 4
+
+
+def test_a_mid_session_line_keeps_the_short_landing_window(
+    tmux_stub: TmuxStub, tmp_path: Path
+) -> None:
+    """Only a boot buys the long window; elsewhere a late paint still fails.
+
+    Green on both sides of the change by design. It is what stops the boot
+    window being granted everywhere, which would cost minutes of silence on the
+    one report that says a keystroke was swallowed — mid-session the composer
+    has been reading for as long as the session has, and a line that does not
+    appear in it is not one that will.
+    """
+    after_l = tmux_stub.stubdir / "pane_after_l.txt"
+    after_l.write_text("──── x ──\n❯ \n")
+
+    def paint_late() -> None:
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline and "-l|" not in tmux_stub.sent_text():
+            time.sleep(0.01)
+        time.sleep(0.5)
+        after_l.write_text("──── x ──\n❯ continue with task 3\n")
+
+    threading.Thread(target=paint_late, daemon=True).start()
+    fail_file = tmp_path / "autodrive.failed"
+
+    result = walk(
+        tmux_stub,
+        "continue with task 3",
+        env={
+            "HANDOFF_FAIL_FILE": str(fail_file),
+            "HANDOFF_WATCHER_LANDING_DELAY": "0.1",
+            "HANDOFF_WATCHER_BOOT_LANDING_DELAY": "5",
+        },
+    )
+
+    assert result.returncode != 0
+    assert "did not land" in fail_file.read_text().lower()
+    assert "Enter|" not in tmux_stub.sent_text()
+
+
 def test_a_delivered_line_records_its_gate_timings(
     tmux_stub: TmuxStub, tmp_path: Path
 ) -> None:
@@ -856,8 +973,11 @@ def test_a_delivered_line_records_its_gate_timings(
     The walker is detached and its output goes nowhere, so the first dogfood
     of the 2026-09-20 boot gate could only be read off transcript timestamps:
     36s from Stop to the continuation, with no way to split boot from settle.
-    The composer is absent for 0.3s here, so the gate's share is measurable
-    and the settle is the one the walker was given.
+    The composer is absent for 0.3s here, so the gate's share is measurable.
+
+    The record carries no `settle`: there is no settle left to report, and a
+    key pinned to a tunable that no longer exists would read as a figure the
+    next dogfood could act on.
     """
     idle = tmux_stub.stubdir / "pane_idle.txt"
     after_l = tmux_stub.stubdir / "pane_after_l.txt"
@@ -896,11 +1016,10 @@ def test_a_delivered_line_records_its_gate_timings(
     records = [json.loads(row) for row in log.read_text().splitlines()]
     last = records[-1]
     assert last["line"] == "continue with task 3"
-    assert last["settle"] == 0.01
     # The 0.3s clock starts before the walker's interpreter does, so the gate
     # sees less of it than was staged; an already-present composer costs 0.03.
     assert last["gate"] >= 0.15
-    assert {"at", "idle", "landed", "confirmed"} <= last.keys()
+    assert set(last) == {"at", "line", "gate", "idle", "landed", "confirmed"}
     # Bounded: a file nothing consumes must not grow with every transition.
     assert len(records) == 50
     assert records[0]["line"] == "old 11"
