@@ -535,12 +535,14 @@ def test_the_first_composer_glyph_is_not_yet_accepting_input(
 
     t_input: float | None = None
     cursor_open: float | None = None
+    sent = 0
     while time.monotonic() < deadline:
         full = _tmux(sock, "capture-pane", "-p", "-t", pane)
         x, y = _cursor(sock, pane)
         if cursor_open is None and wl.cursor_in_composer(full, x, y):
             cursor_open = time.monotonic() - t_zero
         _tmux(sock, "send-keys", "-t", pane, "-l", PROBE_MARKER)
+        sent += 1
         time.sleep(0.25)
         if wl.line_landed(_capture(sock, pane), PROBE_MARKER):
             t_input = time.monotonic() - t_zero
@@ -550,7 +552,13 @@ def test_the_first_composer_glyph_is_not_yet_accepting_input(
         f"landed in the composer.\nPane:\n{_capture(sock, pane)}"
     )
 
+    # Buffered or discarded is read off the count, not the delay: a session
+    # that buffers shows every marker sent since the glyph at once, one that
+    # discards shows only the last.
+    time.sleep(1.0)
+    shown = wl._squash(_capture(sock, pane)).count(wl._squash(PROBE_MARKER))
     print(
+        f"\nmarkers sent after the glyph: {sent}, in the composer: {shown}"
         f"\nresume boot on this box: first ❯ at {t_glyph:.2f}s, "
         f"cursor in composer at "
         f"{'never' if cursor_open is None else f'{cursor_open:.2f}s'}, "
