@@ -70,6 +70,64 @@ make_worktree() {
     printf '%s\n' "$wt"
 }
 
+# A python3 stub, first on PATH: when a spawning hook execs
+# `python3 .../drive_when_idle.py <PANE> <lines...>`, it writes the walker's
+# environment plus its own argv (everything after the drive_when_idle.py path
+# itself) to $BATS_TEST_TMPDIR/walker-spawn instead of running it, then exits
+# without doing anything else. Any other python3 call — worktree_root.py,
+# _checkpoint_lib.py, load-handoff.sh's own mtime probe — falls through to the
+# real interpreter, captured before this dir is put in front of it, so those
+# keep working. Called per-row rather than from setup(): most rows never spawn
+# the walker and must exercise the real interpreter unstubbed.
+stub_walker() {
+    local real_python3
+    real_python3="$(command -v python3)"
+    printf '#!/usr/bin/env bash\nREAL_PYTHON3=%q\nSPAWN_FILE=%q\n' \
+        "$real_python3" "$BATS_TEST_TMPDIR/walker-spawn" \
+        > "$BATS_TEST_TMPDIR/bin/python3"
+    cat >> "$BATS_TEST_TMPDIR/bin/python3" <<'STUB'
+found=0
+argv=()
+for a in "$@"; do
+    if [ "$found" -eq 1 ]; then
+        argv+=("$a")
+    fi
+    if [ "$(basename "$a")" = "drive_when_idle.py" ]; then
+        found=1
+    fi
+done
+if [ "$found" -eq 1 ]; then
+    {
+        printf '%s=%s\n' HANDOFF_LOG_FILE "${HANDOFF_LOG_FILE:-}"
+        printf '%s=%s\n' HANDOFF_FAIL_FILE "${HANDOFF_FAIL_FILE:-}"
+        printf '%s=%s\n' HANDOFF_PENDING_FILE "${HANDOFF_PENDING_FILE:-}"
+        printf '%s=%s\n' HANDOFF_EXIT_FILE "${HANDOFF_EXIT_FILE:-}"
+        printf '%s=%s\n' HANDOFF_TRANSCRIPT "${HANDOFF_TRANSCRIPT:-}"
+        for a in ${argv[@]+"${argv[@]}"}; do
+            printf '%s\n' "$a"
+        done
+    } > "$SPAWN_FILE"
+    exit 0
+fi
+exec "$REAL_PYTHON3" "$@"
+STUB
+    chmod +x "$BATS_TEST_TMPDIR/bin/python3"
+}
+
+# The spawn is detached, so the row has to poll for the stub's dump rather than
+# read it synchronously. No `timeout` binary assumed.
+wait_for_walker_spawn() {
+    local tries=0
+    while [ ! -f "$BATS_TEST_TMPDIR/walker-spawn" ]; do
+        tries=$((tries + 1))
+        if [ "$tries" -ge 60 ]; then
+            echo "walker-spawn never appeared within 3s (stub not invoked?)" >&2
+            return 1
+        fi
+        sleep 0.05
+    done
+}
+
 # --- _lib.sh: handoff_root resolver ---
 
 @test "handoff_root: worktree cwd -> worktree root" {
@@ -976,6 +1034,25 @@ run_load_handoff() {
     echo "$output" | jq -e '.systemMessage | test("pick up") | not' >/dev/null
 }
 
+@test "load-handoff.sh: the walker is handed the log, fail and transcript paths for the after-line" {
+    stub_walker
+    seed_pending "$tmp" "clear" "/rename A Title" "/clear" "pick up per the task file"
+    run_load_handoff "$tmp" clear 'TMUX=fake TMUX_PANE="%0"'
+    [ "$status" -eq 0 ]
+    wait_for_walker_spawn
+    spawn="$(cat "$BATS_TEST_TMPDIR/walker-spawn")"
+    echo "$spawn" | grep -qxF "HANDOFF_LOG_FILE=$tmp/.claude/autodrive.log"
+    echo "$spawn" | grep -qxF "HANDOFF_FAIL_FILE=$tmp/.claude/autodrive.failed"
+    # Neither loader exports these two: only stop-drive.sh's before-lines
+    # confirm by the pending file disappearing or the exited marker appearing.
+    echo "$spawn" | grep -qxF "HANDOFF_PENDING_FILE="
+    echo "$spawn" | grep -qxF "HANDOFF_EXIT_FILE="
+    echo "$spawn" | grep -qxF "HANDOFF_TRANSCRIPT=$tmp/t.jsonl"
+    # argv after the drive_when_idle.py path: the pane, then the after-line.
+    echo "$spawn" | grep -qxF "%0"
+    echo "$spawn" | grep -qxF "pick up per the task file"
+}
+
 # Seed .claude/autodrive under $1 in state `armed` — what the checkpoint, the
 # file's one writer, leaves behind — with the remaining args as the lines below.
 seed_drive() {
@@ -1112,6 +1189,23 @@ run_stop_drive() {
     [ "$status" -eq 0 ]
     [ "$output" = "" ]
     [ "$(head -n1 "$tmp/.claude/autodrive")" = "pending" ]
+}
+
+@test "stop-drive.sh: the walker is handed the log, fail, pending, exit and transcript paths" {
+    stub_walker
+    seed_drive "$tmp" "rename" "/rename Driven Transitions"
+    run_stop_drive "$tmp" 'TMUX=fake TMUX_PANE="%0"'
+    [ "$status" -eq 0 ]
+    wait_for_walker_spawn
+    spawn="$(cat "$BATS_TEST_TMPDIR/walker-spawn")"
+    echo "$spawn" | grep -qxF "HANDOFF_LOG_FILE=$tmp/.claude/autodrive.log"
+    echo "$spawn" | grep -qxF "HANDOFF_FAIL_FILE=$tmp/.claude/autodrive.failed"
+    echo "$spawn" | grep -qxF "HANDOFF_PENDING_FILE=$tmp/.claude/autodrive"
+    echo "$spawn" | grep -qxF "HANDOFF_EXIT_FILE=$tmp/.claude/autodrive.exited"
+    echo "$spawn" | grep -qxF "HANDOFF_TRANSCRIPT=$tmp/t.jsonl"
+    # argv after the drive_when_idle.py path: the pane, then the before-lines.
+    echo "$spawn" | grep -qxF "%0"
+    echo "$spawn" | grep -qxF "/rename Driven Transitions"
 }
 
 # --- session-end (SessionEnd: confirm /exit for a restart in flight) ---
@@ -1281,6 +1375,23 @@ run_load_compact() {
     [ "$(head -n1 "$tmp/.claude/autodrive")" = "armed" ]
 }
 
+@test "load-compact.sh: the walker is handed the log, fail and transcript paths for the after-line" {
+    stub_walker
+    seed_pending "$tmp" "compact" "/compact" "continue with task 3"
+    run_load_compact "$tmp" 'TMUX=fake TMUX_PANE="%0"'
+    [ "$status" -eq 0 ]
+    wait_for_walker_spawn
+    spawn="$(cat "$BATS_TEST_TMPDIR/walker-spawn")"
+    echo "$spawn" | grep -qxF "HANDOFF_LOG_FILE=$tmp/.claude/autodrive.log"
+    echo "$spawn" | grep -qxF "HANDOFF_FAIL_FILE=$tmp/.claude/autodrive.failed"
+    echo "$spawn" | grep -qxF "HANDOFF_PENDING_FILE="
+    echo "$spawn" | grep -qxF "HANDOFF_EXIT_FILE="
+    echo "$spawn" | grep -qxF "HANDOFF_TRANSCRIPT=$tmp/t.jsonl"
+    # argv after the drive_when_idle.py path: the pane, then the after-line.
+    echo "$spawn" | grep -qxF "%0"
+    echo "$spawn" | grep -qxF "continue with task 3"
+}
+
 # --- load-restart (SessionStart(resume): fire the continuation, no frame) ---
 #
 # Unlike /clear or /compact, --resume restores the full prior conversation on
@@ -1357,6 +1468,23 @@ run_load_restart() {
     run_load_restart "$tmp" 'TMUX=fake TMUX_PANE="%0"'
     [ "$status" -eq 0 ]
     echo "$output" | jq -e 'has("hookSpecificOutput") | not' >/dev/null
+}
+
+@test "load-restart.sh: the walker is handed the log, fail and transcript paths for the after-line" {
+    stub_walker
+    seed_pending "$tmp" "restart" "/exit" "claude --resume sess-hook-test" "continue with task 3"
+    run_load_restart "$tmp" 'TMUX=fake TMUX_PANE="%0"'
+    [ "$status" -eq 0 ]
+    wait_for_walker_spawn
+    spawn="$(cat "$BATS_TEST_TMPDIR/walker-spawn")"
+    echo "$spawn" | grep -qxF "HANDOFF_LOG_FILE=$tmp/.claude/autodrive.log"
+    echo "$spawn" | grep -qxF "HANDOFF_FAIL_FILE=$tmp/.claude/autodrive.failed"
+    echo "$spawn" | grep -qxF "HANDOFF_PENDING_FILE="
+    echo "$spawn" | grep -qxF "HANDOFF_EXIT_FILE="
+    echo "$spawn" | grep -qxF "HANDOFF_TRANSCRIPT=$tmp/t.jsonl"
+    # argv after the drive_when_idle.py path: the pane, then the after-line.
+    echo "$spawn" | grep -qxF "%0"
+    echo "$spawn" | grep -qxF "continue with task 3"
 }
 
 @test "hooks.json dispatches SessionStart(resume) to load-restart.sh" {

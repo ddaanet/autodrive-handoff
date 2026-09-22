@@ -1110,6 +1110,16 @@ outright regardless of path.
   mirrored against `load-compact.sh`'s own matrix but with one added negative
   — a task file present still injects no frame, which is the whole reason a
   restart costs no context.
+  A `stub_walker` helper adds one row per spawning hook (`stop-drive.sh`,
+  `load-handoff.sh`, `load-compact.sh`, `load-restart.sh`): a `python3` stub
+  first on `PATH` records the walker's environment and argv instead of
+  running it, polled for since the spawn is detached, and asserts the exact
+  `HANDOFF_LOG_FILE`/`HANDOFF_FAIL_FILE`/`HANDOFF_PENDING_FILE`/
+  `HANDOFF_EXIT_FILE`/`HANDOFF_TRANSCRIPT` paths each hook hands it — only
+  `stop-drive.sh` exports the pending and exited paths, since a loader's
+  after-line is prose or a `/rename` and confirms against the transcript
+  alone — plus the argv it was spawned with. Mutation-checked on
+  `load-compact.sh`'s `HANDOFF_LOG_FILE` export.
   The walker and the pane predicates that used to be `tests/watcher-test.bats`
   ported whole to pytest with the 2026-08-10 split (see
   `docs/changelog/2026-08-10-python-split.md`), never trimmed:
@@ -1214,9 +1224,11 @@ outright regardless of path.
   of 0.25–0.45s ate it under load) and reads the timing record back — an
   exact key set of `at`, `line`, `gate`, `idle`, `landed`, `confirmed` and no
   `settle`, a `gate` that saw the staged delay, and a pre-filled
-  60-row file cut to its last 50. The hooks' `HANDOFF_LOG_FILE` export has no
-  row of its own: they spawn the walker detached, and no synchronous seam
-  shows what it was handed. Every shell-line row
+  60-row file cut to its last 50. The hooks' `HANDOFF_LOG_FILE` export has its
+  own seam now: a `python3` stub first on `tests/hook-test.bats`'s `PATH`
+  records the walker's environment and argv instead of running it, since the
+  spawn is detached and there is otherwise no synchronous read of what it was
+  handed. Every shell-line row
   stages its flip through `TmuxStub.foreground_changes_to` (one more reading
   of the current value, then the new one) rather than a thread, which races
   `main`'s baseline read. Three rows there
