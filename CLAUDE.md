@@ -373,10 +373,18 @@ empty and removed: see `docs/changelog/2026-07-22-a-place-for-the-todo-list.md`,
   discrete ~1–1.5s band 1.7–3.3s into a resume, ending ~2s ahead of the
   alternate-screen switch and 2.5–3.7s ahead of the gate — and input from the
   cursor onward is buffered and painted late rather than lost, so `booting`
-  buys the line a landing window instead of a sleep. Open residual:
-  `cursor_in_composer` fires for a cursor below *any* `❯` row, which is what
-  lets it work on a scrolled composer, so a shell prompt or scrollback
-  carrying one opens the gate at the shell with `booting` false),
+  buys the line a landing window instead of a sleep. Which row the cursor has
+  to be in is decided by the gap: `_composer_index` calls a row the composer
+  only when the `❯` is followed by `COMPOSER_GAP` (U+00A0, the no-break space
+  the TUI pads its glyph with), so a shell prompt's ASCII-padded glyph — in the
+  prompt or in scrollback — no longer opens the gate, while a cursor below the
+  composer row still counts, which is what keeps a scrolled composer working.
+  All four composer predicates inherit that one answer, and mid-session it
+  costs nothing, a live composer's own row carrying the gap on the first poll.
+  `composer_start_column` still derives the gap's *width*, so the character is
+  pinned and the layout is not. Open residual: a shell prompt that pads its own
+  `❯` with a no-break space would still read as a composer, and nothing known
+  does),
   `composer_excerpt` (the composer's first rows, which the
   landing failure quotes instead of naming a cause), `wait_for_idle`
   (stable-idle poll loop), `pane_foreground` + `wait_for_foreground_change`
@@ -1119,10 +1127,17 @@ outright regardless of path.
   would buy `BOOT_LANDING_DELAY` of silence on a swallowed keystroke),
   and the `watcher_fail` recording, plus that the
   four confirmation primitives (`submit_exited` since 2026-08-10) return
-  rather than raise on a non-delivery. Its fixtures are **captures** from a
-  live TUI, spelled with an explicit `\N{NO-BREAK SPACE}` for the composer
-  gap — a hand-written one is how a predicate comes to be tested against its
-  own premise, which is the whole defect of 2026-08-13.
+  rather than raise on a non-delivery. Three rows pin the composer gap itself:
+  `test_composer_index_requires_the_nbsp_gap` over two rows differing in that
+  one character, `test_cursor_in_composer_false_on_a_shell_prompt_glyph` (the
+  2026-09-21 conformance finding as a fixture — `❯ /exit` above the shell's
+  cursor), and `test_line_landed_false_when_the_gap_is_an_ascii_space`, which
+  replaced a parametrization asserting the opposite; revert `_composer_index`
+  to `PROMPT_GLYPH in line` and exactly those three red. Its fixtures are
+  **captures** from a live TUI, spelled with an explicit `\N{NO-BREAK SPACE}`
+  for the composer gap — a hand-written one is how a predicate comes to be
+  tested against its own premise, which is the whole defect of 2026-08-13, and
+  is now also a pane that describes no composer at all.
   `tests/test_tui_conformance.py` (`live` marker, deselected from
   `just precommit` and run by `just tui-conformance`) is the other half: it
   boots a real TUI on a private tmux socket and asserts those captures still
@@ -1153,10 +1168,15 @@ outright regardless of path.
   in order — printing the loss band, the screen switch and a `+`/`-` trace
   rather than pinning them, since a run that loses nothing is not a failure.
   That row is parametrized onto a glyph-free screen because the fixture's
-  default `printf '❯ /exit'` staging reproduces the open residual instead of
-  the platform (the gate opens at the shell in 0.43s and the band then falls
-  behind it), and the default is kept for the other two, where it stands in
-  for a `❯` the fixture cannot otherwise produce. Nothing is ever submitted.
+  default `printf '❯ /exit'` staging reproduces the arrangement the composer
+  predicates were tightened against rather than the platform (against the
+  glyph-presence gate it opened at the shell in 0.43s and the band then fell
+  behind it), and asserting the gate's promise over the screen a real `/exit`
+  leaves is asserting it about the platform. The default is kept for the other
+  two, where it stands in for a `❯` the fixture cannot otherwise produce — and
+  since the tightening that glyph counts as a glyph without counting as a
+  composer, so the cursor moment the measuring row records is the resumed
+  session's. Nothing is ever submitted.
   `tests/test_drive_when_idle.py` drives `drive_when_idle.py`
   end-to-end via subprocess against the tmux stub (`tests/conftest.py`'s
   `TmuxStub` fixture, replacing the bats `make_stub`/`on_enter` helpers):

@@ -54,8 +54,12 @@ class TmuxStub:
         self.stubdir = stubdir
         self.sent = stubdir / "sent.log"
         self.sent.write_text("")
-        (stubdir / "pane_idle.txt").write_text("──── x ──\n❯ \n")
-        (stubdir / "pane_after_enter.txt").write_text("──── x ──\n❯ \n")
+        # \N{NO-BREAK SPACE}: the composer's own gap after the glyph — see
+        # _watcher_lib.COMPOSER_GAP. An ASCII space here would no longer read
+        # as a composer at all.
+        composer = "──── x ──\n❯\N{NO-BREAK SPACE}\n"
+        (stubdir / "pane_idle.txt").write_text(composer)
+        (stubdir / "pane_after_enter.txt").write_text(composer)
         # No pane_after_l.txt: absent it, the stub echoes whatever was sent
         # literally, the way the real composer does. A test that needs some
         # other post-send pane writes the file and the stub defers to it.

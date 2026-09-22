@@ -20,6 +20,10 @@ if TYPE_CHECKING:
 SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "drive_when_idle.py"
 
 TITLE = "Driven Transitions Design"
+# The composer's own gap after the glyph — see _watcher_lib.COMPOSER_GAP.
+# Every staged pane below that stands for a real composer carries it; a bare
+# shell prompt's ❯ (see the resume-line tests) stays ASCII-padded on purpose.
+NBSP = "\N{NO-BREAK SPACE}"
 
 
 def walk(
@@ -55,7 +59,7 @@ def test_slash_line_typed_then_recognition_read_back_then_entered(
     tmux_stub: TmuxStub, tmp_path: Path
 ) -> None:
     (tmux_stub.stubdir / "pane_after_l.txt").write_text(
-        "/compact  Compact the conversation\n❯ /compact keep the parser work\n"
+        f"/compact  Compact the conversation\n❯{NBSP}/compact keep the parser work\n"
     )
     result = walk(
         tmux_stub,
@@ -76,7 +80,7 @@ def test_unrecognized_command_cleared_with_ctrl_u_never_entered(
     tmux_stub: TmuxStub, tmp_path: Path
 ) -> None:
     (tmux_stub.stubdir / "pane_after_l.txt").write_text(
-        'No commands match "/compzzz"\n❯ /compzzz\n'
+        f'No commands match "/compzzz"\n❯{NBSP}/compzzz\n'
     )
     fail_file = tmp_path / "autodrive.failed"
     result = walk(
@@ -104,7 +108,7 @@ def test_a_composer_that_repaints_late_is_waited_for_not_failed(
     wait_for_landing to a single read and this row alone goes red.
     """
     pane_file = tmux_stub.stubdir / "pane_after_l.txt"
-    pane_file.write_text("──── x ──\n❯ \n")
+    pane_file.write_text(f"──── x ──\n❯{NBSP}\n")
 
     def repaint_late() -> None:
         # Anchored to the send, not to wall-clock from here: interpreter
@@ -114,7 +118,7 @@ def test_a_composer_that_repaints_late_is_waited_for_not_failed(
         while time.monotonic() < deadline and "-l|" not in tmux_stub.sent_text():
             time.sleep(0.01)
         time.sleep(0.4)
-        pane_file.write_text("──── x ──\n❯ continue the parser work\n")
+        pane_file.write_text(f"──── x ──\n❯{NBSP}continue the parser work\n")
 
     threading.Thread(target=repaint_late, daemon=True).start()
     tr = tmp_path / "t.jsonl"
@@ -137,11 +141,12 @@ def test_nothing_sent_while_user_is_composing(
     tmux_stub: TmuxStub, tmp_path: Path
 ) -> None:
     (tmux_stub.stubdir / "pane_idle.txt").write_text(
-        "──── x ──\n❯ half-typed thought\n"
+        f"──── x ──\n❯{NBSP}half-typed thought\n"
     )
     # The cursor, not the text, is what says a person typed it: the TUI paints
     # its own suggestion into an idle composer and leaves the cursor at the
-    # start column.
+    # start column. The gap is one character either way, so the length here
+    # is unaffected by the ASCII-space-to-NBSP swap above.
     tmux_stub.compose(len("❯ half-typed thought"))
     fail_file = tmp_path / "autodrive.failed"
     result = walk(
@@ -170,7 +175,7 @@ def test_non_delivery_with_no_fail_file_still_stops_walker(
 def test_line_swallowed_by_pane_fails_fast_before_enter(
     tmux_stub: TmuxStub, tmp_path: Path
 ) -> None:
-    (tmux_stub.stubdir / "pane_after_l.txt").write_text("──── x ──\n❯ \n")
+    (tmux_stub.stubdir / "pane_after_l.txt").write_text(f"──── x ──\n❯{NBSP}\n")
     fail_file = tmp_path / "autodrive.failed"
     result = walk(
         tmux_stub,
@@ -189,7 +194,7 @@ def test_line_swallowed_by_pane_fails_fast_before_enter(
 def test_swallowed_prose_line_fails_fast_before_enter(
     tmux_stub: TmuxStub, tmp_path: Path
 ) -> None:
-    (tmux_stub.stubdir / "pane_after_l.txt").write_text("──── x ──\n❯ \n")
+    (tmux_stub.stubdir / "pane_after_l.txt").write_text(f"──── x ──\n❯{NBSP}\n")
     fail_file = tmp_path / "autodrive.failed"
     result = walk(
         tmux_stub, "continue with task 3", env={"HANDOFF_FAIL_FILE": str(fail_file)}
@@ -218,7 +223,7 @@ def test_rename_line_not_confirmed_by_title_merely_on_pane(
     tmux_stub: TmuxStub, tmp_path: Path
 ) -> None:
     (tmux_stub.stubdir / "pane_after_l.txt").write_text(
-        f"──── {TITLE} ──\n❯ /rename {TITLE}\n"
+        f"──── {TITLE} ──\n❯{NBSP}/rename {TITLE}\nf"
     )
     tr = tmp_path / "t.jsonl"
     tr.write_text("")
@@ -251,7 +256,7 @@ def test_compact_line_confirms_by_pending_file_consumed(
     tmux_stub: TmuxStub, tmp_path: Path
 ) -> None:
     (tmux_stub.stubdir / "pane_after_l.txt").write_text(
-        "/compact  Compact the conversation\n❯ /compact keep the parser work\n"
+        f"/compact  Compact the conversation\n❯{NBSP}/compact keep the parser work\n"
     )
     pending = tmp_path / "autodrive"
     pending.write_text("")
@@ -276,7 +281,7 @@ def test_compact_line_reported_when_nothing_consumes_it(
     tmux_stub: TmuxStub, tmp_path: Path
 ) -> None:
     (tmux_stub.stubdir / "pane_after_l.txt").write_text(
-        "/compact  Compact the conversation\n❯ /compact keep the parser work\n"
+        f"/compact  Compact the conversation\n❯{NBSP}/compact keep the parser work\n"
     )
     pending = tmp_path / "autodrive"
     pending.write_text("")
@@ -294,7 +299,7 @@ def test_clear_line_with_nothing_to_confirm_not_reported_failed(
     tmux_stub: TmuxStub, tmp_path: Path
 ) -> None:
     (tmux_stub.stubdir / "pane_after_l.txt").write_text(
-        "/clear  Clear the conversation\n❯ /clear\n"
+        f"/clear  Clear the conversation\n❯{NBSP}/clear\n"
     )
     fail_file = tmp_path / "autodrive.failed"
     result = walk(tmux_stub, "/clear", env={"HANDOFF_FAIL_FILE": str(fail_file)})
@@ -426,7 +431,7 @@ def test_line_that_never_confirms_stops_sequence(
 def test_exit_line_confirms_by_exit_file_appearing(
     tmux_stub: TmuxStub, tmp_path: Path
 ) -> None:
-    (tmux_stub.stubdir / "pane_after_l.txt").write_text("/exit\n❯ /exit\n")
+    (tmux_stub.stubdir / "pane_after_l.txt").write_text(f"/exit\n❯{NBSP}/exit\n")
     exit_file = tmp_path / "autodrive.exited"
     tmux_stub.on_enter(f"touch '{exit_file}'")
     result = walk(tmux_stub, "/exit", env={"HANDOFF_EXIT_FILE": str(exit_file)})
@@ -438,7 +443,7 @@ def test_exit_line_confirms_by_exit_file_appearing(
 def test_exit_line_reported_when_nothing_confirms_it(
     tmux_stub: TmuxStub, tmp_path: Path
 ) -> None:
-    (tmux_stub.stubdir / "pane_after_l.txt").write_text("/exit\n❯ /exit\n")
+    (tmux_stub.stubdir / "pane_after_l.txt").write_text(f"/exit\n❯{NBSP}/exit\n")
     fail_file = tmp_path / "autodrive.failed"
     exit_file = tmp_path / "autodrive.exited"
     result = walk(
@@ -620,7 +625,7 @@ def test_tui_line_stops_pressing_enter_after_three(
     negative that keeps the flag from spreading back.
     """
     (tmux_stub.stubdir / "pane_after_l.txt").write_text(
-        "/compact  Compact the conversation\n❯ /compact\n"
+        f"/compact  Compact the conversation\n❯{NBSP}/compact\n"
     )
     pending = tmp_path / "autodrive"
     pending.write_text("")
@@ -712,7 +717,7 @@ def test_resume_line_is_not_typed_while_claude_still_holds_the_pane(
 def test_restart_sequence_exit_then_resume_in_order(
     tmux_stub: TmuxStub, tmp_path: Path
 ) -> None:
-    (tmux_stub.stubdir / "pane_after_l.txt").write_text("/exit\n❯ /exit\n")
+    (tmux_stub.stubdir / "pane_after_l.txt").write_text(f"/exit\n❯{NBSP}/exit\n")
     exit_file = tmp_path / "autodrive.exited"
     pending = tmp_path / "autodrive"
     pending.write_text("")
@@ -758,7 +763,7 @@ def test_composer_boot_is_waited_for_not_typed_into_a_screen_with_none(
     not merely the spinner's absence, before typing.
     """
     booting = "╭─ Claude Code ─╮\n│  booting...    │\n╰────────────────╯\n"
-    ready = "──── x ──\n❯ \n"
+    ready = f"──── x ──\n❯{NBSP}\n"
     idle = tmux_stub.stubdir / "pane_idle.txt"
     after_l = tmux_stub.stubdir / "pane_after_l.txt"
     idle.write_text(booting)
@@ -810,7 +815,7 @@ def test_a_glyph_that_is_not_a_live_composer_does_not_open_the_boot_gate(
     answer for.
     """
     booting = "● the glyph is ❯ in _watcher_lib\n╭─ Claude Code ─╮\n│  resuming...  │\n"
-    ready = "──── x ──\n❯ \n"
+    ready = f"──── x ──\n❯{NBSP}\n"
     idle = tmux_stub.stubdir / "pane_idle.txt"
     after_l = tmux_stub.stubdir / "pane_after_l.txt"
     idle.write_text(booting)
@@ -870,7 +875,7 @@ def test_a_booting_pane_is_typed_into_at_once_and_given_time_to_paint(
     idle = tmux_stub.stubdir / "pane_idle.txt"
     after_l = tmux_stub.stubdir / "pane_after_l.txt"
     idle.write_text("╭─ Claude Code ─╮\n│  resuming...  │\n")
-    after_l.write_text("──── x ──\n❯ \n")
+    after_l.write_text(f"──── x ──\n❯{NBSP}\n")
     tmux_stub.compose(0, 0)
 
     def boot_completes() -> None:
@@ -879,7 +884,7 @@ def test_a_booting_pane_is_typed_into_at_once_and_given_time_to_paint(
         # interpreter startup must not be able to swallow the absence that
         # selects it.
         time.sleep(1.0)
-        idle.write_text("──── x ──\n❯ \n")
+        idle.write_text(f"──── x ──\n❯{NBSP}\n")
         tmux_stub.compose(2, 1)
 
     def paint_late() -> None:
@@ -889,7 +894,7 @@ def test_a_booting_pane_is_typed_into_at_once_and_given_time_to_paint(
         while time.monotonic() < deadline and "-l|" not in tmux_stub.sent_text():
             time.sleep(0.01)
         time.sleep(0.5)
-        after_l.write_text("──── x ──\n❯ continue with task 3\n")
+        after_l.write_text(f"──── x ──\n❯{NBSP}continue with task 3\n")
 
     threading.Thread(target=boot_completes, daemon=True).start()
     threading.Thread(target=paint_late, daemon=True).start()
@@ -938,14 +943,14 @@ def test_a_mid_session_line_keeps_the_short_landing_window(
     appear in it is not one that will.
     """
     after_l = tmux_stub.stubdir / "pane_after_l.txt"
-    after_l.write_text("──── x ──\n❯ \n")
+    after_l.write_text(f"──── x ──\n❯{NBSP}\n")
 
     def paint_late() -> None:
         deadline = time.monotonic() + 30
         while time.monotonic() < deadline and "-l|" not in tmux_stub.sent_text():
             time.sleep(0.01)
         time.sleep(0.5)
-        after_l.write_text("──── x ──\n❯ continue with task 3\n")
+        after_l.write_text(f"──── x ──\n❯{NBSP}continue with task 3\n")
 
     threading.Thread(target=paint_late, daemon=True).start()
     fail_file = tmp_path / "autodrive.failed"
@@ -987,7 +992,7 @@ def test_a_delivered_line_records_its_gate_timings(
 
     def boot_completes() -> None:
         time.sleep(1.0)
-        idle.write_text("──── x ──\n❯ \n")
+        idle.write_text(f"──── x ──\n❯{NBSP}\n")
         after_l.unlink()
         tmux_stub.compose(2, 1)
 
@@ -1031,7 +1036,7 @@ def test_sequence_re_gates_on_idle_between_lines(
     tmux_stub: TmuxStub, tmp_path: Path
 ) -> None:
     (tmux_stub.stubdir / "pane_after_enter.txt").write_text(
-        "* Flummoxing… (12s · ↓ 1k tokens)\n❯ \n"
+        f"* Flummoxing… (12s · ↓ 1k tokens)\n❯{NBSP}\n"
     )
     tr = tmp_path / "t.jsonl"
     tr.write_text("")

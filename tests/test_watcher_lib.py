@@ -19,24 +19,27 @@ import pytest
 if TYPE_CHECKING:
     from conftest import TmuxStub
 
+NBSP = "\N{NO-BREAK SPACE}"
+
 BUSY_TEXT = (
-    "  ⎿  running\n* Flummoxing… (37s · ↓ 2.4k tokens)\n──── name pending ──\n❯ \n────"
+    f"  ⎿  running\n* Flummoxing… (37s · ↓ 2.4k tokens)\n"
+    f"──── name pending ──\n❯{NBSP}\n────"
 )
 IDLE_TEXT = (
-    "  ⎿  done\n──── name pending ──\n❯ \n────\n  ▄▂▁15s│3m▅▆ 15:30 / 7d Wed 12:42"
+    f"  ⎿  done\n──── name pending ──\n❯{NBSP}\n────\n"
+    "  ▄▂▁15s│3m▅▆ 15:30 / 7d Wed 12:42"
 )
-TYPING_TEXT = "──── name pending ──\n❯ hello there\n────"
+TYPING_TEXT = f"──── name pending ──\n❯{NBSP}hello there\n────"
 
 MARKER = "run code-review per the task file"
 TITLE = "Driven Transitions Design"
 
 # Captures, not compositions. Every string below was read off `tmux
-# capture-pane` against a live Claude Code TUI on 2026-08-13. The fixtures
-# above were hand-written and put an ASCII space in the composer gap; the TUI
-# pads with U+00A0, and that one character made is_typing False for every line
-# the walker has ever typed. Spelled as an escape so it survives an edit and a
-# reader can see it.
-NBSP = "\N{NO-BREAK SPACE}"
+# capture-pane` against a live Claude Code TUI on 2026-08-13. The gap after
+# the composer's ❯ is U+00A0 (NBSP, above) — an ASCII space there made
+# is_typing False for every line the walker has ever typed, and now also
+# fails _composer_index's own gap match. Spelled as an escape so it survives
+# an edit and a reader can see it.
 RULE = "─" * 200  # the composer's box rules span the pane width
 STATUS = "  ❷ Opus ◉ xhigh    handoff   main  $0.00    -   Plan 5h 17%/25%"
 MODE = "  ⏵⏵ auto mode on (shift+tab to cycle)"
@@ -64,10 +67,19 @@ REAL_SPINNER_UNDER_A_MINUTE = "✻ Flummoxing… (37s · ↓ 2.4k tokens)"
 REAL_SPINNER_OVER_A_MINUTE = "✻ Transmuting… (8m 30s · ↓ 23.1k tokens)"
 
 
-@pytest.mark.parametrize("gap", [" ", NBSP], ids=["ascii-space", "nbsp"])
-def test_line_landed_whatever_whitespace_pads_the_composer(gap: str) -> None:
-    """The gap is the TUI's choice, and it has already changed once."""
-    assert wl.line_landed(_composer("/compact", gap=gap), "/compact")
+def test_line_landed_true_with_the_composer_gap() -> None:
+    """The gap is the TUI's choice; the next row pins what a move costs."""
+    assert wl.line_landed(_composer("/compact"), "/compact")
+
+
+def test_line_landed_false_when_the_gap_is_an_ascii_space() -> None:
+    """A shell prompt's ❯, ASCII-padded, must not read as the composer.
+
+    _composer_index now requires the TUI's own NBSP gap (COMPOSER_GAP) to call a
+    row the composer at all, so a row that only differs in that one character no
+    longer counts — see test_composer_index_requires_the_nbsp_gap.
+    """
+    assert not wl.line_landed(_composer("/compact", gap=" "), "/compact")
 
 
 def test_line_landed_true_on_captured_slash_line() -> None:
@@ -168,6 +180,23 @@ def test_cursor_in_composer_true_when_typed_text_wrapped_below() -> None:
     assert wl.cursor_in_composer(typed, 3, _glyph_row(typed) + 1)
 
 
+def test_cursor_in_composer_false_on_a_shell_prompt_glyph() -> None:
+    """The 2026-09-21 conformance finding: the boot gate opened on a shell.
+
+    The conformance fixture's own staged previous screen, ``printf '❯ /exit'``,
+    put a ❯ on the pane before the resume even ran — ASCII-padded, the way a
+    shell prompt (or a starship/pure prompt) spells it — and the gate read it as
+    a live composer 0.43s in, on the shell rather than the resumed session.
+    """
+    pane = "$ claude\n❯ /exit\n$ claude --resume abc\n"
+    assert not wl.cursor_in_composer(pane, 0, 2)
+
+
+def test_composer_index_requires_the_nbsp_gap() -> None:
+    assert wl._composer_index(["❯ x", f"❯{NBSP}y"]) == 1
+    assert wl._composer_index(["❯ x"]) is None
+
+
 def test_cursor_in_composer_false_with_the_cursor_above_the_glyph() -> None:
     """The 2026-09-20 case: a ❯ on screen the cursor is nowhere near.
 
@@ -241,11 +270,13 @@ def test_line_landed_false_on_empty_prompt() -> None:
 
 
 def test_is_unknown_command_true_on_no_commands_match() -> None:
-    assert wl.is_unknown_command('No commands match "/compzzz"\n❯ /compzzz')
+    assert wl.is_unknown_command(f'No commands match "/compzzz"\n❯{NBSP}/compzzz')
 
 
 def test_is_unknown_command_false_on_autocomplete_row() -> None:
-    assert not wl.is_unknown_command("/compact  Compact the conversation\n❯ /compact")
+    assert not wl.is_unknown_command(
+        f"/compact  Compact the conversation\n❯{NBSP}/compact"
+    )
 
 
 def test_is_unknown_command_false_on_plain_idle_text() -> None:
@@ -451,7 +482,7 @@ def test_wait_for_composer_reports_a_boot_when_the_composer_arrives_late(
 
     def boot_completes() -> None:
         time.sleep(0.2)
-        idle.write_text("──── x ──\n❯ \n")
+        idle.write_text(f"──── x ──\n❯{NBSP}\n")
         tmux_stub.compose(2, 1)
 
     threading.Thread(target=boot_completes, daemon=True).start()

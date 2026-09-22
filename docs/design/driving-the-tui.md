@@ -113,7 +113,9 @@ Their fixtures are captures from a live TUI, and `just tui-conformance`
 asserts those captures still match one — a hand-written fixture is how a
 predicate comes to be tested against its own premise, which is what let
 `is_typing` sit inverted against a U+00A0 composer gap while its suite stayed
-green. [Composer predicates match the real
+green. That gap now does double duty: it is also what identifies the composer
+row at all, so a stub pane spelling it with an ASCII space describes no composer
+rather than a subtly wrong one. [Composer predicates match the real
 pane](../changelog/2026-08-13-predicates-match-the-real-pane.md)
 
 ## Submitting: press, retry, then wait
@@ -180,14 +182,27 @@ gate, and the line is typed the moment it opens. [The landing window is sized
 by the boot, not a
 settle](../changelog/2026-09-21-the-landing-window-is-sized-by-the-boot.md)
 
-`cursor_in_composer` is true for a cursor anywhere below a `❯` row, which is
-what lets it work on a composer that has scrolled, and is an open residual: a
-bare shell whose prompt or scrollback carries one opens the gate at the shell
-within half a second, with `booting` false, so the continuation is typed ahead
-of or into the loss band and given the short window below. Requiring
-`#{alternate_on}` — Claude Code runs on the alternate screen — or requiring
-the glyph row to carry the composer's U+00A0 gap would each close it. Neither
-is taken.
+Which row the cursor has to be in, the **gap** decides. The composer is the
+last row carrying a `❯` followed by U+00A0, the no-break space the TUI pads its
+glyph with, and a cursor on any row below that one still counts — which is what
+lets this work on a composer that has scrolled. A shell prompt pads the same
+glyph with an ordinary space (starship, pure and fish configurations that use
+`❯` are common), so a bare shell, or one sitting in scrollback, does not open
+the gate, does not hold a landed line, and is not what a landing failure quotes
+back: `_composer_index` answers for all four composer predicates at once.
+Mid-session it costs nothing — a live composer's own row carries the gap on the
+first poll.
+
+The gap's *character* is pinned; its *width* is still derived from the captured
+line. That character is the one value here that is not layout, and the evidence
+is that it has already been what separates a real pane from a composed one —
+2026-08-13's inverted `is_typing`, the same gap biting the other way. A Claude
+Code that stops emitting it fails the gate closed: no row reads as a composer,
+nothing is typed, the walker reports a non-delivery, and `just tui-conformance`
+sees it before production does. Residual: a shell prompt that pads its own `❯`
+with a no-break space would still read as a composer, and nothing known does.
+[The composer row carries its own
+gap](../changelog/2026-09-22-the-composer-row-carries-its-own-gap.md)
 
 ## Two landing windows
 

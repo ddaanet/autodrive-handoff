@@ -213,6 +213,21 @@ step](../changelog/2026-09-17-memory-moves-inside-the-deciding-step.md),
 [The directive owns the
 procedure](../changelog/2026-09-18-the-directive-owns-the-procedure.md)
 
+**The composer row is identified by its U+00A0 gap.** The TUI pads its composer
+glyph with a no-break space; a shell prompt pads the same glyph with an ordinary
+one. That single character is what separates a live composer from a `❯` sitting
+in a prompt or in scrollback, and without it the boot gate opens at the shell
+and a driven restart's continuation is typed into a terminal reading nothing.
+The gap's *width* stays derived from the captured line, so what is pinned is the
+one value that is not layout — and the evidence it can carry that weight is that
+it has already been what separates a real pane from a composed one, in
+2026-08-13's inverted `is_typing`. The direction of failure is the other half: a
+Claude Code that stops emitting it leaves no row reading as a composer, so
+nothing is typed and the walker reports, with `just tui-conformance` seeing it
+before production does. [The mechanism](driving-the-tui.md), [The composer row
+carries its own
+gap](../changelog/2026-09-22-the-composer-row-carries-its-own-gap.md)
+
 **Nothing about the exiting process is read.** A driven restart once
 identified it by a bounded parent-chain walk, to replay its argv — `$PPID`
 inside a hook is the `/bin/sh -c` wrapper Claude Code spawns, whose argv is

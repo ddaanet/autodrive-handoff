@@ -14,7 +14,7 @@ argument; read the node before making a claim about, or changing, what it
 argues. The routing table under Architecture, and the two indexes under
 Design decisions and Rejected alternatives, are the entry points.
 
-Last updated: 2026-09-21.
+Last updated: 2026-09-22.
 
 ## Problem
 
@@ -248,6 +248,7 @@ The standing calls, each argued in
 - **With nothing to approve, the wrap-up completes in a single turn.**
 - **A context-size nudge was tried and dropped.**
 - **Deciding makes no tool call.**
+- **The composer row is identified by its U+00A0 gap.**
 - **Nothing about the exiting process is read.**
 
 ## Rejected alternatives
@@ -280,6 +281,7 @@ Ruled out, each argued in
 - **Injecting the frame on any compaction where one exists**, **prepare-only
   with a driven continuation**
 - **Every way of identifying the exiting `claude` process**
+- **Requiring `#{alternate_on}` for the boot gate**
 - **Lengthening `HANDOFF_WATCHER_SHELL_SETTLE`**
 
 ## Non-goals

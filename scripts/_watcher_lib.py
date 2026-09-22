@@ -137,9 +137,14 @@ def cursor_in_composer(text: str, cursor_x: int, cursor_y: int) -> bool:
     composer the TUI is actually reading does, at the start column when
     nothing is typed yet.
 
-    Residual: a cursor on any row *below* the glyph counts, which is what
-    makes this work on a composer that has scrolled, and also means a bare
-    shell whose prompt or scrollback carries a ❯ reads as a live composer.
+    A cursor on any row *below* the glyph row still counts, which is what
+    makes this work on a composer that has scrolled. The glyph row itself
+    must also carry the COMPOSER_GAP after the ❯ (see _composer_index),
+    which is what keeps a bare shell's prompt or scrollback — its ❯ padded
+    with an ordinary ASCII space — from opening the gate.
+
+    Residual: a shell prompt that happens to pad its own ❯ with a NO-BREAK
+    SPACE would still read as a live composer.
     """
     lines = strip(text).split("\n")
     index = _composer_index(lines)
@@ -187,10 +192,20 @@ def composer_excerpt(text: str, rows: int = 3) -> str:
 
 
 def _composer_index(lines: list[str]) -> int | None:
+    """Return the last row that is genuinely the composer, or None.
+
+    A shell prompt's ❯ is padded with an ordinary ASCII space; the TUI's
+    composer pads the same glyph with U+00A0 (COMPOSER_GAP). That one character
+    is what keeps a shell prompt — or one sitting in scrollback — from reading
+    as a composer.
+    """
     for index in range(len(lines) - 1, -1, -1):
-        if PROMPT_GLYPH in lines[index]:
+        if PROMPT_GLYPH + COMPOSER_GAP in lines[index]:
             return index
     return None
+
+
+COMPOSER_GAP = "\N{NO-BREAK SPACE}"
 
 
 def _squash(text: str) -> str:

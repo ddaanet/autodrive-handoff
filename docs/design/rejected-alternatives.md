@@ -154,6 +154,19 @@ from the session id alone, so nothing identifies that process at all.
 [Restart drive repair](../changelog/2026-08-13-restart-drive-repair.md),
 [The relaunch stops replaying argv](../changelog/2026-08-14-the-relaunch-stops-replaying-argv.md)
 
+**Requiring `#{alternate_on}` for the boot gate** — the other way to keep a
+shell prompt's `❯` from reading as a live composer: Claude Code runs on the
+alternate screen, and the flag flips 0 → 1 part way through boot. It adds a
+second tmux query to a predicate family that is deliberately pure over captured
+pane text, which is what makes every one of them testable offline against
+captures and re-checkable against a live TUI, and the stub would have to answer
+a new format field. It buys nothing for the replayed-transcript glyph, which is
+already on the alternate screen and which the cursor tells apart. And it ties
+the gate to a terminal mode rather than to the composer, which is the thing the
+caller wants to know about.
+[The composer row carries its own
+gap](../changelog/2026-09-22-the-composer-row-carries-its-own-gap.md)
+
 **Lengthening `HANDOFF_WATCHER_SHELL_SETTLE`** — tuning a constant against
 an unbounded shutdown. The failure returns under load, and it is silent: the
 pane looks untouched.

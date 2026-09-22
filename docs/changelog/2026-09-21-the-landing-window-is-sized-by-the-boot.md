@@ -122,6 +122,16 @@ every path where the clear is the keystroke that gets dropped.
 
 ## Residual — a `❯` above the shell's cursor opens the gate
 
+> **Superseded 2026-09-22** (see [The composer row carries its own
+> gap](2026-09-22-the-composer-row-carries-its-own-gap.md)) — scoped to this
+> residual and to the "Undecided, deliberately" paragraph below, which is
+> decided: the second of the two candidates landed. `_composer_index` requires
+> the composer's U+00A0 gap after the `❯`, so a shell prompt's ASCII-padded
+> glyph no longer opens the gate. What is recorded below about the arrangement,
+> the two probes on CC 2.1.278 and the fixture's staging all stand; the
+> parametrization onto a glyph-free screen stands too, on the narrower ground
+> that a real `/exit`'s screen is what the platform produces.
+
 `cursor_in_composer` is true for a cursor sitting *below* any `❯` row, which is
 what makes it work on a composer that has scrolled. On a bare shell whose prompt
 or scrollback carries a `❯` — starship, pure, and fish configurations that use

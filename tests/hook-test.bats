@@ -35,7 +35,10 @@ TASK
     cat > "$BATS_TEST_TMPDIR/bin/tmux" <<'STUB'
 #!/usr/bin/env bash
 case "$1" in
-  capture-pane) printf '%s\n' '──── x ──' '❯ ' ;;
+  # \302\240 is U+00A0, the composer's own gap after the glyph (see
+  # _watcher_lib.COMPOSER_GAP) — an ASCII space here would no longer read as
+  # a composer at all.
+  capture-pane) printf '%s\n' '──── x ──' "$(printf '❯\302\240')" ;;
 esac
 STUB
     chmod +x "$BATS_TEST_TMPDIR/bin/tmux"
