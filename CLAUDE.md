@@ -1190,9 +1190,10 @@ outright regardless of path.
   window unconditional — it alone reds, the line landing inside the widened
   window and the failure moving past `did not land` to the confirmation stage.
   An eleventh row (2026-09-20)
-  stages the same 0.3s boot and reads the timing record back — an exact key
-  set of `at`, `line`, `gate`, `idle`, `landed`, `confirmed` and no `settle`,
-  a `gate` that saw the staged delay, and a pre-filled
+  stages a 1s boot (0.3s until 2026-09-22, when a walker interpreter startup
+  of 0.25–0.45s ate it under load) and reads the timing record back — an
+  exact key set of `at`, `line`, `gate`, `idle`, `landed`, `confirmed` and no
+  `settle`, a `gate` that saw the staged delay, and a pre-filled
   60-row file cut to its last 50. The hooks' `HANDOFF_LOG_FILE` export has no
   row of its own: they spawn the walker detached, and no synchronous seam
   shows what it was handed. Every shell-line row

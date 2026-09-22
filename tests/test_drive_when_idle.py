@@ -973,7 +973,7 @@ def test_a_delivered_line_records_its_gate_timings(
     The walker is detached and its output goes nowhere, so the first dogfood
     of the 2026-09-20 boot gate could only be read off transcript timestamps:
     36s from Stop to the continuation, with no way to split boot from settle.
-    The composer is absent for 0.3s here, so the gate's share is measurable.
+    The composer is absent for 1s here, so the gate's share is measurable.
 
     The record carries no `settle`: there is no settle left to report, and a
     key pinned to a tunable that no longer exists would read as a figure the
@@ -986,7 +986,7 @@ def test_a_delivered_line_records_its_gate_timings(
     tmux_stub.compose(0, 0)
 
     def boot_completes() -> None:
-        time.sleep(0.3)
+        time.sleep(1.0)
         idle.write_text("──── x ──\n❯ \n")
         after_l.unlink()
         tmux_stub.compose(2, 1)
@@ -1008,7 +1008,7 @@ def test_a_delivered_line_records_its_gate_timings(
         env={
             "HANDOFF_TRANSCRIPT": str(tr),
             "HANDOFF_LOG_FILE": str(log),
-            "HANDOFF_WATCHER_BOOT_TIMEOUT": "2",
+            "HANDOFF_WATCHER_BOOT_TIMEOUT": "5",
         },
     )
 
@@ -1016,9 +1016,11 @@ def test_a_delivered_line_records_its_gate_timings(
     records = [json.loads(row) for row in log.read_text().splitlines()]
     last = records[-1]
     assert last["line"] == "continue with task 3"
-    # The 0.3s clock starts before the walker's interpreter does, so the gate
-    # sees less of it than was staged; an already-present composer costs 0.03.
-    assert last["gate"] >= 0.15
+    # The 1s clock starts before the walker's interpreter does, so the gate
+    # sees less of it than was staged — 0.25-0.45s less unloaded, and a 0.3s
+    # staging went under 0.15 at load average ~9. An already-present composer
+    # costs 0.03, so the bound is well clear of that either way.
+    assert last["gate"] >= 0.5
     assert set(last) == {"at", "line", "gate", "idle", "landed", "confirmed"}
     # Bounded: a file nothing consumes must not grow with every transition.
     assert len(records) == 50
