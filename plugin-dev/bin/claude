@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# Dogfood shim for a plugin that vendors this toolkit. Vendored at
+# <root>/plugin-dev/bin/claude and put first on PATH, it execs the next claude on
+# PATH (every entry whose claude is the shim itself is dropped) with argv
+# unchanged, CLAUDE_CODE_PLUGIN_DIRS pointing at <root>/dist/plugin over any
+# inherited value, and CDPATH unset. It never syncs: a launch is not a
+# promotion, and only `just dogfood` writes the copy. With no copy it says so on
+# one dogfood: line naming that step, leaves the variable as it came, and
+# launches anyway; session-start then reports a session without the copy. With
+# no other claude on PATH it exits 127 and says so.
+# <root> is found from the script's own location, never from the launch
+# directory, and resolved physically, as dogfood.sh resolves its own, so the
+# variable spells the copy the way the hooks compute it.
+set -euo pipefail
+unset CDPATH # else a relative cd searches it and prints its target
+
+main() {
+    local here root path
+    here="$(dirname "${BASH_SOURCE[0]}" && printf x)"
+    here="${here%?x}"
+    root="$(cd -P -- "$here/../.." && printf '%s' "$PWD" && printf x)"
+    root="${root%x}"
+    if [[ -d "$root/dist/plugin" ]]; then
+        export CLAUDE_CODE_PLUGIN_DIRS="$root/dist/plugin"
+    else
+        echo "dogfood: no copy at $root/dist/plugin, so claude starts without it; run just dogfood to create it" >&2
+    fi
+    path="$(path_without "${BASH_SOURCE[0]}" && printf x)"
+    export PATH="${path%x}"
+    if ! command -v claude >/dev/null; then
+        echo "dogfood: no other claude on PATH" >&2
+        exit 127
+    fi
+    exec claude "$@"
+}
+
+# PATH minus every entry whose claude is the file $1, however the entry is
+# spelled (trailing slash, symlinked directory, /./), so the exec finds the next
+# claude. An empty entry means the working directory, so it is tested as
+# ./claude and kept unless that is the shim itself. Every kept entry is prefixed
+# with a colon and the first one stripped, so an empty entry (the working
+# directory) survives in first place too.
+path_without() {
+    local entry out="" rest="$PATH:"
+    while [[ -n "$rest" ]]; do
+        entry="${rest%%:*}"
+        rest="${rest#*:}"
+        [[ "${entry:-.}/claude" -ef "$1" ]] && continue
+        out="$out:$entry"
+    done
+    printf '%s' "${out#:}"
+}
+
+main "$@"
