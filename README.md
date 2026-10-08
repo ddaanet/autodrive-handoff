@@ -33,10 +33,11 @@ dotfiles).
   release is the exception the Conventions below spell out, and the hook refuses
   an agent's edit there too.
 - **`dogfood.sh`** — the dogfood launcher's script, with three subcommands.
-  `sync` mirrors the plugin tree, minus git-ignored paths and `.git`, into
-  `dist/plugin/`. `pre-tool` is the `PreToolUse` hook that refuses edits into
-  that copy, and `session-start` the `SessionStart` hook that warns when a
-  session does not load it. See [Dogfooding](#dogfooding).
+  `sync` mirrors the plugin tree, minus git-ignored paths (a submodule's own
+  ignores included) and `.git`, into `dist/plugin/`. `pre-tool` is the
+  `PreToolUse` hook that refuses edits into that copy, and `session-start` the
+  `SessionStart` hook that warns when a session does not load it. See
+  [Dogfooding](#dogfooding).
 - **`bin/claude`** — the dogfood shim. First on PATH, it points
   `CLAUDE_CODE_PLUGIN_DIRS` at `dist/plugin/` and execs the next `claude` on
   PATH. It never syncs; while the copy is missing it warns and launches without
@@ -265,12 +266,15 @@ live then depends on what changed:
 
 The sync copies everything git does not ignore, tracked or not, minus every
 `.git` and `dist/plugin/` itself, and deletes from the copy what left the
-source. It refuses to run without `.claude-plugin/plugin.json` at the root, when
+source. What an initialised submodule ignores through its own rules stays out
+too. It refuses to run without `.claude-plugin/plugin.json` at the root, when
 git does not ignore `dist/plugin/`, and when an ignored path's name holds `*`,
 `?`, `[`, `]` or a backslash, naming that path, and without `rsync` on PATH;
-each refusal leaves `dist/` untouched. rsync's own errors are shown as they
-come, and a failure exits non-zero. A file vanishing mid-sync, or two syncs
-colliding, fails the same way; a re-run repairs it.
+each refusal leaves `dist/` untouched. A git error listing the root or an
+initialised submodule stops the sync with git's own message, `dist/` untouched.
+rsync's own errors are shown as they come, and a failure exits non-zero. A file
+vanishing mid-sync, or two syncs colliding, fails the same way; a re-run
+repairs it.
 
 Run `just dogfood` from your own shell, not through an agent's Bash tool,
 whether or not your plugin ships a `.mcp.json`. The command sandbox masks a set
@@ -292,19 +296,21 @@ version-guard:
   agent the source path to edit instead. A Bash write into the copy passes it,
   and the next sync overwrites or deletes that write.
 - **Session check** — `SessionStart`. Silent when all is well; otherwise it
-  prints one of two warnings:
+  prints one of three warnings:
 
   ```text
+  dogfood: no copy at <root>/dist/plugin, so this session does not load it; run just dogfood to create it, then relaunch
   dogfood: this session does not load <root>/dist/plugin — launch claude through plugin-dev/bin/claude from the repo root
   dogfood: jq is not on PATH, so the copy guard and this check are off until it is installed
   ```
 
-  The first means the session started through the shim with no copy, or past
+  The first means there is no copy yet, as after a shim launch before the first
+  `just dogfood`. The second means the copy exists but the session started past
   the shim (no direnv, an IDE or the desktop app, an absolute path to
   `claude`), or inherited another repo's `CLAUDE_CODE_PLUGIN_DIRS`, as a
   `claude` started from another plugin's dogfood session does. The agent is
-  told the same, as a fact. After the second, Claude Code's own sensitive-file
-  prompt still stops a copy edit.
+  told either as a fact, with no command to run. After the third, Claude Code's
+  own sensitive-file prompt still stops a copy edit.
 
 ## Conventions
 
