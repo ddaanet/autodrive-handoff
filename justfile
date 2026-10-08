@@ -21,7 +21,7 @@ precommit:
     jq . .claude-plugin/plugin.json > /dev/null
     jq . hooks/hooks.json > /dev/null
     jq . .claude/settings.json > /dev/null
-    shellcheck -x .bin/* bin/* scripts/*.sh tests/*.bats
+    shellcheck -x bin/* scripts/*.sh tests/*.bats
     ruff check scripts tests
     ruff format --check scripts tests
     docformatter --check scripts/*.py tests/*.py

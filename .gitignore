@@ -39,3 +39,5 @@ __pycache__/
 # under docs/ and got carried along by directory moves.
 .DS_Store
 ._*
+
+/dist/plugin/

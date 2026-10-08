@@ -9,6 +9,25 @@
             "command": "bash ${CLAUDE_PROJECT_DIR}/plugin-dev/version-guard.sh"
           }
         ]
+      },
+      {
+        "matcher": "Write|Edit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/plugin-dev/dogfood.sh\" pre-tool"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/plugin-dev/dogfood.sh\" session-start"
+          }
+        ]
       }
     ]
   },
