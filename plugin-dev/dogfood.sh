@@ -28,24 +28,19 @@ usage() {
     exit 2
 }
 
-# The copy is the source tree minus what git ignores, minus .git, minus the
-# copy itself. rsync gets the ignored paths as an exclude list, each anchored
-# with a leading slash and NUL-separated, so a name holding a space or a
-# newline survives. The list is written out in full before rsync starts: fed
-# through a pipe, a git failure would leave rsync running on a partial list,
-# copying .git and recursing into the copy. Deletions propagate: a path that
-# stops being source leaves the copy. rsync's stderr is left alone, and its
-# exit status is the script's. An entry holding * ? [ ] or a backslash aborts
-# the sync before rsync runs or dist/ is touched: rsync reads the first four as
-# wildcards and a backslash as an escape only when a wildcard is present, so
-# such names are refused rather than escaped. The exit leaves only the loop's
-# subshell; errexit ends the script on the pipeline's status, which is the
-# loop's 1 even when git dies of SIGPIPE (pipefail reports the rightmost).
-# Before anything else touches the tree, sync refuses a root with no plugin
-# manifest, a root where git does not ignore dist/plugin/, and a PATH with no
-# rsync; each refusal is one dogfood: line naming the path or the command, exit
-# 1, dist/ untouched. Without the rsync check, the mkdir would leave an empty
-# copy that the shim launches as a promoted one.
+# The copy is the source tree minus what git ignores, in the repo or in any
+# initialised submodule, minus .git, minus the copy itself. rsync gets the
+# ignored paths as an exclude list (see list_ignored), each anchored with a
+# leading slash and NUL-separated, so a name holding a space or a newline
+# survives. The list is written out in full before rsync starts: fed through a
+# pipe, a git failure would leave rsync running on a partial list, copying .git
+# and recursing into the copy. Deletions propagate: a path that stops being
+# source leaves the copy. rsync's stderr is left alone, and its exit status is
+# the script's. Before anything else touches the tree, sync refuses a root with
+# no plugin manifest, a root where git does not ignore dist/plugin/, and a PATH
+# with no rsync; each refusal is one dogfood: line naming the path or the
+# command, exit 1, dist/ untouched. Without the rsync check, the mkdir would
+# leave an empty copy that the shim launches as a promoted one.
 sync_copy() {
     local root
     root="$(root_dir && printf x)"
@@ -54,22 +49,54 @@ sync_copy() {
     require_ignored_copy "$root"
     require_rsync
     # Not local: the EXIT trap reads it after sync_copy has returned.
-    excludes="$(mktemp "${TMPDIR:-/tmp}/dogfood.XXXXXX")"
-    trap 'rm -f "$excludes"' EXIT
-    git -C "$root" ls-files -z -o -i --exclude-standard --directory |
-        while IFS= read -r -d '' entry; do
-            case "$entry" in
-                *'*'* | *'?'* | *'['* | *']'* | *\\*)
-                    printf "dogfood: ignored entry '%s' holds a pattern character (* ? [ ] or \\\\); sync refused\n" "$entry" >&2
-                    exit 1
-                    ;;
-            esac
-            printf '/%s\0' "$entry"
-        done >"$excludes"
-    printf '%s\0' '.git' '/dist/plugin/' >>"$excludes"
+    work="$(mktemp -d "${TMPDIR:-/tmp}/dogfood.XXXXXX")"
+    trap 'rm -rf "$work"' EXIT
+    list_ignored "$root" "" >"$work/excludes"
+    printf '%s\0' '.git' '/dist/plugin/' >>"$work/excludes"
     mkdir -p "$root/dist/plugin"
     rsync -a --delete --delete-excluded --from0 --exclude-from=- \
-        "$root/" "$root/dist/plugin/" <"$excludes"
+        "$root/" "$root/dist/plugin/" <"$work/excludes"
+}
+
+# list_ignored <dir> <prefix>: print, NUL-terminated, the untracked ignored
+# entries of the repo at <dir>, then those of each initialised submodule in
+# turn, recursively, each entry as /<prefix><entry>, where <prefix> is <dir>
+# relative to the root with a trailing slash ("" for the root itself). The
+# root's ls-files does not descend into a submodule, whose own ignores would
+# otherwise be copied, and git submodule foreach runs its command under sh,
+# which has no read -d ''. A submodule is a gitlink, mode 160000 in
+# ls-files -s, and is initialised when it holds a .git, file or directory.
+# Each git listing goes to its own scratch file under $work and is read from
+# there, never through a pipe or a process substitution: as a simple command,
+# a git failure ends the script under errexit, which also holds in the
+# recursion, called as a plain statement and never as a condition. Reads use
+# fd 3, since the recursion runs inside the caller's loop. An entry holding
+# * ? [ ] or a backslash, prefix included, ends the script before rsync runs
+# or dist/ is touched: rsync reads the first four as wildcards and a backslash
+# as an escape only when a wildcard is present, so such names are refused
+# rather than escaped.
+list_ignored() {
+    local dir="$1" prefix="$2" ignored staged entry
+    ignored="$(mktemp "$work/ignored.XXXXXX")"
+    staged="$(mktemp "$work/staged.XXXXXX")"
+    git -C "$dir" ls-files -z -o -i --exclude-standard --directory >"$ignored"
+    while IFS= read -r -d '' -u 3 entry; do
+        entry="$prefix$entry"
+        case "$entry" in
+            *'*'* | *'?'* | *'['* | *']'* | *\\*)
+                printf "dogfood: ignored entry '%s' holds a pattern character (* ? [ ] or \\\\); sync refused\n" "$entry" >&2
+                exit 1
+                ;;
+        esac
+        printf '/%s\0' "$entry"
+    done 3<"$ignored"
+    git -C "$dir" ls-files -z -s >"$staged"
+    while IFS= read -r -d '' -u 3 entry; do
+        [[ "${entry%% *}" == 160000 ]] || continue
+        entry="${entry#*$'\t'}"
+        [[ -e "$dir/$entry/.git" ]] || continue
+        list_ignored "$dir/$entry" "$prefix$entry/"
+    done 3<"$staged"
 }
 
 # The copy is regenerated by sync, so an edit into it is lost and never reaches
@@ -136,10 +163,12 @@ pre_tool() {
 # Code drops, never matches, and one that cannot be entered puts no cd error on
 # stderr. Anything else, unset included, gets one object. The payload is not
 # read. systemMessage is the one line for the human, opening with an ANSI reset
-# so Claude Code does not dim it like routine hook output; it names the remedy,
-# launching through the shim. additionalContext gives the agent the same
-# finding as a fact and nothing to act on: no command, no way to make the
-# session load the copy. The object is built with jq --arg, never spliced.
+# so Claude Code does not dim it like routine hook output; it names the remedy:
+# with no <root>/dist/plugin directory, the shim's own test, just dogfood and a
+# relaunch, else launching through the shim. additionalContext gives the agent
+# the same finding as a fact and nothing to act on: no command, no way to make
+# the session load the copy, since the promotion and the relaunch are the
+# human's. The object is built with jq --arg, never spliced.
 # Without jq there is no object to build and no copy guard in pre-tool, so the
 # check is skipped and a static systemMessage says so; it stays off the agent's
 # channel, since only the human can install jq.
@@ -167,6 +196,16 @@ session_start() {
         fi
         [[ "$entry" == "$copy" ]] && exit 0
     done
+    if [[ ! -d "$copy" ]]; then
+        jq -nc --arg copy "$copy" '{
+            systemMessage: ("\u001b[0m" + "dogfood: no copy at " + $copy + ", so this session does not load it; run just dogfood to create it, then relaunch"),
+            hookSpecificOutput: {
+                hookEventName: "SessionStart",
+                additionalContext: ("No copy exists at " + $copy + ", so this session loads none; plugin behaviour observed in it does not come from that path.")
+            }
+        }'
+        exit 0
+    fi
     jq -nc --arg copy "$copy" '{
         systemMessage: ("\u001b[0m" + "dogfood: this session does not load " + $copy + " — launch claude through plugin-dev/bin/claude from the repo root"),
         hookSpecificOutput: {
