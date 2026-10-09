@@ -186,7 +186,7 @@ Write the prompt as an instruction to the agent on the far side, which will
 have the files and the repo — and, after a compaction, a summary — but not
 this conversation. Name the next action, not the topic.
 
-- Good: `continue with the watcher tests per the task file`
+- Good: `continue with the parser tests per the task file`
 - Bad: `continue` / `keep going with the plugin work`
 
 It must be a **single line**: one Enter is one submit, so an embedded

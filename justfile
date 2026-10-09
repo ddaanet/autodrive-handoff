@@ -53,15 +53,9 @@ ty:
 hook-test:
     bats tests/hook-test.bats tests/checkpoint.bats tests/drive-take.bats
 
-# Run the Python unit tests (pytest) — worktree_root.py, checkpoint.py, drive_when_idle.py
+# Run the Python unit tests (pytest) — worktree_root.py, checkpoint.py, the mod fixtures
 py-test:
     pytest
-
-# Check the frozen pane fixtures against a live TUI. Not in `precommit`: needs a
-# real claude + tmux server (so it cannot run sandboxed), takes ~40s. Submits
-# nothing, so it costs no tokens. `-rs` so a skip is never mistaken for a pass.
-tui-conformance:
-    pytest -m live -v -rs
 
 # Smoke-test the mod against a live `claude -p`: an armed sentinel in a
 # throwaway repo, then the session transcripts say whether the transition ran.

@@ -185,21 +185,6 @@ pick up per the task file" ]
     [ "$(head -n1 "$repo/.claude/autodrive")" = "armed" ]
 }
 
-# finding 3: no `*)` arm meant a held sentinel of an unreachable-through-the-
-# checkpoint kind (restart never holds today) still armed silently and exited
-# 0 with no closing line. handoff_drive_read itself accepts `held` for any
-# kind — the state check is independent of the kind check — so this fixture is
-# a shape handoff_drive_read reads back cleanly, exercising the gap.
-@test "handoff-approved: a held sentinel of an unexpected kind -> exit 2, left held, naming the kind" {
-    repo="$(make_repo)"
-    printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" restart "/exit" "claude --resume sess-other" \
-        > "$repo/.claude/autodrive"
-    run_approved "$repo"
-    [ "$status" -eq 2 ]
-    [[ "$stderr" == *"restart"* ]]
-    [ "$(head -n1 "$repo/.claude/autodrive")" = "held $CLAUDE_CODE_SESSION_ID" ]
-}
-
 @test "handoff-approved: HANDOFF_ROOT unset -> refuses, naming the unrecognised invocation" {
     repo="$(make_repo)"
     # shellcheck disable=SC2016   # $1/$2 are the inner bash -c's own positional params
@@ -335,10 +320,9 @@ handoff_payload() {
         | jq -e '.hookSpecificOutput.additionalContext | test("Leave them staged")' >/dev/null
 }
 
-# Staging is all this hook does. A sentinel the checkpoint wrote is armed at
-# Stop like any other, so this must leave it alone — consuming it here would
-# spawn the walker mid-turn, which is the one thing the Stop gate exists to
-# prevent.
+# Staging is all this hook does. A sentinel the checkpoint wrote is taken at the
+# turn end like any other, so this must leave it alone — consuming it here
+# would run the transition mid-turn.
 @test "bash-post: empty manifest (rename-only checkpoint call) -> consumed, sentinel untouched" {
     repo="$BATS_TEST_TMPDIR/bp-rename"; mkdir -p "$repo/.claude"
     git -C "$repo" init -q
@@ -346,7 +330,7 @@ handoff_payload() {
     printf 'armed\nrename\n/rename New Title\n' > "$repo/.claude/autodrive"
     run bash -c '
         jq -nc --arg cwd "$1" "{cwd:\$cwd, tool_name:\"Bash\", tool_input:{command:\"ls\"}}" \
-        | CLAUDE_PROJECT_DIR="$1" TMUX=fake TMUX_PANE="%0" bash "$2"
+        | CLAUDE_PROJECT_DIR="$1" bash "$2"
     ' _ "$repo" "$BASHPOST"
     [ "$status" -eq 0 ]
     [ ! -e "$repo/.claude/checkpoint-manifest" ]
@@ -374,7 +358,7 @@ handoff_payload() {
     : > "$wt/.claude/checkpoint-manifest"
     run bash -c '
         jq -nc --arg cwd "$1" "{cwd:\$cwd, tool_name:\"Bash\", tool_input:{command:\"ls\"}}" \
-        | TMUX=fake TMUX_PANE="%0" bash "$2"
+        | bash "$2"
     ' _ "$wt" "$BASHPOST"
     [ "$status" -eq 0 ]
     [ ! -e "$wt/.claude/checkpoint-manifest" ]

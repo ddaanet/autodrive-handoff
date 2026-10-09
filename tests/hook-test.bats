@@ -25,29 +25,6 @@ hook smoke test
 - none
 TASK
 
-    # Three hooks here (stop-drive, load-compact, load-handoff) spawn the
-    # detached walker, which drives tmux. Without a stub they reach the real
-    # server: TMUX=fake does not stop tmux falling back to the default socket,
-    # so `%0` is somebody's actual pane. Stub it to an idle, empty composer —
-    # the spawned watchers then find nothing to do and exit on their own
-    # timeouts, which the tunables below cut to ~1s.
-    mkdir -p "$BATS_TEST_TMPDIR/bin"
-    cat > "$BATS_TEST_TMPDIR/bin/tmux" <<'STUB'
-#!/usr/bin/env bash
-case "$1" in
-  # \302\240 is U+00A0, the composer's own gap after the glyph (see
-  # _watcher_lib.COMPOSER_GAP) — an ASCII space here would no longer read as
-  # a composer at all.
-  capture-pane) printf '%s\n' '──── x ──' "$(printf '❯\302\240')" ;;
-esac
-STUB
-    chmod +x "$BATS_TEST_TMPDIR/bin/tmux"
-    PATH="$BATS_TEST_TMPDIR/bin:$PATH"
-    export PATH
-    export HANDOFF_WATCHER_TIMEOUT=1 HANDOFF_WATCHER_POLL=0.01 \
-           HANDOFF_WATCHER_VERIFY_DELAY=0.01 \
-           HANDOFF_WATCHER_CONSUME_TIMEOUT=1 HANDOFF_WATCHER_CONSUME_POLL=0.05
-
     # The session-keyed pointer and drift marker live at a literal path
     # (/tmp/claude) so a hook and the agent's Bash can address them without
     # sharing an environment. Redirect it, or the suite writes into the
@@ -68,64 +45,6 @@ make_worktree() {
     mkdir -p "$wt/.claude" "$tmp/.git/worktrees/$name"
     printf 'gitdir: %s\n' "$tmp/.git/worktrees/$name" > "$wt/.git"
     printf '%s\n' "$wt"
-}
-
-# A python3 stub, first on PATH: when a spawning hook execs
-# `python3 .../drive_when_idle.py <PANE> <lines...>`, it writes the walker's
-# environment plus its own argv (everything after the drive_when_idle.py path
-# itself) to $BATS_TEST_TMPDIR/walker-spawn instead of running it, then exits
-# without doing anything else. Any other python3 call — worktree_root.py,
-# _checkpoint_lib.py, load-handoff.sh's own mtime probe — falls through to the
-# real interpreter, captured before this dir is put in front of it, so those
-# keep working. Called per-row rather than from setup(): most rows never spawn
-# the walker and must exercise the real interpreter unstubbed.
-stub_walker() {
-    local real_python3
-    real_python3="$(command -v python3)"
-    printf '#!/usr/bin/env bash\nREAL_PYTHON3=%q\nSPAWN_FILE=%q\n' \
-        "$real_python3" "$BATS_TEST_TMPDIR/walker-spawn" \
-        > "$BATS_TEST_TMPDIR/bin/python3"
-    cat >> "$BATS_TEST_TMPDIR/bin/python3" <<'STUB'
-found=0
-argv=()
-for a in "$@"; do
-    if [ "$found" -eq 1 ]; then
-        argv+=("$a")
-    fi
-    if [ "$(basename "$a")" = "drive_when_idle.py" ]; then
-        found=1
-    fi
-done
-if [ "$found" -eq 1 ]; then
-    {
-        printf '%s=%s\n' HANDOFF_LOG_FILE "${HANDOFF_LOG_FILE:-}"
-        printf '%s=%s\n' HANDOFF_FAIL_FILE "${HANDOFF_FAIL_FILE:-}"
-        printf '%s=%s\n' HANDOFF_PENDING_FILE "${HANDOFF_PENDING_FILE:-}"
-        printf '%s=%s\n' HANDOFF_EXIT_FILE "${HANDOFF_EXIT_FILE:-}"
-        printf '%s=%s\n' HANDOFF_TRANSCRIPT "${HANDOFF_TRANSCRIPT:-}"
-        for a in ${argv[@]+"${argv[@]}"}; do
-            printf '%s\n' "$a"
-        done
-    } > "$SPAWN_FILE"
-    exit 0
-fi
-exec "$REAL_PYTHON3" "$@"
-STUB
-    chmod +x "$BATS_TEST_TMPDIR/bin/python3"
-}
-
-# The spawn is detached, so the row has to poll for the stub's dump rather than
-# read it synchronously. No `timeout` binary assumed.
-wait_for_walker_spawn() {
-    local tries=0
-    while [ ! -f "$BATS_TEST_TMPDIR/walker-spawn" ]; do
-        tries=$((tries + 1))
-        if [ "$tries" -ge 60 ]; then
-            echo "walker-spawn never appeared within 3s (stub not invoked?)" >&2
-            return 1
-        fi
-        sleep 0.05
-    done
 }
 
 # --- _lib.sh: handoff_root resolver ---
@@ -151,8 +70,8 @@ wait_for_walker_spawn() {
 }
 
 # The project-root and empty-cwd cases resolve in bash without spawning
-# python3 (they mirror worktree_root.py's trivial branches) — Stop and
-# UserPromptSubmit hit this on every turn. A broken python3 on PATH proves
+# python3 (they mirror worktree_root.py's trivial branches) — UserPromptSubmit and
+# the loaders hit this on every turn. A broken python3 on PATH proves
 # the fast path never leaves the shell.
 @test "handoff_root: project-root or empty cwd -> fast path, no python3" {
     run bash -c '
@@ -298,9 +217,9 @@ inside" ]
 #
 # Line 1 is the kind and the kind fixes the shape, so the remaining lines need
 # no separator and each kind keeps its own rules. The lines are the literal
-# keystrokes: the walker must not know which command any kind uses, and
+# commands the mod runs: it must not know which command any kind uses, and
 # validation is what anchors it — the nth line of kind k must begin with the
-# expected command literal, so the file cannot be made to type something else.
+# expected command literal, so the file cannot be made to run something else.
 
 # Write the args as lines of a sentinel and read it back. On rejection the
 # reason is printed, so a `run read_drive ...` can assert on it — the reader
@@ -334,7 +253,7 @@ read_drive() {
     [ "${DRIVE_BEFORE[0]}" = "/compact" ]
 }
 
-# FR-G: the kind line alone. Nothing is typed, but the transition is expected,
+# FR-G: the kind line alone. Nothing is run, but the transition is expected,
 # and that expectation is what the frame's re-injection is gated on.
 @test "handoff_drive_read (compact, kind line alone): legal, both sequences empty" {
     read_drive "armed" "compact"
@@ -355,7 +274,7 @@ read_drive() {
 # The continuation is optional on both driven kinds: driving a transition and
 # submitting a prompt into what it opens are separate decisions, and the cross
 # product is what the two payload fields express.
-@test "handoff_drive_read (clear, no continuation): typed, nothing submitted after" {
+@test "handoff_drive_read (clear, no continuation): nothing submitted after" {
     read_drive "armed" "clear" "/rename A Title" "/clear"
     [ "$DRIVE_KIND" = clear ]
     [ "${#DRIVE_BEFORE[@]}" -eq 2 ]
@@ -363,51 +282,14 @@ read_drive() {
     [ "${#DRIVE_AFTER[@]}" -eq 0 ]
 }
 
-@test "handoff_drive_read (compact, no continuation): typed, nothing submitted after" {
+@test "handoff_drive_read (compact, no continuation): nothing submitted after" {
     read_drive "armed" "compact" "/compact focus on the parser"
     [ "$DRIVE_KIND" = compact ]
     [ "${DRIVE_BEFORE[0]}" = "/compact focus on the parser" ]
     [ "${#DRIVE_AFTER[@]}" -eq 0 ]
 }
 
-# restart's shape mirrors clear's exactly (4 or 5 lines, two required
-# before-lines, one optional prose after) — only the literal commands differ.
-@test "handoff_drive_read (restart): two before-lines in order, prose after" {
-    read_drive "armed" "restart" "/exit" "claude --resume sess-42" "pick up per the task file"
-    [ "$DRIVE_KIND" = restart ]
-    [ "${#DRIVE_BEFORE[@]}" -eq 2 ]
-    [ "${DRIVE_BEFORE[0]}" = "/exit" ]
-    [ "${DRIVE_BEFORE[1]}" = "claude --resume sess-42" ]
-    [ "${DRIVE_AFTER[0]}" = "pick up per the task file" ]
-}
-
-@test "handoff_drive_read (restart, no continuation): typed, nothing submitted after" {
-    read_drive "armed" "restart" "/exit" "claude --resume sess-42"
-    [ "$DRIVE_KIND" = restart ]
-    [ "${#DRIVE_BEFORE[@]}" -eq 2 ]
-    [ "${DRIVE_BEFORE[1]}" = "claude --resume sess-42" ]
-    [ "${#DRIVE_AFTER[@]}" -eq 0 ]
-}
-
-@test "handoff_drive_read (restart, /exit with an argument): rejected" {
-    run read_drive "armed" "restart" "/exit now" "claude --resume sess-42"
-    [ "$status" -ne 0 ]
-    [[ "$output" == *"exactly"* ]]
-}
-
-@test "handoff_drive_read (restart, resume line with no session id): rejected" {
-    run read_drive "armed" "restart" "/exit" "claude --resume"
-    [ "$status" -ne 0 ]
-    [[ "$output" == *"non-empty argument"* ]]
-}
-
-@test "handoff_drive_read (restart, wrong line count): rejected, naming the count" {
-    run read_drive "armed" "restart" "/exit"
-    [ "$status" -ne 0 ]
-    [[ "$output" == *"4 or 5 lines"* ]]
-}
-
-# The state a Stop has already consumed. The parser does not know which caller
+# The state drive-take.sh has already taken. The parser does not know which caller
 # wants which state — it reports the value and the gates decide.
 @test "handoff_drive_read (pending): parsed like any other state" {
     read_drive "pending" "clear" "/rename A Title" "/clear" "pick up per the task file"
@@ -426,7 +308,7 @@ read_drive() {
 # do not reach a pane whose turn is about to end on the approval question.
 #
 # Alone among the states it names its owner: the session whose approval it waits
-# on. Every other state is this turn's or the walker's, and both are reached
+# on. Every other state is this turn's or the mod's, and both are reached
 # from the session that wrote them; `held` is the one that outlives a turn
 # boundary on purpose, so it is the one that has to say whose boundary.
 @test "handoff_drive_read (held): parsed like any other state, and names its owner" {
@@ -545,10 +427,9 @@ read_drive() {
     [[ "$output" == *"must not be empty"* ]]
 }
 
-# The walker dispatches on the leading character: a `/` line takes the
-# recognition path and is confirmed by a command primitive, prose takes the
-# direct path. A prose line that looks like a command would be confirmed by the
-# wrong one.
+# The mod dispatches on the leading character: a `/` line runs as a command,
+# prose is submitted as a prompt. A prose line that looks like a command would
+# run as the wrong one.
 @test "handoff_drive_read (continuation prompt beginning with /): rejected" {
     run read_drive "armed" "clear" "/rename A Title" "/clear" "/resume the work"
     [ "$status" -ne 0 ]
@@ -558,8 +439,8 @@ read_drive() {
 # --- _lib.sh: handoff_drive_arm ---
 
 # Everything below line 1 is copied through untouched: the arm never has to know
-# the kind's shape, which is what lets one helper serve Stop and, in the next
-# pass, handoff-approved.
+# the kind's shape, which is what lets one helper serve drive-take.sh and
+# handoff-approved.
 @test "handoff_drive_arm (rewrites line 1, preserves every line below)" {
     printf '%s\n' "armed" "clear" "/rename A Title" "/clear" "pick up per the task file" \
         > "$BATS_TEST_TMPDIR/sentinel"
@@ -592,8 +473,8 @@ compact" ]
     [ "$DRIVE_OWNER" = "" ]
 }
 
-# Readers exist concurrently — both loaders and Stop parse this file, and the
-# walker stats it — so a half-written file must never be observable under the
+# Readers exist concurrently — both loaders, drive-take.sh and the sweep parse this
+# file — so a half-written file must never be observable under the
 # real name. The temp lands beside it and is renamed over it.
 @test "handoff_drive_arm (leaves no temp file behind)" {
     printf '%s\n' "armed" "compact" "/compact" "continue" > "$BATS_TEST_TMPDIR/sentinel"
@@ -920,14 +801,13 @@ WTTASK
     echo "$output" | jq -r '.hookSpecificOutput.additionalContext' | grep -q 'worktree handoff body'
 }
 
-# --- load-handoff on source: "clear" (consume the armed clear, spawn line 4) ---
+# --- load-handoff on source: "clear" (consume the pending clear) ---
 #
-# `/clear` mints a new session and a new transcript, and this payload reports
-# both, so the after-line confirms against .transcript_path here exactly as it
-# does at the compact boundary.
+# The mod ran the `/clear` and submits the continuation itself; the loader only
+# consumes the sentinel and injects the frame.
 
-# The same file in state `pending`: a transition Stop has already armed, waiting
-# on the SessionStart that confirms it.
+# The same file in state `pending`: a transition drive-take.sh has already taken,
+# waiting on the SessionStart that confirms it.
 seed_pending() {
     local dir="$1"; shift
     printf '%s\n' "pending" "$@" > "$dir/.claude/autodrive"
@@ -936,54 +816,50 @@ seed_pending() {
 run_load_handoff() {
     run bash -c '
         jq -nc --arg cwd "$1" --arg s "$2" \
-            "{cwd:\$cwd, hook_event_name:\"SessionStart\", source:\$s, transcript_path:(\$cwd + \"/t.jsonl\")}" \
-        | '"$3"' bash scripts/load-handoff.sh
+            "{cwd:\$cwd, hook_event_name:\"SessionStart\", source:\$s}" \
+        | bash scripts/load-handoff.sh
     ' _ "$1" "$2"
 }
 
-@test "load-handoff (clear, pending present: consumes it and reports the continuation)" {
+@test "load-handoff (clear, pending present: consumes it, injects the frame)" {
     seed_pending "$tmp" "clear" "/rename A Title" "/clear" "pick up per the task file"
-    run_load_handoff "$tmp" clear 'TMUX=fake TMUX_PANE="%0"'
+    run_load_handoff "$tmp" clear
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
-    echo "$output" | jq -e '.systemMessage | test("pick up per the task file")' >/dev/null
-    # The frame still goes out alongside it.
+    # The continuation is the mod's to submit, so it is not echoed here.
+    echo "$output" | jq -e '.systemMessage | test("pick up") | not' >/dev/null
     echo "$output" | jq -e '.hookSpecificOutput.additionalContext | test("hook smoke test")' >/dev/null
 }
 
 # The ordering hazard, and the regression this row exists to catch: the script
-# exits when handoff_frame finds nothing to inject, so the consume and the spawn
-# have to come first. Otherwise a driven clear whose task file is empty strands
-# the pending file and never continues.
-@test "load-handoff (clear, pending present but NO frame: still continues)" {
+# exits when handoff_frame finds nothing to inject, so the consume has to come
+# first. Otherwise a driven clear whose task file is empty strands the pending
+# file, and the next transition's sentinel is read as one still in flight.
+@test "load-handoff (clear, pending present but NO frame: still consumes)" {
     rm -f "$tmp/.claude/handoff-task.md" "$tmp/.claude/handoff-todo.md"
     seed_pending "$tmp" "clear" "/rename A Title" "/clear" "resume anyway"
-    run_load_handoff "$tmp" clear 'TMUX=fake TMUX_PANE="%0"'
+    run_load_handoff "$tmp" clear
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
-    echo "$output" | jq -e '.systemMessage | test("resume anyway")' >/dev/null
-    echo "$output" | jq -e 'has("hookSpecificOutput") | not' >/dev/null
+    [ "$output" = "" ]
 }
 
-# A driven clear with no continuation: the `/clear` was typed by the walker at
-# Stop, and there is nothing to submit into the session it opened. The pending
-# file is still this loader's to consume — it is what confirms the `/clear`
-# landed — and the frame still goes out.
+# A driven clear with no continuation: the mod ran the `/clear` at turn end, and
+# there is nothing to submit into the session it opened. The pending file is
+# still this loader's to consume, and the frame still goes out.
 @test "load-handoff (clear, pending with no continuation: consumed, frame only)" {
     seed_pending "$tmp" "clear" "/rename A Title" "/clear"
-    run_load_handoff "$tmp" clear 'TMUX=fake TMUX_PANE="%0"'
+    run_load_handoff "$tmp" clear
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
     echo "$output" | jq -e '.hookSpecificOutput.additionalContext | test("hook smoke test")' >/dev/null
-    echo "$output" | jq -e '.systemMessage | test("resume") | not' >/dev/null
     # Without the widened shape this row passes for the wrong reason: the
-    # sentinel fails to parse, and the malformed branch also consumes the file
-    # and says nothing about resuming.
+    # sentinel fails to parse, and the malformed branch also consumes the file.
     echo "$output" | jq -e '.systemMessage | test("malformed") | not' >/dev/null
 }
 
 @test "load-handoff (clear, no pending: frame only, silent about any transition)" {
-    run_load_handoff "$tmp" clear 'TMUX=fake TMUX_PANE="%0"'
+    run_load_handoff "$tmp" clear
     [ "$status" -eq 0 ]
     echo "$output" | jq -e '.systemMessage | test("loaded")' >/dev/null
     echo "$output" | jq -e '.systemMessage | test("resume") | not' >/dev/null
@@ -993,7 +869,7 @@ run_load_handoff() {
 # same hook, and a compact armed in the outgoing session must survive it.
 @test "load-handoff (clear, pending of kind compact: left for SessionStart(compact))" {
     seed_pending "$tmp" "compact" "/compact" "continue with task 3"
-    run_load_handoff "$tmp" clear 'TMUX=fake TMUX_PANE="%0"'
+    run_load_handoff "$tmp" clear
     [ "$status" -eq 0 ]
     [ "$(head -n1 "$tmp/.claude/autodrive")" = "pending" ]
     [ "$(sed -n 2p "$tmp/.claude/autodrive")" = "compact" ]
@@ -1001,56 +877,29 @@ run_load_handoff() {
 
 @test "load-handoff (startup with a pending present: does not consume it)" {
     seed_pending "$tmp" "clear" "/rename A Title" "/clear" "pick up per the task file"
-    run_load_handoff "$tmp" startup 'TMUX=fake TMUX_PANE="%0"'
+    run_load_handoff "$tmp" startup
     [ "$status" -eq 0 ]
     [ -f "$tmp/.claude/autodrive" ]
     echo "$output" | jq -e '.systemMessage | test("pick up") | not' >/dev/null
 }
 
-@test "load-handoff (clear, not in tmux: emits the after-line to paste)" {
-    seed_pending "$tmp" "clear" "/rename A Title" "/clear" "pick up per the task file"
-    run_load_handoff "$tmp" clear 'env -u TMUX -u TMUX_PANE'
-    [ "$status" -eq 0 ]
-    [ ! -e "$tmp/.claude/autodrive" ]
-    echo "$output" | jq -e '.hookSpecificOutput.additionalContext | test("pick up per the task file")' >/dev/null
-}
-
-@test "load-handoff (clear, malformed pending: discarded, reported, not armed)" {
+@test "load-handoff (clear, malformed pending: discarded and reported)" {
     seed_pending "$tmp" "clear" "/rename A Title" "not a clear" "resume"
-    run_load_handoff "$tmp" clear 'TMUX=fake TMUX_PANE="%0"'
+    run_load_handoff "$tmp" clear
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
     echo "$output" | jq -e '.systemMessage | test("malformed")' >/dev/null
 }
 
 # Each loader consumes only a transition in flight. An armed file belongs to a
-# Stop that has not fired — the agent wrote it and the turn ended on an Esc, so
-# the sweep is what deals with it, not this.
+# turn end that has not come — the agent wrote it and the turn ended on an Esc
+# (or the mod never loaded), so the sweep is what deals with it, not this.
 @test "load-handoff (clear, armed file: not consumed, left for the sweep)" {
     seed_drive "$tmp" "clear" "/rename A Title" "/clear" "pick up per the task file"
-    run_load_handoff "$tmp" clear 'TMUX=fake TMUX_PANE="%0"'
+    run_load_handoff "$tmp" clear
     [ "$status" -eq 0 ]
     [ "$(head -n1 "$tmp/.claude/autodrive")" = "armed" ]
     echo "$output" | jq -e '.systemMessage | test("pick up") | not' >/dev/null
-}
-
-@test "load-handoff.sh: the walker is handed the log, fail and transcript paths for the after-line" {
-    stub_walker
-    seed_pending "$tmp" "clear" "/rename A Title" "/clear" "pick up per the task file"
-    run_load_handoff "$tmp" clear 'TMUX=fake TMUX_PANE="%0"'
-    [ "$status" -eq 0 ]
-    wait_for_walker_spawn
-    spawn="$(cat "$BATS_TEST_TMPDIR/walker-spawn")"
-    echo "$spawn" | grep -qxF "HANDOFF_LOG_FILE=$tmp/.claude/autodrive.log"
-    echo "$spawn" | grep -qxF "HANDOFF_FAIL_FILE=$tmp/.claude/autodrive.failed"
-    # Neither loader exports these two: only stop-drive.sh's before-lines
-    # confirm by the pending file disappearing or the exited marker appearing.
-    echo "$spawn" | grep -qxF "HANDOFF_PENDING_FILE="
-    echo "$spawn" | grep -qxF "HANDOFF_EXIT_FILE="
-    echo "$spawn" | grep -qxF "HANDOFF_TRANSCRIPT=$tmp/t.jsonl"
-    # argv after the drive_when_idle.py path: the pane, then the after-line.
-    echo "$spawn" | grep -qxF "%0"
-    echo "$spawn" | grep -qxF "pick up per the task file"
 }
 
 # Seed .claude/autodrive under $1 in state `armed` — what the checkpoint, the
@@ -1060,257 +909,49 @@ seed_drive() {
     printf '%s\n' "armed" "$@" > "$dir/.claude/autodrive"
 }
 
-# --- stop-drive (Stop: arm the transition) ---
-
-# $3, when given, is shell run inside the invoking shell before stop-drive.sh
-# — the seam for a fixture that has to be keyed on that shell's own $$.
-run_stop_drive() {
-    run bash -c '
-        '"${3:-:}"'
-        jq -nc --arg cwd "$1" "{cwd:\$cwd, stop_hook_active:false, transcript_path:(\$cwd + \"/t.jsonl\")}" \
-        | '"$2"' bash scripts/stop-drive.sh
-    ' _ "$1"
-}
-
-@test "stop-drive (no autodrive: silent no-op)" {
-    run_stop_drive "$tmp" 'TMUX=fake TMUX_PANE="%0"'
-    [ "$status" -eq 0 ]
-    [ "$output" = "" ]
-}
-
-@test "stop-drive (kind with a confirming source: rewrites to pending, reports armed)" {
-    seed_drive "$tmp" "compact" "/compact keep the parser work" "continue with task 3"
-    run_stop_drive "$tmp" 'TMUX=fake TMUX_PANE="%0"'
-    [ "$status" -eq 0 ]
-    [ "$(head -n1 "$tmp/.claude/autodrive")" = "pending" ]
-    echo "$output" | jq -e '.systemMessage | test("/compact keep the parser work")' >/dev/null
-}
-
-@test "stop-drive (kind restart: confirming source too, rewrites to pending)" {
-    seed_drive "$tmp" "restart" "/exit" "claude --resume sess-hook-test"
-    run_stop_drive "$tmp" 'TMUX=fake TMUX_PANE="%0"'
-    [ "$status" -eq 0 ]
-    [ "$(head -n1 "$tmp/.claude/autodrive")" = "pending" ]
-    echo "$output" | jq -e '.systemMessage | test("/exit")' >/dev/null
-}
-
-# The relaunch line reaches the pane exactly as the checkpoint composed it.
-# stop-drive.sh used to rewrite it into this process's own argv, which re-added
-# the flags the launcher shims had injected — once more per restart, growing
-# without bound. The name resolves through PATH instead, so the shims supply
-# them. The not-in-tmux path prints the paste text synchronously, which makes
-# it the direct seam to assert against: no detached process, no timing.
-@test "stop-drive (kind restart, not in tmux: pastes the line as composed)" {
-    seed_drive "$tmp" "restart" "/exit" "claude --resume sess-hook-test"
-    run_stop_drive "$tmp" "env -u TMUX -u TMUX_PANE"
-    [ "$status" -eq 0 ]
-    ctx="$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')"
-    echo "$ctx" | grep -q '^/exit$'
-    echo "$ctx" | grep -qx -- 'claude --resume sess-hook-test'
-}
-
-@test "stop-drive (kind restart: clears a stale exited marker before proceeding)" {
-    : > "$tmp/.claude/autodrive.exited"
-    seed_drive "$tmp" "restart" "/exit" "claude --resume sess-hook-test"
-    run_stop_drive "$tmp" 'TMUX=fake TMUX_PANE="%0"'
-    [ "$status" -eq 0 ]
-    [ ! -e "$tmp/.claude/autodrive.exited" ]
-}
-
-# `rename` has no loader, so nothing would ever clear a pending armed for it.
-@test "stop-drive (kind rename: deletes the sentinel outright)" {
-    seed_drive "$tmp" "rename" "/rename Driven Transitions"
-    run_stop_drive "$tmp" 'TMUX=fake TMUX_PANE="%0"'
-    [ "$status" -eq 0 ]
-    [ ! -e "$tmp/.claude/autodrive" ]
-    echo "$output" | jq -e '.systemMessage | test("/rename Driven Transitions")' >/dev/null
-}
-
-@test "stop-drive (arms once only: second Stop is silent)" {
-    seed_drive "$tmp" "compact" "/compact" "continue with task 3"
-    run_stop_drive "$tmp" 'TMUX=fake TMUX_PANE="%0"'
-    [ "$status" -eq 0 ]
-    run_stop_drive "$tmp" 'TMUX=fake TMUX_PANE="%0"'
-    [ "$status" -eq 0 ]
-    [ "$output" = "" ]
-}
-
-# FR-G: the prepare-only marker. Nothing is typed and nothing is spawned; the
-# pending file alone is the whole effect, and it is what SessionStart(compact)
-# gates the frame re-injection on.
-@test "stop-drive (empty before-sequence: leaves it pending, spawns nothing)" {
-    seed_drive "$tmp" "compact"
-    run_stop_drive "$tmp" 'TMUX=fake TMUX_PANE="%0"'
-    [ "$status" -eq 0 ]
-    [ "$(head -n1 "$tmp/.claude/autodrive")" = "pending" ]
-    echo "$output" | jq -e '.systemMessage | test("nothing to type")' >/dev/null
-}
-
-@test "stop-drive (not in tmux: emits every line to paste, in order, clears pending)" {
-    seed_drive "$tmp" "clear" "/rename A Title" "/clear" "pick up per the task file"
-    run_stop_drive "$tmp" 'env -u TMUX -u TMUX_PANE'
-    [ "$status" -eq 0 ]
-    [ ! -e "$tmp/.claude/autodrive" ]
-    ctx="$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')"
-    echo "$ctx" | grep -q '^/rename A Title$'
-    echo "$ctx" | grep -q '^/clear$'
-    echo "$ctx" | grep -q '^pick up per the task file$'
-    # Before-lines precede the after-line: the paste order is the run order.
-    r=$(echo "$ctx" | grep -n '^/rename A Title$' | cut -d: -f1)
-    c=$(echo "$ctx" | grep -n '^/clear$' | cut -d: -f1)
-    p=$(echo "$ctx" | grep -n '^pick up per the task file$' | cut -d: -f1)
-    [ "$r" -lt "$c" ] && [ "$c" -lt "$p" ]
-}
-
-@test "stop-drive (malformed file survived write-drive: discarded, not armed)" {
-    seed_drive "$tmp" "clear" "/rename A Title"
-    run_stop_drive "$tmp" 'TMUX=fake TMUX_PANE="%0"'
-    [ "$status" -eq 0 ]
-    [ ! -e "$tmp/.claude/autodrive" ]
-    echo "$output" | jq -e '.systemMessage | test("malformed")' >/dev/null
-}
-
-@test "stop-drive (worktree cwd: arms the worktree file)" {
-    wt="$(make_worktree wtS)"
-    seed_drive "$wt" "compact" "/compact" "continue with task 3"
-    run_stop_drive "$wt" 'TMUX=fake TMUX_PANE="%0"'
-    [ "$status" -eq 0 ]
-    [ "$(head -n1 "$wt/.claude/autodrive")" = "pending" ]
-}
-
-# The consume-before-spawn guarantee, stated directly. A pending file is a
-# transition already in flight — its confirming SessionStart has not fired yet —
-# and a Stop in the window between the two must not retype the sequence. That
-# window is real: the walker submits its lines as ordinary prompts, and each one
-# ends a turn.
-@test "stop-drive (pending file: ignored, left untouched)" {
-    seed_pending "$tmp" "compact" "/compact" "continue with task 3"
-    run_stop_drive "$tmp" 'TMUX=fake TMUX_PANE="%0"'
-    [ "$status" -eq 0 ]
-    [ "$output" = "" ]
-    [ "$(head -n1 "$tmp/.claude/autodrive")" = "pending" ]
-}
-
-@test "stop-drive.sh: the walker is handed the log, fail, pending, exit and transcript paths" {
-    stub_walker
-    seed_drive "$tmp" "rename" "/rename Driven Transitions"
-    run_stop_drive "$tmp" 'TMUX=fake TMUX_PANE="%0"'
-    [ "$status" -eq 0 ]
-    wait_for_walker_spawn
-    spawn="$(cat "$BATS_TEST_TMPDIR/walker-spawn")"
-    echo "$spawn" | grep -qxF "HANDOFF_LOG_FILE=$tmp/.claude/autodrive.log"
-    echo "$spawn" | grep -qxF "HANDOFF_FAIL_FILE=$tmp/.claude/autodrive.failed"
-    echo "$spawn" | grep -qxF "HANDOFF_PENDING_FILE=$tmp/.claude/autodrive"
-    echo "$spawn" | grep -qxF "HANDOFF_EXIT_FILE=$tmp/.claude/autodrive.exited"
-    echo "$spawn" | grep -qxF "HANDOFF_TRANSCRIPT=$tmp/t.jsonl"
-    # argv after the drive_when_idle.py path: the pane, then the before-lines.
-    echo "$spawn" | grep -qxF "%0"
-    echo "$spawn" | grep -qxF "/rename Driven Transitions"
-}
-
-# --- session-end (SessionEnd: confirm /exit for a restart in flight) ---
-
-run_session_end() {
-    run bash -c '
-        jq -nc --arg cwd "$1" "{cwd:\$cwd, hook_event_name:\"SessionEnd\", reason:\"other\"}" \
-        | bash scripts/session-end.sh
-    ' _ "$1"
-}
-
-@test "session-end (no autodrive: silent no-op)" {
-    run_session_end "$tmp"
-    [ "$status" -eq 0 ]
-    [ "$output" = "" ]
-    [ ! -e "$tmp/.claude/autodrive.exited" ]
-}
-
-@test "session-end (armed, not pending yet: silent, nothing written)" {
-    seed_drive "$tmp" "restart" "/exit" "claude --resume sess-hook-test"
-    run_session_end "$tmp"
-    [ "$status" -eq 0 ]
-    [ "$output" = "" ]
-    [ ! -e "$tmp/.claude/autodrive.exited" ]
-}
-
-@test "session-end (pending of a different kind: left alone, not written)" {
-    seed_pending "$tmp" "compact" "/compact" "continue with task 3"
-    run_session_end "$tmp"
-    [ "$status" -eq 0 ]
-    [ "$output" = "" ]
-    [ ! -e "$tmp/.claude/autodrive.exited" ]
-}
-
-@test "session-end (pending restart: writes the exited marker)" {
-    seed_pending "$tmp" "restart" "/exit" "claude --resume sess-hook-test"
-    run_session_end "$tmp"
-    [ "$status" -eq 0 ]
-    [ -e "$tmp/.claude/autodrive.exited" ]
-}
-
-@test "session-end (worktree cwd: writes the worktree's own marker)" {
-    wt="$(make_worktree wtE)"
-    seed_pending "$wt" "restart" "/exit" "claude --resume sess-hook-test"
-    run_session_end "$wt"
-    [ "$status" -eq 0 ]
-    [ -e "$wt/.claude/autodrive.exited" ]
-    [ ! -e "$tmp/.claude/autodrive.exited" ]
-}
-
-@test "hooks.json dispatches SessionEnd to session-end.sh" {
-    run jq -e '.hooks.SessionEnd[0].hooks[0].command | test("session-end.sh")' \
-        "$repo_root/hooks/hooks.json"
-    [ "$status" -eq 0 ]
-}
-
-# --- load-compact (SessionStart(compact): fire the continuation) ---
+# --- load-compact (SessionStart(compact): consume, re-inject the frame) ---
 #
 # The regression this matrix guards is silent: a frame that stops being injected
 # fails by the successor knowing less, not by anything going red.
 
 run_load_compact() {
     run bash -c '
-        jq -nc --arg cwd "$1" "{cwd:\$cwd, source:\"compact\", transcript_path:(\$cwd + \"/t.jsonl\")}" \
-        | '"$2"' bash scripts/load-compact.sh
+        jq -nc --arg cwd "$1" "{cwd:\$cwd, source:\"compact\"}" \
+        | bash scripts/load-compact.sh
     ' _ "$1"
 }
 
 @test "load-compact (no pending: silent, and no frame — a hand-typed /compact injects nothing)" {
-    run_load_compact "$tmp" 'TMUX=fake TMUX_PANE="%0"'
+    run_load_compact "$tmp"
     [ "$status" -eq 0 ]
     [ "$output" = "" ]
 }
 
-@test "load-compact (pending present: consumes it and reports the continuation)" {
+@test "load-compact (pending present: consumes it, frame re-injected)" {
     seed_pending "$tmp" "compact" "/compact" "continue with task 3"
-    run_load_compact "$tmp" 'TMUX=fake TMUX_PANE="%0"'
+    run_load_compact "$tmp"
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
-    echo "$output" | jq -e '.systemMessage | test("continue with task 3")' >/dev/null
+    echo "$output" | jq -e '.systemMessage | test("frame re-injected")' >/dev/null
+    # The continuation is the mod's to submit, so it is not echoed here.
+    echo "$output" | jq -e '.systemMessage | test("continue with task 3") | not' >/dev/null
 }
 
 @test "load-compact (pending of kind clear: left for SessionStart(clear))" {
     seed_pending "$tmp" "clear" "/rename A Title" "/clear" "pick up per the task file"
-    run_load_compact "$tmp" 'TMUX=fake TMUX_PANE="%0"'
+    run_load_compact "$tmp"
     [ "$status" -eq 0 ]
     [ "$(head -n1 "$tmp/.claude/autodrive")" = "pending" ]
     [ "$(sed -n 2p "$tmp/.claude/autodrive")" = "clear" ]
 }
 
-@test "load-compact (not in tmux: emits continuation to paste, clears pending)" {
-    seed_pending "$tmp" "compact" "/compact" "continue with task 3"
-    run_load_compact "$tmp" 'env -u TMUX -u TMUX_PANE'
-    [ "$status" -eq 0 ]
-    [ ! -e "$tmp/.claude/autodrive" ]
-    echo "$output" | jq -e '.hookSpecificOutput.additionalContext | test("continue with task 3")' >/dev/null
-}
-
-# The task file carries the content across compaction; the typed prompt is only
+# The task file carries the content across compaction; the continuation prompt is only
 # a handle to it. So the frame has to be injected here, the same way
 # load-handoff.sh injects it at startup|clear.
 @test "load-compact (task file present: injects the frame)" {
     seed_pending "$tmp" "compact" "/compact" "resume per the task file"
     printf '%s\n' "## Now" "- rewire the parser" > "$tmp/.claude/handoff-task.md"
-    run_load_compact "$tmp" 'TMUX=fake TMUX_PANE="%0"'
+    run_load_compact "$tmp"
     [ "$status" -eq 0 ]
     echo "$output" | jq -e '.hookSpecificOutput.additionalContext | test("rewire the parser")' >/dev/null
     echo "$output" | jq -e '.hookSpecificOutput.hookEventName == "SessionStart"' >/dev/null
@@ -1318,21 +959,22 @@ run_load_compact() {
     [ -s "$tmp/.claude/handoff-task.md" ]
 }
 
-@test "load-compact (no task file: continuation still fires, no frame)" {
+@test "load-compact (no task file: consumed, no frame)" {
     rm -f "$tmp/.claude/handoff-task.md"
     seed_pending "$tmp" "compact" "/compact" "continue with task 3"
-    run_load_compact "$tmp" 'TMUX=fake TMUX_PANE="%0"'
+    run_load_compact "$tmp"
     [ "$status" -eq 0 ]
-    echo "$output" | jq -e '.systemMessage | test("continue")' >/dev/null
+    [ ! -e "$tmp/.claude/autodrive" ]
+    echo "$output" | jq -e '.systemMessage | test("frame re-injected")' >/dev/null
     echo "$output" | jq -e 'has("hookSpecificOutput") | not' >/dev/null
 }
 
-# A driven compaction with no continuation — the /compact line was typed, and
-# nothing follows it. Same effect here as the prepare-only marker, from a
-# different sentinel: consume, inject, type nothing.
+# A driven compaction with no continuation — the /compact line ran, and nothing
+# follows it. Same effect here as the prepare-only marker, from a different
+# sentinel: consume, inject.
 @test "load-compact (pending with no continuation: consumed, frame only)" {
     seed_pending "$tmp" "compact" "/compact keep the parser work"
-    run_load_compact "$tmp" 'TMUX=fake TMUX_PANE="%0"'
+    run_load_compact "$tmp"
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
     echo "$output" | jq -e '.hookSpecificOutput.additionalContext | test("hook smoke test")' >/dev/null
@@ -1340,157 +982,30 @@ run_load_compact() {
 }
 
 # FR-G's other half: the prepare-only marker arrives here as a pending file with
-# no after-line. Inject the frame, type nothing.
-@test "load-compact (empty after-sequence: frame injected, nothing typed)" {
+# no after-line. Inject the frame.
+@test "load-compact (empty after-sequence: frame injected)" {
     seed_pending "$tmp" "compact"
-    run_load_compact "$tmp" 'TMUX=fake TMUX_PANE="%0"'
+    run_load_compact "$tmp"
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
     echo "$output" | jq -e '.hookSpecificOutput.additionalContext | test("hook smoke test")' >/dev/null
     echo "$output" | jq -e '.systemMessage | test("frame re-injected")' >/dev/null
 }
 
-@test "load-compact (not in tmux, task file present: frame and prompt both emitted)" {
-    seed_pending "$tmp" "compact" "/compact" "resume per the task file"
-    printf '%s\n' "## Now" "- rewire the parser" > "$tmp/.claude/handoff-task.md"
-    run_load_compact "$tmp" 'env -u TMUX -u TMUX_PANE'
-    [ "$status" -eq 0 ]
-    echo "$output" | jq -e '.hookSpecificOutput.additionalContext | test("rewire the parser")' >/dev/null
-    echo "$output" | jq -e '.hookSpecificOutput.additionalContext | test("resume per the task file")' >/dev/null
-}
-
 @test "load-compact (worktree cwd: consumes the worktree pending file)" {
     wt="$(make_worktree wtLC)"
     seed_pending "$wt" "compact" "/compact" "continue with task 3"
-    run_load_compact "$wt" 'TMUX=fake TMUX_PANE="%0"'
+    run_load_compact "$wt"
     [ "$status" -eq 0 ]
     [ ! -e "$wt/.claude/autodrive" ]
 }
 
 @test "load-compact (armed file: not consumed, no frame)" {
     seed_drive "$tmp" "compact" "/compact" "continue with task 3"
-    run_load_compact "$tmp" 'TMUX=fake TMUX_PANE="%0"'
+    run_load_compact "$tmp"
     [ "$status" -eq 0 ]
     [ "$output" = "" ]
     [ "$(head -n1 "$tmp/.claude/autodrive")" = "armed" ]
-}
-
-@test "load-compact.sh: the walker is handed the log, fail and transcript paths for the after-line" {
-    stub_walker
-    seed_pending "$tmp" "compact" "/compact" "continue with task 3"
-    run_load_compact "$tmp" 'TMUX=fake TMUX_PANE="%0"'
-    [ "$status" -eq 0 ]
-    wait_for_walker_spawn
-    spawn="$(cat "$BATS_TEST_TMPDIR/walker-spawn")"
-    echo "$spawn" | grep -qxF "HANDOFF_LOG_FILE=$tmp/.claude/autodrive.log"
-    echo "$spawn" | grep -qxF "HANDOFF_FAIL_FILE=$tmp/.claude/autodrive.failed"
-    echo "$spawn" | grep -qxF "HANDOFF_PENDING_FILE="
-    echo "$spawn" | grep -qxF "HANDOFF_EXIT_FILE="
-    echo "$spawn" | grep -qxF "HANDOFF_TRANSCRIPT=$tmp/t.jsonl"
-    # argv after the drive_when_idle.py path: the pane, then the after-line.
-    echo "$spawn" | grep -qxF "%0"
-    echo "$spawn" | grep -qxF "continue with task 3"
-}
-
-# --- load-restart (SessionStart(resume): fire the continuation, no frame) ---
-#
-# Unlike /clear or /compact, --resume restores the full prior conversation on
-# its own — there is nothing for a frame to hand a summariser's paraphrase
-# back to, so this loader never assembles or injects one. That is the whole
-# difference from load-compact.sh's shape below.
-
-run_load_restart() {
-    run bash -c '
-        jq -nc --arg cwd "$1" "{cwd:\$cwd, source:\"resume\", transcript_path:(\$cwd + \"/t.jsonl\")}" \
-        | '"$2"' bash scripts/load-restart.sh
-    ' _ "$1"
-}
-
-@test "load-restart (no pending: silent)" {
-    run_load_restart "$tmp" 'TMUX=fake TMUX_PANE="%0"'
-    [ "$status" -eq 0 ]
-    [ "$output" = "" ]
-}
-
-@test "load-restart (pending restart with continuation: consumes it, reports it)" {
-    seed_pending "$tmp" "restart" "/exit" "claude --resume sess-hook-test" "continue with task 3"
-    run_load_restart "$tmp" 'TMUX=fake TMUX_PANE="%0"'
-    [ "$status" -eq 0 ]
-    [ ! -e "$tmp/.claude/autodrive" ]
-    echo "$output" | jq -e '.systemMessage | test("continue with task 3")' >/dev/null
-}
-
-@test "load-restart (pending restart, no continuation: consumed, reports resumed)" {
-    seed_pending "$tmp" "restart" "/exit" "claude --resume sess-hook-test"
-    run_load_restart "$tmp" 'TMUX=fake TMUX_PANE="%0"'
-    [ "$status" -eq 0 ]
-    [ ! -e "$tmp/.claude/autodrive" ]
-    echo "$output" | jq -e '.systemMessage | test("resumed")' >/dev/null
-}
-
-@test "load-restart (pending of kind compact: left for SessionStart(compact))" {
-    seed_pending "$tmp" "compact" "/compact" "continue with task 3"
-    run_load_restart "$tmp" 'TMUX=fake TMUX_PANE="%0"'
-    [ "$status" -eq 0 ]
-    [ "$(head -n1 "$tmp/.claude/autodrive")" = "pending" ]
-    [ "$(sed -n 2p "$tmp/.claude/autodrive")" = "compact" ]
-}
-
-@test "load-restart (armed file: not consumed)" {
-    seed_drive "$tmp" "restart" "/exit" "claude --resume sess-hook-test"
-    run_load_restart "$tmp" 'TMUX=fake TMUX_PANE="%0"'
-    [ "$status" -eq 0 ]
-    [ "$output" = "" ]
-    [ "$(head -n1 "$tmp/.claude/autodrive")" = "armed" ]
-}
-
-@test "load-restart (not in tmux: emits continuation to paste, clears pending)" {
-    seed_pending "$tmp" "restart" "/exit" "claude --resume sess-hook-test" "continue with task 3"
-    run_load_restart "$tmp" 'env -u TMUX -u TMUX_PANE'
-    [ "$status" -eq 0 ]
-    [ ! -e "$tmp/.claude/autodrive" ]
-    echo "$output" | jq -e '.hookSpecificOutput.additionalContext | test("continue with task 3")' >/dev/null
-}
-
-@test "load-restart (worktree cwd: consumes the worktree pending file)" {
-    wt="$(make_worktree wtLR)"
-    seed_pending "$wt" "restart" "/exit" "claude --resume sess-hook-test"
-    run_load_restart "$wt" 'TMUX=fake TMUX_PANE="%0"'
-    [ "$status" -eq 0 ]
-    [ ! -e "$wt/.claude/autodrive" ]
-}
-
-# The differentiator from load-compact.sh: --resume already restores the full
-# conversation, so even with a task file present, no frame is assembled.
-@test "load-restart (task file present: still no frame injected)" {
-    seed_pending "$tmp" "restart" "/exit" "claude --resume sess-hook-test" "continue with task 3"
-    printf '%s\n' "## Now" "- rewire the parser" > "$tmp/.claude/handoff-task.md"
-    run_load_restart "$tmp" 'TMUX=fake TMUX_PANE="%0"'
-    [ "$status" -eq 0 ]
-    echo "$output" | jq -e 'has("hookSpecificOutput") | not' >/dev/null
-}
-
-@test "load-restart.sh: the walker is handed the log, fail and transcript paths for the after-line" {
-    stub_walker
-    seed_pending "$tmp" "restart" "/exit" "claude --resume sess-hook-test" "continue with task 3"
-    run_load_restart "$tmp" 'TMUX=fake TMUX_PANE="%0"'
-    [ "$status" -eq 0 ]
-    wait_for_walker_spawn
-    spawn="$(cat "$BATS_TEST_TMPDIR/walker-spawn")"
-    echo "$spawn" | grep -qxF "HANDOFF_LOG_FILE=$tmp/.claude/autodrive.log"
-    echo "$spawn" | grep -qxF "HANDOFF_FAIL_FILE=$tmp/.claude/autodrive.failed"
-    echo "$spawn" | grep -qxF "HANDOFF_PENDING_FILE="
-    echo "$spawn" | grep -qxF "HANDOFF_EXIT_FILE="
-    echo "$spawn" | grep -qxF "HANDOFF_TRANSCRIPT=$tmp/t.jsonl"
-    # argv after the drive_when_idle.py path: the pane, then the after-line.
-    echo "$spawn" | grep -qxF "%0"
-    echo "$spawn" | grep -qxF "continue with task 3"
-}
-
-@test "hooks.json dispatches SessionStart(resume) to load-restart.sh" {
-    run jq -e '[.hooks.SessionStart[] | select(.matcher == "resume") | .hooks[0].command | test("load-restart.sh")] | any' \
-        "$repo_root/hooks/hooks.json"
-    [ "$status" -eq 0 ]
 }
 
 # --- session-pointer (SessionStart, every source: sweep stale pointer files) ---
@@ -1579,29 +1094,28 @@ run_session_pointer() {
     [ -e "$HANDOFF_POINTER_DIR/sub/handoff-root-nested" ]
 }
 
-# --- report-watcher-failure (UserPromptSubmit: surface a non-delivery) ---
+# --- report-drive-failure (UserPromptSubmit: surface a non-delivery) ---
 #
-# The walker is detached and has no channel back: a line that never lands is
-# invisible to the agent, and the recognition abort leaves the pane looking
-# untouched. The walker drops a reason file; this hook is what reads it. One
-# channel now, not two — the transition is a singleton.
+# The drive mod has no channel back to the agent: a line it could not run is
+# invisible once its turn is over. The mod drops a reason file; this hook is
+# what reads it. One channel, since the transition is a singleton.
 
 run_report_failure() {
     run bash -c '
         jq -nc --arg cwd "$1" --arg sid "$2" \
           "{cwd:\$cwd, session_id:\$sid, prompt:\"anything\"}" \
-        | bash scripts/report-watcher-failure.sh
+        | bash scripts/report-drive-failure.sh
     ' _ "$1" "${2-$SESSION_ID}"
 }
 
-@test "report-watcher-failure (no failure file: silent no-op)" {
+@test "report-drive-failure (no failure file: silent no-op)" {
     run_report_failure "$tmp"
     [ "$status" -eq 0 ]
     [ "$output" = "" ]
 }
 
-@test "report-watcher-failure (failure present: reports on both channels)" {
-    printf '%s\n' "the TUI did not recognize \`/compact\`" \
+@test "report-drive-failure (failure present: reports on both channels)" {
+    printf '%s\n' "the host did not recognize \`/compact\`" \
         > "$tmp/.claude/autodrive.failed"
     run_report_failure "$tmp"
     [ "$status" -eq 0 ]
@@ -1612,8 +1126,8 @@ run_report_failure() {
         '.hookSpecificOutput.additionalContext | test("did not recognize")' >/dev/null
 }
 
-@test "report-watcher-failure (consumes the file: reports once, not every prompt)" {
-    printf '%s\n' "typed but never submitted" > "$tmp/.claude/autodrive.failed"
+@test "report-drive-failure (consumes the file: reports once, not every prompt)" {
+    printf '%s\n' "rejected before it ran" > "$tmp/.claude/autodrive.failed"
     run_report_failure "$tmp"
     [ ! -e "$tmp/.claude/autodrive.failed" ]
 
@@ -1622,30 +1136,32 @@ run_report_failure() {
 }
 
 # A failure part-way through a sequence leaves the transition stranded in
-# state `pending`: no transition will consume it, and Stop cannot re-arm from it.
-@test "report-watcher-failure (clears a stranded pending file)" {
-    printf '%s\n' "typed but never submitted" > "$tmp/.claude/autodrive.failed"
+# state `pending`: no transition will consume it, and drive-take.sh will not take
+# it again from that state.
+@test "report-drive-failure (clears a stranded pending file)" {
+    printf '%s\n' "rejected before it ran" > "$tmp/.claude/autodrive.failed"
     seed_pending "$tmp" "compact" "/compact" "continue"
     run_report_failure "$tmp"
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
 }
 
-@test "report-watcher-failure (worktree cwd: reads the worktree file)" {
+@test "report-drive-failure (worktree cwd: reads the worktree file)" {
     wt="$(make_worktree wtF)"
-    printf '%s\n' "typed but never submitted" > "$wt/.claude/autodrive.failed"
+    printf '%s\n' "rejected before it ran" > "$wt/.claude/autodrive.failed"
     run_report_failure "$wt"
     [ "$status" -eq 0 ]
     [ ! -e "$wt/.claude/autodrive.failed" ]
-    echo "$output" | jq -e '.systemMessage | test("never submitted")' >/dev/null
+    echo "$output" | jq -e '.systemMessage | test("rejected before it ran")' >/dev/null
 }
 
-# An autodrive is armed at the Stop of the turn that writes it, and that Stop
-# leaves it `pending` or removes it. So one still in state `armed` at a *later*
-# turn's UserPromptSubmit never armed — its turn ended abnormally (Esc, crash,
-# quit). Left alone it is armed by the next normal Stop, days later and
-# possibly in another session, driving a stale transition into unrelated work.
-@test "report-watcher-failure (stale autodrive: discards it and reports)" {
+# An autodrive is taken at the turn end after the turn that writes it, and that
+# take leaves it `pending` or removes it. So one still in state `armed` at a
+# *later* turn's UserPromptSubmit never ran — its turn ended abnormally (Esc,
+# crash, quit) or the drive mod did not load. Left alone it is taken by the next
+# normal turn end, days later and possibly in another session, driving a stale
+# transition into unrelated work.
+@test "report-drive-failure (stale autodrive: discards it and reports)" {
     seed_drive "$tmp" "compact" "/compact keep the parser work" "continue with task 3"
     run_report_failure "$tmp"
     [ "$status" -eq 0 ]
@@ -1657,7 +1173,7 @@ run_report_failure() {
         '.hookSpecificOutput.additionalContext | test("autodrive")' >/dev/null
 }
 
-@test "report-watcher-failure (stale autodrive: reports once, not every prompt)" {
+@test "report-drive-failure (stale autodrive: reports once, not every prompt)" {
     seed_drive "$tmp" "compact" "/compact" "continue with task 3"
     run_report_failure "$tmp"
     [ "$status" -eq 0 ]
@@ -1667,25 +1183,72 @@ run_report_failure() {
     [ "$output" = "" ]
 }
 
+# The armed sentinel that survived to the next prompt never ran. One cause is a
+# drive mod that did not load (--safe-mode, or Claude Code older than 2.1.287),
+# in which case nothing will ever run it: the report names that cause and prints
+# the lines the file held, before then after, one per line, for the user to type.
+@test "report-drive-failure (stale armed autodrive: names the mod and prints the lines to type)" {
+    # shellcheck disable=SC2016  # the literal $HOME is the odd content under test
+    seed_drive "$tmp" "clear" '/rename Fix "the  $HOME" bug & more' "/clear" \
+        "pick up 'task  3' per the *file*; then \\ done"
+    run_report_failure "$tmp"
+    [ "$status" -eq 0 ]
+    echo "$output" | jq -e '.hookSpecificOutput.additionalContext | test("drive mod")' >/dev/null
+    echo "$output" | jq -e '.hookSpecificOutput.additionalContext | test("safe-mode")' >/dev/null
+    echo "$output" | jq -e '.hookSpecificOutput.additionalContext | test("2.1.287")' >/dev/null
+    # shellcheck disable=SC2016
+    expected='/rename Fix "the  $HOME" bug & more
+/clear
+pick up '"'"'task  3'"'"' per the *file*; then \ done'
+    # Both channels carry the three lines whole, contiguous and in order.
+    echo "$output" | jq -e --arg e "$expected" '.systemMessage | contains($e)' >/dev/null
+    echo "$output" | jq -e --arg e "$expected" '.hookSpecificOutput.additionalContext | contains($e)' >/dev/null
+}
+
+# Prepare-only (FR-G): the kind line alone. The cause is still reported, but
+# there is nothing to type, so no empty block is offered.
+@test "report-drive-failure (stale armed autodrive with no lines: names the mod, prints nothing to type)" {
+    seed_drive "$tmp" "compact"
+    run_report_failure "$tmp"
+    [ "$status" -eq 0 ]
+    [ ! -e "$tmp/.claude/autodrive" ]
+    echo "$output" | jq -e '.hookSpecificOutput.additionalContext | test("drive mod")' >/dev/null
+    echo "$output" | jq -e '.systemMessage | test("Type in order") | not' >/dev/null
+    echo "$output" | jq -e '.hookSpecificOutput.additionalContext | test("fenced code block") | not' >/dev/null
+}
+
+# A held file owned by a dead session is a different cause entirely, and its
+# lines are a dead session's: offering them for typing would replay them into
+# this conversation.
+@test "report-drive-failure (held file of a dead session: lines are not offered)" {
+    printf '%s\n' "held sess-someone-else" "clear" "/rename A Title" "/clear" "resume" \
+        > "$tmp/.claude/autodrive"
+    run_report_failure "$tmp"
+    [ "$status" -eq 0 ]
+    echo "$output" | jq -e '.systemMessage | test("Type in order") | not' >/dev/null
+    echo "$output" | jq -e '.hookSpecificOutput.additionalContext | test("/rename A Title") | not' >/dev/null
+}
+
 # A sentinel that does not parse — here, a `clear` with only one of its four
 # command/prose lines — describes no transition this session can complete.
 # handoff_drive_read returns 1, drive_state is recorded as "malformed", and
-# the sweep (any state other than "pending") discards it exactly as it would
-# a stale armed file.
-@test "report-watcher-failure (malformed sentinel: discarded and reported)" {
+# the sweep (any state other than "pending" or "held") discards it, but offers
+# no lines to type: there is nothing it could say they were.
+@test "report-drive-failure (malformed sentinel: discarded and reported)" {
     seed_drive "$tmp" "clear" "/rename A Title"
     run_report_failure "$tmp"
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
     echo "$output" | jq -e '.systemMessage | test("discarded")' >/dev/null
+    echo "$output" | jq -e '.systemMessage | test("Type in order") | not' >/dev/null
 }
 
-# A pending file is legitimate for the whole Stop -> transition window, and that
-# window contains the walker's own submits — each of which is a
+# A pending file is legitimate for the whole turn end -> transition window, and
+# that window contains the mod's own prompt submits — each of which is a
 # UserPromptSubmit. Sweeping one here would race SessionStart(compact|clear) and
 # kill a live continuation. Only the failure branch above, which acts on
-# something the walker observed itself, may clear one.
-@test "report-watcher-failure (pending file: left alone, no report)" {
+# something the mod observed itself, may clear one.
+@test "report-drive-failure (pending file: left alone, no report)" {
     seed_pending "$tmp" "compact" "/compact" "continue"
     run_report_failure "$tmp"
     [ "$status" -eq 0 ]
@@ -1697,7 +1260,7 @@ run_report_failure() {
 # approval round trip it waits on costs at least one turn, and the answer arrives
 # at a UserPromptSubmit — this hook. Sweeping this session's own held file would
 # silently cancel the transition the user is in the middle of approving.
-@test "report-watcher-failure (held file owned by this session: left alone)" {
+@test "report-drive-failure (held file owned by this session: left alone)" {
     printf '%s\n' "held $SESSION_ID" "clear" "/rename A Title" "/clear" "resume" \
         > "$tmp/.claude/autodrive"
     run_report_failure "$tmp"
@@ -1711,7 +1274,7 @@ run_report_failure() {
 # this repo, that approval can never arrive — the session that would have given
 # it is gone. Left on disk it stays armable indefinitely, and handoff-approved
 # would arm a dead session's `/rename` + `/clear` into a live conversation.
-@test "report-watcher-failure (held file owned by a dead session: discarded)" {
+@test "report-drive-failure (held file owned by a dead session: discarded)" {
     printf '%s\n' "held sess-someone-else" "clear" "/rename A Title" "/clear" "resume" \
         > "$tmp/.claude/autodrive"
     run_report_failure "$tmp"
@@ -1720,17 +1283,17 @@ run_report_failure() {
     echo "$output" | jq -e '.systemMessage | test("stale|discarded")' >/dev/null
 }
 
-@test "report-watcher-failure (failure and stale file: one report covering both)" {
-    printf '%s\n' "typed but never submitted" > "$tmp/.claude/autodrive.failed"
+@test "report-drive-failure (failure and stale file: one report covering both)" {
+    printf '%s\n' "rejected before it ran" > "$tmp/.claude/autodrive.failed"
     seed_drive "$tmp" "compact" "/compact" "continue"
     run_report_failure "$tmp"
     [ "$status" -eq 0 ]
     [ "$(echo "$output" | jq -sr 'length')" = "1" ]
-    echo "$output" | jq -e '.systemMessage | test("never submitted")' >/dev/null
+    echo "$output" | jq -e '.systemMessage | test("rejected before it ran")' >/dev/null
     echo "$output" | jq -e '.systemMessage | test("stale")' >/dev/null
 }
 
-# --- report-watcher-failure: session-root drift ---
+# --- report-drive-failure: session-root drift ---
 #
 # Nothing announces a cwd that leaves the launch repo: the environment block,
 # gitStatus and the project CLAUDE.md all follow cwd, while the transcript, the
@@ -1739,7 +1302,7 @@ run_report_failure() {
 # cwd foreign now?" later sees nothing — and because this hook already resolves
 # the root every turn and already owns a reporting channel.
 
-@test "report-watcher-failure (drift: reports the destination and the root)" {
+@test "report-drive-failure (drift: reports the destination and the root)" {
     mkdir -p "$other/.git"
     run_report_failure "$other"
     [ "$status" -eq 0 ]
@@ -1753,14 +1316,14 @@ run_report_failure() {
 
 # Dimmed like the ordinary hook chatter around it, the one line that says the
 # agent is reasoning about the wrong repo reads as noise.
-@test "report-watcher-failure (drift: systemMessage leads with an ANSI reset)" {
+@test "report-drive-failure (drift: systemMessage leads with an ANSI reset)" {
     mkdir -p "$other/.git"
     run_report_failure "$other"
     [ "$status" -eq 0 ]
     echo "$output" | jq -e '.systemMessage | startswith("\u001b[0m")' >/dev/null
 }
 
-@test "report-watcher-failure (drift: reports once per destination, not every prompt)" {
+@test "report-drive-failure (drift: reports once per destination, not every prompt)" {
     mkdir -p "$other/.git"
     run_report_failure "$other"
     [ -n "$output" ]
@@ -1772,7 +1335,7 @@ run_report_failure() {
 
 # A blip is announced once; a later move somewhere else is a new fact, not the
 # same one repeating.
-@test "report-watcher-failure (drift: a different destination reports again)" {
+@test "report-drive-failure (drift: a different destination reports again)" {
     mkdir -p "$other/.git"
     run_report_failure "$other"
     [ -n "$output" ]
@@ -1786,7 +1349,7 @@ run_report_failure() {
 
 # Back inside the launch repo, and back to silence — including from the marker
 # the earlier drift left behind.
-@test "report-watcher-failure (drift: cwd back in the project is silent)" {
+@test "report-drive-failure (drift: cwd back in the project is silent)" {
     mkdir -p "$other/.git"
     run_report_failure "$other"
     [ -n "$output" ]
@@ -1798,7 +1361,7 @@ run_report_failure() {
 
 # Returning ends the episode, so the same destination reached again is a new
 # fact — the transient blip is the shape this has to survive.
-@test "report-watcher-failure (drift: returning and drifting again reports again)" {
+@test "report-drive-failure (drift: returning and drifting again reports again)" {
     mkdir -p "$other/.git"
     run_report_failure "$other"
     [ -n "$output" ]
@@ -1810,27 +1373,27 @@ run_report_failure() {
     echo "$output" | jq -e --arg c "$other" '.systemMessage | test($c)' >/dev/null
 }
 
-@test "report-watcher-failure (drift: a worktree cwd is not drift)" {
+@test "report-drive-failure (drift: a worktree cwd is not drift)" {
     wt="$(make_worktree wtDR)"
     run_report_failure "$wt"
     [ "$status" -eq 0 ]
     [ "$output" = "" ]
 }
 
-@test "report-watcher-failure (drift and a non-delivery: one report covering both)" {
+@test "report-drive-failure (drift and a non-delivery: one report covering both)" {
     mkdir -p "$other/.git"
-    printf '%s\n' "typed but never submitted" > "$other/.claude/autodrive.failed"
+    printf '%s\n' "rejected before it ran" > "$other/.claude/autodrive.failed"
     # The failure file the hook reads is the *root's*, not cwd's — that is the
     # split being reported.
-    printf '%s\n' "typed but never submitted" > "$tmp/.claude/autodrive.failed"
+    printf '%s\n' "rejected before it ran" > "$tmp/.claude/autodrive.failed"
     run_report_failure "$other"
     [ "$status" -eq 0 ]
     [ "$(echo "$output" | jq -sr 'length')" = "1" ]
-    echo "$output" | jq -e '.systemMessage | test("never submitted")' >/dev/null
+    echo "$output" | jq -e '.systemMessage | test("rejected before it ran")' >/dev/null
     echo "$output" | jq -e --arg c "$other" '.systemMessage | test($c)' >/dev/null
 }
 
-@test "report-watcher-failure (worktree cwd: sweeps the worktree file)" {
+@test "report-drive-failure (worktree cwd: sweeps the worktree file)" {
     wt="$(make_worktree wtG)"
     seed_drive "$wt" "compact" "/compact" "continue"
     run_report_failure "$wt"

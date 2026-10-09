@@ -117,7 +117,7 @@ def memory_directive(root: str, mode: str) -> MemoryPart:
                 "gitlore memory has uncommitted changes, but this session cannot "
                 "read the memory-approval wording: git config "
                 "gitlore.memoryApprovalClauseFile is unset or its file is missing. "
-                "gitlore pins that key at SessionStart — run /handoff:restart (or "
+                "gitlore pins that key at SessionStart — run /restart (or "
                 "exit and relaunch with --resume, by hand), then retry. The "
                 "memory changes are still pending."
             ),

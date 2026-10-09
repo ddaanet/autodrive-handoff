@@ -22,10 +22,10 @@ dev = [
 # so `import worktree_root` resolves without a conftest hack.
 pythonpath = ["scripts"]
 testpaths = ["tests"]
-# `-m "not live"` deselects the TUI conformance probe: it needs a real claude
-# and a real tmux server, so it cannot run in the gate (nor inside the agent's
-# sandbox). `just tui-conformance` passes `-m live` on the command line, which
-# wins over this one. See tests/test_tui_conformance.py.
+# `-m "not live"` deselects the mod smoke test: it needs a real claude, so it
+# cannot run in the gate (nor inside the agent's sandbox). `just mod-smoke`
+# passes `-m live` on the command line, which wins over this one. See
+# tests/test_mod_live.py.
 addopts = [
     "--strict-markers",
     "--strict-config",
@@ -34,7 +34,7 @@ addopts = [
     "not live",
 ]
 markers = [
-    "live: drives a real Claude Code (TUI in tmux, or `claude -p`); excluded from `just precommit`",
+    "live: drives a real `claude -p`; excluded from `just precommit`",
 ]
 
 [tool.docformatter]
@@ -62,9 +62,8 @@ ignore = [
     "TD003",    # missing-todo-link
     "FIX",      # FIXME comments should not cause failure
 
-    # The watcher matches literal TUI glyphs (the prompt's "❯", box-drawing
-    # pane borders) — these are the real characters Claude Code's terminal
-    # renders, not stand-ins for ASCII.
+    # The tests and docstrings use literal typographic characters (em dashes,
+    # arrows), which are the real text, not stand-ins for ASCII.
     "RUF001",   # ambiguous-unicode-character-string
     "RUF002",   # ambiguous-unicode-character-docstring
     "RUF003",   # ambiguous-unicode-character-comment

@@ -1,10 +1,12 @@
 """Live smoke test: does the plugin's mod drive an armed transition?
 
 Boots a real ``claude -p`` (cheap model, one trivial turn) with this repo as
-``--plugin-dir`` in a throwaway git repo whose ``.claude/autodrive`` is
-already ``armed``, then reads what the transition left in the session
-transcripts. Nothing is read from a pane and no tmux is involved: the mod
-drives the session through the mods API, and the transcript is the record.
+``--plugin-dir`` in a throwaway git repo, where the first turn writes
+``.claude/autodrive`` in state ``armed`` through one allowed ``printf`` Bash
+call, then reads what the transition left in the session transcripts. The
+file is written mid-turn because the sweep at ``UserPromptSubmit`` discards an
+``armed`` sentinel that predates the prompt. Nothing is read from a pane: the
+mod drives the session through the mods API, and the transcript is the record.
 
 Excluded from ``just precommit`` by the ``live`` marker: it needs a real
 ``claude`` on PATH, which the agent's sandbox excludes, and it spends a few
@@ -19,6 +21,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 from collections.abc import Iterator
@@ -33,37 +36,39 @@ REPO = Path(__file__).resolve().parent.parent
 
 MODEL = os.environ.get("HANDOFF_MOD_SMOKE_MODEL", "haiku")
 RUN_TIMEOUT = 240.0
-FIRST_PROMPT = "Reply with the single word ok. Use no tools."
 TITLE = "mod-smoke-title"
 CONTINUATION = "Reply with exactly the word CONTINUED"
 FOCUS = "keep the word PINEAPPLE"
 
 
 def test_rename_row(smoke_repo: Path) -> None:
-    arm(smoke_repo, f"rename\n/rename {TITLE}\n")
+    prompt = arm_prompt(f"rename\n/rename {TITLE}\n")
 
-    run_claude(smoke_repo)
+    run_claude(smoke_repo, prompt)
 
     assert TITLE in custom_titles(smoke_repo)
 
 
 def test_clear_row_continues_in_the_fresh_session(smoke_repo: Path) -> None:
-    arm(smoke_repo, f"clear\n/rename {TITLE}\n/clear\n{CONTINUATION}\n")
+    prompt = arm_prompt(f"clear\n/rename {TITLE}\n/clear\n{CONTINUATION}\n")
 
-    run_claude(smoke_repo)
+    run_claude(smoke_repo, prompt)
 
     sessions = user_prompts_by_session(smoke_repo)
-    first = [s for s, texts in sessions.items() if FIRST_PROMPT in texts]
+    first = [s for s, texts in sessions.items() if prompt in texts]
     fresh = [s for s, texts in sessions.items() if texts[:1] == [CONTINUATION]]
     assert len(first) == 1, sessions
     assert len(fresh) == 1, sessions
     assert first != fresh, sessions
+    # load-handoff.sh consumed the `pending` sentinel on the mod-run /clear.
+    assert not (smoke_repo / ".claude" / "autodrive").exists()
+    assert not (smoke_repo / ".claude" / "autodrive.failed").exists()
 
 
 def test_compact_row_carries_the_focus_and_continues(smoke_repo: Path) -> None:
-    arm(smoke_repo, f"compact\n/compact {FOCUS}\n{CONTINUATION}\n")
+    prompt = arm_prompt(f"compact\n/compact {FOCUS}\n{CONTINUATION}\n")
 
-    run_claude(smoke_repo)
+    run_claude(smoke_repo, prompt)
 
     entries = [e for _, e in transcript_entries(smoke_repo)]
     assert any(e.get("isCompactSummary") for e in entries), "no compaction"
@@ -86,11 +91,19 @@ def git(repo: Path, *args: str) -> None:
     subprocess.run(["git", "-C", str(repo), *args], check=True)
 
 
-def arm(repo: Path, body: str) -> None:
-    (repo / ".claude" / "autodrive").write_text(f"armed\n{body}")
+def arm_prompt(body: str) -> str:
+    """The first prompt: have the model write an ``armed`` sentinel, then
+    reply."""
+    lines = ["armed", *body.splitlines()]
+    quoted = " ".join(shlex.quote(line) for line in lines)
+    command = f"printf '%s\\n' {quoted} > .claude/autodrive"
+    return (
+        "Run exactly this one shell command, then reply with the single word ok: "
+        f"{command}"
+    )
 
 
-def run_claude(repo: Path) -> None:
+def run_claude(repo: Path, prompt: str) -> None:
     env = allowed_env()
     proc = subprocess.run(
         [
@@ -102,9 +115,10 @@ def run_claude(repo: Path) -> None:
             str(REPO),
             "--permission-mode",
             "default",
-            # `=` form: the flag is variadic and would swallow the prompt.
-            "--disallowedTools=Bash,Edit,Write,NotebookEdit",
-            FIRST_PROMPT,
+            # `=` form: the flags are variadic and would swallow the prompt.
+            "--allowedTools=Bash(printf:*)",
+            "--disallowedTools=Edit,Write,NotebookEdit",
+            prompt,
         ],
         cwd=repo,
         env=env,
@@ -119,8 +133,8 @@ def run_claude(repo: Path) -> None:
 
 def allowed_env() -> dict[str, str]:
     # Not the developer's whole environment: the process runs a model turn
-    # and a plugin's hooks. TMUX is absent by construction, so the plugin's
-    # classic hooks can never type into the pane of whoever runs the suite.
+    # and a plugin's hooks and mod, none of which has any business with the
+    # developer's other variables.
     names = {"PATH", "HOME", "TMPDIR", "LANG", "LC_ALL", "USER", "CLAUDE_CONFIG_DIR"}
     return {
         k: v

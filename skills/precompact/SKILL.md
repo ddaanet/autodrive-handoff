@@ -116,8 +116,7 @@ checkpoint call, and its output is one part, naming the line to end on.
   transition. Both are settled by the request and the armed file.
 - Reprinting the continuation prompt, or printing the `/compact` line, as
   something for the user to run. There is one producer of that pasteable
-  form and it is the hook — which is also what covers a session outside
-  tmux, where there is no composer to type into.
+  form and it is the hook, for the case where the drive mod never loaded.
 - Authoring a continuation prompt for a prepared compaction. Nothing types
   it, and the checkpoint rejects it.
 - Writing `.claude/autodrive` directly. The checkpoint composes it from the

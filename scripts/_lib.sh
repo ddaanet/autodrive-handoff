@@ -22,22 +22,12 @@ HANDOFF_REL_TODO=".claude/handoff-todo.md"
 # names the transition."
 # shellcheck disable=SC2034
 HANDOFF_REL_DRIVE=".claude/autodrive"
-# Where the walker records a line it could not deliver. A watcher's exit status
-# goes nowhere, so this is the only path back to the agent; consumed and
-# reported by report-watcher-failure.sh at the next UserPromptSubmit.
+# Where the drive mod records a line it could not run (written from
+# hooks/handoff.ts at the failing line). A mod's rejection goes nowhere on its
+# own, so this is the only path back to the agent; consumed and reported by
+# report-drive-failure.sh at the next UserPromptSubmit.
 # shellcheck disable=SC2034
 HANDOFF_REL_DRIVE_FAILED=".claude/autodrive.failed"
-# Where SessionEnd records that the process has actually exited, for a
-# restart transition's /exit line — the opposite polarity of
-# HANDOFF_REL_DRIVE_FAILED (created, never disappears, and only ever once per
-# attempt: stop-drive.sh clears any stale copy before spawning the walker).
-# shellcheck disable=SC2034
-HANDOFF_REL_DRIVE_EXITED=".claude/autodrive.exited"
-# Where the walker records the timings of each line it delivered — the
-# success-side sibling of HANDOFF_REL_DRIVE_FAILED. Read by nothing; it is
-# there for whoever next asks how long a boot gate actually waited.
-# shellcheck disable=SC2034
-HANDOFF_REL_DRIVE_LOG=".claude/autodrive.log"
 
 # Where the drift report records the last destination it announced. A literal
 # directory rather than $TMPDIR: it used to also be where session-pointer.sh
@@ -133,8 +123,8 @@ _handoff_drive_prose() {
 }
 
 # Parse and validate the sentinel ($1) into the caller's DRIVE_STATE,
-# DRIVE_OWNER, DRIVE_KIND, DRIVE_BEFORE (lines typed before the transition) and
-# DRIVE_AFTER (lines typed into the session the transition opens). Returns 0 when
+# DRIVE_OWNER, DRIVE_KIND, DRIVE_BEFORE (lines the mod runs before the transition) and
+# DRIVE_AFTER (lines it runs in the session the transition opens). Returns 0 when
 # well-formed; otherwise returns 1 with DRIVE_ERR set to a one-phrase reason
 # naming the constraint that failed.
 #
@@ -147,24 +137,24 @@ _handoff_drive_prose() {
 #            and handoff-approved is what releases it. The session
 #            id is the one whose approval it waits on — the state that outlives
 #            its turn by design is the one that must say whose turn
-#   armed    the transition this turn's Stop will arm
+#   armed    the transition drive-take.sh takes after this turn's Stop
 #   pending  armed, in flight, waiting on its confirming SessionStart
 #
 #   rename   /rename <title>
 #   compact  /compact [directive]         [+ continuation prose]
 #   compact  (kind line alone: a transition is expected, nothing is typed)
 #   clear    /rename <title>, /clear      [+ continuation prose]
-#   restart  /exit, claude --resume <sid...>   [+ continuation prose]
 #
 # The continuation is optional on both driven kinds: typing the transition and
 # submitting a prompt into what it opens are separate decisions, and the payload
 # the checkpoint composes this file from carries them as separate fields.
 #
 # The state is reported, never interpreted: which state a caller wants is the
-# caller's business, and the parser serves the Stop gate, both loaders and the
+# caller's business, and the parser serves drive-take.sh, both loaders and the
 # UserPromptSubmit sweep with one answer.
 #
-# The lines are literal keystrokes: the walker must not know which command any
+# The lines are literal: the mod runs a `/x args` line as that command and the
+# rest as a prompt, and must not know which command any
 # kind uses. Every prose line is a single line because in the TUI one Enter is
 # one submit — an embedded newline would submit it early. Read with a `read`
 # loop rather than mapfile: bash 3.2 (macOS system bash) has no mapfile, and for
@@ -220,7 +210,7 @@ handoff_drive_read() {
     esac
 
     if [ "$n" -eq 1 ]; then
-        DRIVE_ERR="line 2 must be the transition kind — rename, compact, clear or restart"
+        DRIVE_ERR="line 2 must be the transition kind — rename, compact, clear"
         return 1
     fi
     DRIVE_KIND="${lines[1]}"
@@ -232,7 +222,7 @@ handoff_drive_read() {
             DRIVE_BEFORE=("${lines[2]}")
             ;;
         compact)
-            # The kind line alone is the prepare-only marker: nothing is typed,
+            # The kind line alone is the prepare-only marker: nothing is run,
             # but the transition is expected, so the loader still injects.
             [ "$n" -eq 2 ] && return 0
             _handoff_drive_expect "$n" 2 3 4 || return 1
@@ -253,18 +243,8 @@ handoff_drive_read() {
                 DRIVE_AFTER=("${lines[4]}")
             fi
             ;;
-        restart)
-            _handoff_drive_expect "$n" 4 5 || return 1
-            _handoff_drive_command "${lines[2]}" 3 "/exit" none || return 1
-            _handoff_drive_command "${lines[3]}" 4 "claude --resume" arg || return 1
-            DRIVE_BEFORE=("${lines[2]}" "${lines[3]}")
-            if [ "$n" -eq 5 ]; then
-                _handoff_drive_prose "${lines[4]}" 5 || return 1
-                DRIVE_AFTER=("${lines[4]}")
-            fi
-            ;;
         *)
-            DRIVE_ERR="line 2 must be the transition kind — rename, compact, clear or restart — not \`$DRIVE_KIND\`"
+            DRIVE_ERR="line 2 must be the transition kind — rename, compact, clear — not \`$DRIVE_KIND\`"
             return 1
             ;;
     esac
@@ -272,11 +252,11 @@ handoff_drive_read() {
 }
 
 # Kinds whose transition is confirmed by a SessionStart. `rename` is not one:
-# no loader consumes it, so stop-drive.sh deletes its sentinel outright instead
+# no loader consumes it, so drive-take.sh deletes its sentinel outright instead
 # of leaving it pending for nobody to clear.
 handoff_drive_has_source() {
     case "$1" in
-        compact|clear|restart) return 0 ;;
+        compact|clear) return 0 ;;
         *) return 1 ;;
     esac
 }
@@ -290,7 +270,7 @@ handoff_drive_has_source() {
 # the approval there is none. No state below `held` accepts one.
 #
 # Atomic: a sibling temp file renamed over the original. Concurrent readers
-# exist — both loaders and Stop parse this file, and the walker stats it — so a
+# exist — both loaders, drive-take.sh and the sweep parse this file — so a
 # partially written file must never be observable under the real name. The temp
 # lands in the same directory because rename(2) is only atomic within one
 # filesystem, and .claude/autodrive* is gitignored, so a temp orphaned by a kill
@@ -402,28 +382,6 @@ handoff_match_target() {
     { read -r target; read -r expected; } \
         < <(handoff_resolve "$HOOK_FILE_PATH" "$cwd/$rel")
     [[ "$target" == "$expected" ]] || return 2
-}
-
-# Spawn a detached watcher (scripts/<$1>, remaining args passed through) so it
-# outlives the hook turn. setsid fully detaches it into its own session but is
-# Linux-only — macOS ships no setsid(1) — so fall back to nohup (POSIX, ignores
-# SIGHUP). An exported HANDOFF_FAIL_FILE propagates to the child; exporting it
-# stays with the caller, which owns the path. The watcher itself
-# (drive_when_idle.py) is Python; the extension picks the interpreter, so this
-# helper stays generic over either.
-handoff_spawn_detached() {
-    local watcher interpreter
-    watcher="$(dirname "${BASH_SOURCE[0]}")/$1"; shift
-    case "$watcher" in
-        *.py) interpreter=python3 ;;
-        *) interpreter=bash ;;
-    esac
-    if command -v setsid >/dev/null 2>&1; then
-        setsid "$interpreter" "$watcher" "$@" >/dev/null 2>&1 &
-    else
-        nohup "$interpreter" "$watcher" "$@" >/dev/null 2>&1 &
-    fi
-    disown 2>/dev/null || true
 }
 
 # Emit a PreToolUse deny on stdout, then `exit 0` (not `return`) —

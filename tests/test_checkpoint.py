@@ -649,23 +649,6 @@ def test_top_level_unknown_key_errors_under_autoname(tmp_path: Path) -> None:
     assert "bogus" in result.stderr
 
 
-def test_top_level_unknown_key_errors_under_restart(tmp_path: Path) -> None:
-    """Guard against a vacuous pass on the generic "unknown skill" message.
-
-    That message's own fixed vocabulary contains the words "restart" and
-    "compact" (it lists all four skill names), so a naive `"restart" in stderr`
-    assertion would pass even if this payload were instead rejected for some
-    unrelated reason. Assert on the offending key's name, and rule the generic
-    message out explicitly, mirroring test_restart_session_id_unset_errors.
-    """
-    repo = make_repo(tmp_path)
-    payload = {"skill": "restart", "continue": None, "bogus": "x"}
-    result = run_checkpoint(repo, payload)
-    assert result.returncode == 2
-    assert "bogus" in result.stderr
-    assert 'must be "handoff"' not in result.stderr
-
-
 @pytest.mark.parametrize("skill", ["handoff", "precompact"])
 @pytest.mark.parametrize(
     ("field", "shape", "reason"),
@@ -1910,122 +1893,6 @@ def test_every_boundary_field_is_schema_error_under_autoname(
     assert "autoname" in result.stderr
 
 
-# ==========================================================================
-# the restart skill
-# ==========================================================================
-#
-# Structurally the fourth "neither boundary" skill value, alongside autoname:
-# its whole payload is its own name and an optional continuation, and every
-# boundary field (commit, task, todo, rename, clear, compact) is a schema
-# error under it rather than a silent ignore. Unlike autoname it DOES carry
-# `continue` — the restart's own third typed line — so it is not simply
-# autoname's forbidden-field set reused.
-
-
-def test_restart_sentinel_no_continuation(tmp_path: Path) -> None:
-    repo = make_repo(tmp_path)
-    payload = {"skill": "restart", "continue": None}
-    result = run_checkpoint(repo, payload)
-    assert result.returncode == 0
-    assert (repo / ".claude" / "autodrive").read_text() == (
-        "armed\nrestart\n/exit\nclaude --resume sess-checkpoint\n"
-    )
-    assert read_back_drive(repo / ".claude" / "autodrive")
-
-
-def test_restart_sentinel_with_continuation(tmp_path: Path) -> None:
-    repo = make_repo(tmp_path)
-    payload = {"skill": "restart", "continue": "continue with task 3"}
-    result = run_checkpoint(repo, payload)
-    assert result.returncode == 0
-    assert (repo / ".claude" / "autodrive").read_text() == (
-        "armed\nrestart\n/exit\nclaude --resume sess-checkpoint\ncontinue with task 3\n"
-    )
-    assert read_back_drive(repo / ".claude" / "autodrive")
-
-
-def test_restart_manifest_present_empty_neither_file_touched(tmp_path: Path) -> None:
-    repo = make_repo(tmp_path)
-    payload = {"skill": "restart", "continue": None}
-    result = run_checkpoint(repo, payload)
-    assert result.returncode == 0
-    manifest = repo / ".claude" / "checkpoint-manifest"
-    assert manifest.is_file()
-    assert manifest.stat().st_size == 0
-    assert not (repo / ".claude" / "handoff-task.md").exists()
-    assert not (repo / ".claude" / "handoff-todo.md").exists()
-
-
-def test_restart_never_holds_even_with_dirty_memory(tmp_path: Path) -> None:
-    """Restart composes no memory directive at all, so it never holds."""
-    repo = make_gitlore_repo(tmp_path)
-    dirty_memory(repo)
-    payload = {"skill": "restart", "continue": None}
-    result = run_checkpoint(repo, payload)
-    assert result.returncode == 0
-    first_line = (repo / ".claude" / "autodrive").read_text().splitlines()[0]
-    assert first_line == "armed"
-    assert result.stdout == ""
-
-
-def test_continue_missing_errors_under_restart(tmp_path: Path) -> None:
-    repo = make_repo(tmp_path)
-    payload = {"skill": "restart"}
-    result = run_checkpoint(repo, payload)
-    assert result.returncode == 2
-    assert "continue" in result.stderr
-
-
-def test_restart_session_id_unset_errors(tmp_path: Path) -> None:
-    repo = make_repo(tmp_path)
-    env = dict(os.environ)
-    env["HANDOFF_ROOT"] = str(repo)
-    env.pop("CLAUDE_CODE_SESSION_ID", None)
-    env.pop("CLAUDE_PROJECT_DIR", None)
-    result = subprocess.run(
-        [sys.executable, str(CHECKPOINT)],
-        cwd=repo,
-        input=json.dumps({"skill": "restart", "continue": None}),
-        env=env,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result.returncode == 2
-    # Guard against a vacuous pass: the generic "unknown skill" error also
-    # echoes the rejected value, so it contains the literal text "restart"
-    # too. Rule that message out explicitly rather than just pattern-matching
-    # for it.
-    assert 'must be "handoff"' not in result.stderr
-    assert "SESSION_ID" in result.stderr or "session" in result.stderr.lower()
-
-
-@pytest.mark.parametrize(
-    ("field", "value"),
-    [
-        ("commit", "with-commit"),
-        ("task", task_content("body")),
-        ("todo", todo_content("body")),
-        ("rename", "Not Allowed"),
-        ("clear", True),
-        ("compact", True),
-    ],
-)
-def test_every_boundary_field_is_schema_error_under_restart(
-    tmp_path: Path, field: str, value: object
-) -> None:
-    repo = make_repo(tmp_path)
-    payload = {"skill": "restart", "continue": None, field: value}
-    result = run_checkpoint(repo, payload)
-    assert result.returncode == 2
-    assert field in result.stderr
-    assert "restart" in result.stderr
-    # Guard against a vacuous pass: "restart" appears in the generic
-    # "unknown skill" error too (it echoes the rejected value), and
-    # "precompact" contains "compact" as a substring.
-    assert 'must be "handoff"' not in result.stderr
-
-
 def test_autoname_against_dirty_memory_no_directive_at_all(tmp_path: Path) -> None:
     repo = make_gitlore_repo(tmp_path)
     dirty_memory(repo)
@@ -2130,7 +1997,7 @@ def test_clause_file_unset_names_key_and_restart(tmp_path: Path) -> None:
     result = run_checkpoint(repo, handoff_payload("without-commit"))
     assert result.returncode == 0
     assert "gitlore.memoryapprovalclausefile" in result.stdout.lower()
-    assert "/handoff:restart" in result.stdout
+    assert "/restart" in result.stdout
     # The checkpoint has already written the task file, the todo file, the
     # manifest and the sentinel by the time this prints, so it claims no such
     # thing — only that the memory changes are still pending.
@@ -2156,7 +2023,7 @@ def test_clause_file_missing_same_key_and_restart_report(tmp_path: Path) -> None
     result = run_checkpoint(repo, handoff_payload("without-commit"))
     assert result.returncode == 0
     assert "gitlore.memoryapprovalclausefile" in result.stdout.lower()
-    assert "/handoff:restart" in result.stdout
+    assert "/restart" in result.stdout
     assert "Nothing has been written" not in result.stdout
     assert "The memory changes are still pending." in result.stdout
     assert str(repo / ".claude" / "gitlore-memory-message") not in result.stdout

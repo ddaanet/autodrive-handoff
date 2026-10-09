@@ -2,25 +2,26 @@
 # UserPromptSubmit: reconcile the armed-transition state at the start of a turn,
 # and report anything that went wrong in the last one.
 #
-# 1. The walker's non-delivery. It runs detached, so its exit status goes
-#    nowhere. Left alone, a line that never lands is silent — worst on the
-#    recognition abort, which wipes the composer and leaves the pane looking
-#    untouched while the agent carries on believing it armed a transition, and
-#    on the composing-bail, which leaves the arming hook's "will run once idle"
-#    promise standing forever. The walker writes its reason to
-#    .claude/autodrive.failed; this reads it at the first moment anything can
-#    act on it. It is written only on paths the walker observed itself — never
-#    inferred from a file still in state `pending`, which is legitimate for the
-#    whole Stop -> transition window.
+# 1. The drive mod's non-delivery. A rejected command or prompt in
+#    hooks/handoff.ts has no one to tell: the turn it ran after is over. Left
+#    alone, a line that never runs is silent, and the agent carries on believing
+#    it armed a transition. The mod writes its reason to .claude/autodrive.failed;
+#    this reads it at the first moment anything can act on it. It is written
+#    only on a rejection the mod observed itself — never inferred from a file
+#    still in state `pending`, which is legitimate for the whole turn-end ->
+#    transition window.
 #
-# 2. An autodrive that outlived its turn. The file is armed at the Stop of the
-#    turn that writes it, and Stop leaves it `pending` or removes it, so one
-#    still in state `armed` when a later turn begins never armed: that turn
-#    ended abnormally (Esc — Stop does not fire on an interrupt — or a crash,
-#    or a quit). Left on disk it is armed by the next Stop that does fire, days
-#    later and possibly in an unrelated session, driving a stale transition
-#    into work it was never written for. UserPromptSubmit is the exact
-#    discriminator: it cannot fire between the write and that turn's own Stop.
+# 2. An autodrive that outlived its turn. The file is armed by the mod's
+#    drive-take.sh at the turn end that follows the write, which leaves it
+#    `pending` or removes it, so one still in state `armed` when a later turn
+#    begins never ran. Two causes: that turn ended abnormally (Esc — Stop does
+#    not fire on an interrupt — or a crash, or a quit), or the drive mod did not
+#    load at all (--safe-mode, or a Claude Code older than 2.1.287). Left on disk
+#    it would be taken by a later turn end, days later and possibly in an
+#    unrelated session, driving a stale transition into work it was never
+#    written for. UserPromptSubmit is the exact discriminator: it cannot fire
+#    between the write and that turn's own end. For an armed file the report
+#    also prints the lines it held, one per line, for the user to type in order.
 #    (Prose injected into a still-running turn is the one exception, and it
 #    fails safe — the transition is cancelled and said so, not deferred.)
 #
@@ -31,8 +32,8 @@
 #    split, and it is silent in both directions: the agent reasons about the
 #    repo under cwd while the plugin reads and writes the one under the root.
 #
-# UserPromptSubmit rather than Stop: the walker runs *after* the Stop that
-# spawned it, so the next Stop is a whole turn later. It also fires on every
+# UserPromptSubmit: the mod drives *after* the turn that armed it, so the first
+# moment anything can act on a failure is the next prompt. It fires on every
 # prompt, so the no-file path must be silent and cheap.
 set -euo pipefail
 
@@ -85,10 +86,12 @@ drive="$cwd/$HANDOFF_REL_DRIVE"
 # no transition anyone can complete, so the sweep takes it.
 drive_state=""
 drive_owner=""
+drive_lines=()   # the lines an armed file held, before then after
 if [[ -f "$drive" ]]; then
     if handoff_drive_read "$drive"; then
         drive_state="$DRIVE_STATE"
         drive_owner="$DRIVE_OWNER"
+        drive_lines=( ${DRIVE_BEFORE[@]+"${DRIVE_BEFORE[@]}"} ${DRIVE_AFTER[@]+"${DRIVE_AFTER[@]}"} )
     else
         drive_state="malformed"
     fi
@@ -106,20 +109,20 @@ if [[ -f "$failed" ]]; then
     reason="$(head -n1 "$failed")"
     rm -f "$failed"
     # A failure part-way through a sequence strands the transition in `pending`:
-    # nothing will consume it (its SessionStart never fires) and Stop will not
-    # re-arm from that state. Clear it with the report. Only here — a stale
-    # armed file says nothing about one in flight, and sweeping on that evidence
-    # would race a live SessionStart(compact|clear).
+    # nothing will consume it (its SessionStart never fires) and drive-take.sh
+    # will not take it again from that state. Clear it with the report. Only
+    # here — a stale armed file says nothing about one in flight, and sweeping
+    # on that evidence would race a live SessionStart(compact|clear).
     if [[ "$drive_state" == "pending" ]]; then
         rm -f "$drive"
     fi
-    msgs+=("transition watcher did not deliver — $reason")
-    notes+=("The handoff transition watcher failed to deliver its line: $reason. The transition or continuation it was driving did not happen, and any lines after it in the sequence were never typed.")
+    msgs+=("transition drive did not deliver — $reason")
+    notes+=("The handoff transition drive failed to run its line: $reason. The transition or continuation it was driving did not happen, and any lines after it in the sequence were never run.")
 fi
 
-# An autodrive is armed at the Stop of the turn that writes it, and that Stop
-# leaves it `pending` or removes it. So one still in state `armed` when a later
-# turn begins never armed.
+# An autodrive is taken at the turn end after the turn that writes it, and that
+# take leaves it `pending` or removes it. So one still in state `armed` when a later
+# turn begins never ran.
 #
 # `held` is the exception, and the reason this is a list rather than "anything
 # but pending": a held transition is *waiting* on an approval whose answer
@@ -128,10 +131,24 @@ fi
 # another session was reclassified above, because the approval it waits on
 # cannot arrive and handoff-approved would otherwise arm it into this
 # conversation.
+paste=""   # the armed lines, for the user to type in order
 if [[ -n "$drive_state" && "$drive_state" != "pending" && "$drive_state" != "held" ]]; then
     rm -f "$drive"
-    msgs+=("stale autodrive discarded — its turn ended without arming")
-    notes+=("A .claude/autodrive file was still on disk when this turn began, and this session cannot act on it: either its Stop never fired to arm it — that turn ended on an interrupt, a crash or a quit — or it does not parse in this version's format. Either way it has been discarded, so the transition it described did not happen and cannot fire into unrelated work later.")
+    if [[ "$drive_state" == "armed" ]]; then
+        msgs+=("stale autodrive discarded — the drive mod did not run it")
+        notes+=("A .claude/autodrive file was still armed when this turn began, so the transition it described did not run. Most likely the drive mod did not load (--safe-mode, or a Claude Code older than 2.1.287); an interrupt or crash that ended the turn before it was taken leaves the same trace. The file has been discarded, so it cannot fire into unrelated work later.")
+        if (( ${#drive_lines[@]} > 0 )); then
+            paste="$(printf '%s\n' "${drive_lines[@]}")"
+            notes+=("Present these lines to the user in a fenced code block, to type in order:
+$paste")
+        fi
+    elif [[ "$drive_state" == "abandoned" ]]; then
+        msgs+=("stale autodrive discarded — it was held by a session that is gone")
+        notes+=("A .claude/autodrive file held by another session was still on disk when this turn began. The approval it waited on can no longer arrive, so it has been discarded and the transition it described did not happen.")
+    else
+        msgs+=("stale autodrive discarded — it does not parse in this version's format")
+        notes+=("A .claude/autodrive file was still on disk when this turn began and does not parse in this version's format. It has been discarded, so the transition it described did not happen and cannot fire into unrelated work later.")
+    fi
 fi
 
 (( ${#msgs[@]} > 0 )) || exit 0
@@ -141,8 +158,8 @@ printf -v note '%s ' "${notes[@]}"
 
 # Lead with a style reset. This hook speaks only when something went wrong, and
 # the ordinary hook chatter it sits among is rendered dimmed.
-jq -nc --arg m "${msg%; }" --arg n "${note% }" --arg lead $'\033[0m' '{
-    systemMessage: ($lead + "handoff: " + $m + "."),
+jq -nc --arg m "${msg%; }" --arg n "${note% }" --arg p "$paste" --arg lead $'\033[0m' '{
+    systemMessage: ($lead + "handoff: " + $m + "." + (if $p == "" then "" else "\nType in order:\n" + $p end)),
     hookSpecificOutput: {
         hookEventName: "UserPromptSubmit",
         additionalContext: $n

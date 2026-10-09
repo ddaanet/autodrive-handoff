@@ -14,8 +14,8 @@
 # as it does from scripts/. It self-locates from $0 the way the checkpoint shim
 # does — PATH resolution hands a bare-name invocation its own absolute path.
 #
-# NFR1: no git and no tmux. It rewrites one file in the agent's own worktree;
-# the transition itself is armed at Stop like any other.
+# NFR1: no git. It rewrites one file in the agent's own worktree;
+# the transition itself is taken at turn end like any other (drive-take.sh).
 set -euo pipefail
 
 # shellcheck source-path=SCRIPTDIR source=../scripts/_lib.sh
@@ -58,27 +58,18 @@ handoff_drive_read "$drive" || err "$HANDOFF_REL_DRIVE is malformed — $DRIVE_E
 [ "$DRIVE_OWNER" = "$session_id" ] \
     || err "the held transition belongs to session \`$DRIVE_OWNER\`, not this one; it is not this session's approval to give"
 
-# rename, clear and compact are the only kinds a held sentinel can carry
-# (restart never holds, and neither does autoname). Checked ahead of
-# handoff_drive_arm so a held sentinel of an unexpected kind is left held,
-# not consumed into a state nothing else can act on.
-case "$DRIVE_KIND" in
-    rename | clear | compact) ;;
-    *) err "the held transition is kind \`$DRIVE_KIND\`, which this command does not know how to arm" ;;
-esac
-
 handoff_drive_arm "$drive" armed \
     || err "could not rewrite $HANDOFF_REL_DRIVE"
 
 printf 'handoff: %s armed; it runs at the end of this turn.\n\n' "$DRIVE_KIND"
 
-# The closing line for each kind a held sentinel can carry. Restart never
-# holds, and neither does autoname, so a held rename is always an untyped
-# handoff and a held clear or compact always a driven one. Literal rather
-# than composed in Python, so this command stays one file rewrite (NFR1); it
-# must match closing_directive() in scripts/_checkpoint_lib.py byte for
-# byte. Single-quoted: the backticks are literal text, and double-quoting
-# them would open command substitution.
+# The closing line for each kind a held sentinel can carry. Autoname never
+# holds, so a held rename is always an untyped handoff and a held clear or
+# compact always a driven one. Literal rather than composed in Python, so
+# this command stays one file rewrite (NFR1); it must match
+# closing_directive() in scripts/_checkpoint_lib.py byte for byte.
+# Single-quoted: the backticks are literal text, and double-quoting them would
+# open command substitution.
 # shellcheck disable=SC2016
 case "$DRIVE_KIND" in
     rename)

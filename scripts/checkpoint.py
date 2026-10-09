@@ -7,15 +7,15 @@ tagged union — content, or an object naming an action (FR5/FR6) — writes the
 manifest (FR7), composes the sentinel (FR8), and prints the directive output
 (FR9).
 
-NFR1: nothing here mutates git state and no tmux runs — this is the agent's
-sandboxed Bash. scripts/bash-post.sh (PostToolUse(Bash), bash, unmoved) does the
-staging, driven by the manifest this script leaves; the sentinel is armed at
-Stop by stop-drive.sh (bash, unmoved) like any other.
+NFR1: nothing here mutates git state — this is the agent's sandboxed Bash.
+scripts/bash-post.sh (PostToolUse(Bash), bash, unmoved) does the staging, driven
+by the manifest this script leaves. At turn end the sentinel is taken by
+scripts/drive-take.sh and run by the drive mod, like any other.
 
 Port of checkpoint.sh — see docs/changelog/2026-08-10-python-split.md. The
 composer reads its own sentinel back through handoff_drive_read, which stays the
-single bash implementation of the sentinel grammar (still used by stop-drive.sh,
-load-compact.sh, load-handoff.sh and report-watcher-failure.sh) — so this shells
+single bash implementation of the sentinel grammar (still used by drive-take.sh,
+load-compact.sh, load-handoff.sh and report-drive-failure.sh) — so this shells
 out to it rather than reimplementing the grammar a second time, which is exactly
 the drift the single-parser design exists to prevent.
 """
@@ -62,8 +62,6 @@ def main() -> int:
 
     if skill == "autoname":
         validate_autoname_forbidden_fields(payload)
-    if skill == "restart":
-        validate_restart_forbidden_fields(payload)
     commit_mode = validate_commit_mode(payload, skill)
     title = validate_rename(payload, skill)
     transition = build_transition(payload, skill, title)
@@ -76,8 +74,7 @@ def main() -> int:
         transition, memory=bool(memory.text), commit=commit_mode == "with-commit"
     )
     if held:
-        # Resolving before anything is written (task/todo/manifest/sentinel),
-        # matching _build_restart_transition's own check of this variable —
+        # Resolving before anything is written (task/todo/manifest/sentinel):
         # a held sentinel's first line names the session, and there is
         # nothing else this run could do with it unset.
         require_session_id(
@@ -175,18 +172,18 @@ def validate_root() -> Path:
 def validate_skill(payload: JSONDict) -> str:
     """Return the skill name.
 
-    One of "handoff", "precompact", "autoname" or "restart".
+    One of "handoff", "precompact" or "autoname".
     """
     skill = payload.get("skill")
     if "skill" not in payload or skill in (None, ""):
         err(
             "skill",
-            'required, one of "handoff", "precompact", "autoname" or "restart"',
+            'required, one of "handoff", "precompact" or "autoname"',
         )
-    if skill not in ("handoff", "precompact", "autoname", "restart"):
+    if skill not in ("handoff", "precompact", "autoname"):
         err(
             "skill",
-            f'must be "handoff", "precompact", "autoname" or "restart", got "{skill}"',
+            f'must be "handoff", "precompact" or "autoname", got "{skill}"',
         )
     return cast("str", skill)
 
@@ -225,10 +222,10 @@ _TOP_LEVEL_KEYS = (
 def validate_commit_mode(payload: JSONDict, skill: str) -> str:
     """Return the commit mode.
 
-    "" for autoname/restart (neither carries commit awareness); the commit mode
-    string otherwise.
+    "" for autoname (it carries no commit awareness); the commit mode string
+    otherwise.
     """
-    if skill in ("autoname", "restart"):
+    if skill == "autoname":
         return ""
     commit_mode = payload.get("commit")
     if commit_mode not in ("with-commit", "without-commit"):
@@ -245,26 +242,15 @@ def validate_autoname_forbidden_fields(payload: JSONDict) -> None:
             err(forbidden, 'forbidden when skill is "autoname"')
 
 
-def validate_restart_forbidden_fields(payload: JSONDict) -> None:
-    """Error naming the field if any boundary-only field is present.
-
-    Unlike autoname, restart's own payload DOES carry `continue` — its own third
-    typed line — so that field is not in this set.
-    """
-    for forbidden in ("commit", "task", "todo", "rename", "clear", "compact"):
-        if forbidden in payload:
-            err(forbidden, 'forbidden when skill is "restart"')
-
-
 def validate_rename(payload: JSONDict, skill: str) -> str:
     """Return the flattened title.
 
     Required wherever a title is decided (handoff, autoname) and forbidden under
-    precompact/restart by key presence.
+    precompact by key presence.
     """
-    if skill in ("precompact", "restart"):
+    if skill == "precompact":
         if "rename" in payload:
-            err("rename", f'forbidden when skill is "{skill}"')
+            err("rename", 'forbidden when skill is "precompact"')
         return ""
     if "rename" not in payload or payload.get("rename") is None:
         err("rename", f'required when skill is "{skill}"')
@@ -280,8 +266,6 @@ def build_transition(payload: JSONDict, skill: str, title: str) -> Transition:
     """Return the transition this call types, per the skill's own rules."""
     if skill == "autoname":
         return Transition("rename", [f"/rename {title}"], typed=False)
-    if skill == "restart":
-        return _build_restart_transition()
     if skill == "handoff":
         return _build_handoff_transition(payload, title)
     return _build_precompact_transition(payload)
@@ -293,11 +277,6 @@ def require_session_id(field: str, reason: str) -> str:
     if not session_id:
         err(field, f"CLAUDE_CODE_SESSION_ID is unset — {reason}")
     return session_id
-
-
-def _build_restart_transition() -> Transition:
-    session_id = require_session_id("restart", "cannot compose the resume command")
-    return Transition("restart", ["/exit", f"claude --resume {session_id}"], typed=True)
 
 
 def _build_handoff_transition(payload: JSONDict, title: str) -> Transition:
@@ -654,7 +633,7 @@ def compose_directives(
     Print order: memory, then the todo boundary/SDD nudge, then the commit act
     (present only under "with-commit"), then either the arming instruction
     (held) or the closing line (not held) — always last, and mutually
-    exclusive. [] under autoname/restart. The clause-file refusal
+    exclusive. [] under autoname. The clause-file refusal
     (`memory.refusal`) suppresses every other part — the checkpoint prints it
     alone.
     """

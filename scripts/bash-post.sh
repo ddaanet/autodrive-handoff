@@ -5,7 +5,7 @@
 # (a sandboxed `git add` can strand .git/index.lock).
 #
 # Staging is all it does. A sentinel the checkpoint writes needs nothing from
-# this hook: it is armed at Stop like any other, by stop-drive.sh.
+# this hook: it is taken at the turn end like any other, by drive-take.sh.
 #
 # This hook fires on every Bash call in every session with the plugin
 # installed (NFR2) — the checkpoint runs once per wrap-up, so the negative

@@ -7,31 +7,27 @@
 #     hookSpecificOutput.additionalContext so the fresh agent sees the handoff
 #     in its input for this turn, plus a curt systemMessage with content size
 #     and age;
-#   - on `clear`, consumes an armed transition of kind `clear` and spawns the
-#     walker for the lines to type into this new session. Consuming
-#     .claude/autodrive is itself the confirmation the walker was waiting on
-#     for the `/clear` line it typed.
+#   - on `clear`, consumes a pending transition of kind `clear`. The mod
+#     (hooks/handoff.ts) ran the `/clear` and submits the continuation itself;
+#     the file disappearing is what leaves the sentinel clean for the next
+#     transition.
 #
 # Those two are independent: a driven clear whose task file is empty must still
-# continue, so the consume and the spawn come BEFORE the no-frame exit. Silent
-# only when there is nothing to inject and nothing was armed.
+# consume, so the consume comes BEFORE the no-frame exit. Silent only when there
+# is nothing to inject and nothing was pending.
 set -euo pipefail
 
 # shellcheck source-path=SCRIPTDIR source=_lib.sh
 source "$(dirname "$0")/_lib.sh"
 
-{ read -r hook_cwd; read -r hook_event; read -r hook_source; read -r hook_transcript; } < <(
-    jq -r '.cwd // "", .hook_event_name // "SessionStart", .source // "", .transcript_path // ""'
+{ read -r hook_cwd; read -r hook_event; read -r hook_source; } < <(
+    jq -r '.cwd // "", .hook_event_name // "SessionStart", .source // ""'
 )
 cwd="$(handoff_root "$hook_cwd")"
 [[ -n "$cwd" ]] || exit 0
 
 notes=()   # systemMessage fragments from the transition, if any
-extra=""   # additionalContext appended after the frame
 
-# `/clear` mints a new session and a new transcript, and this payload reports
-# both — measured 2026-07-30, see the design doc. So the after-line confirms
-# against .transcript_path here exactly as it does at the compact boundary.
 drive="$cwd/$HANDOFF_REL_DRIVE"
 if [[ "$hook_source" == "clear" && -f "$drive" ]]; then
     if ! handoff_drive_read "$drive"; then
@@ -42,22 +38,6 @@ if [[ "$hook_source" == "clear" && -f "$drive" ]]; then
         # the outgoing session is left for SessionStart(compact), and an armed
         # file — one whose Stop never fired — is left for the sweep.
         rm -f "$drive"
-        after=( ${DRIVE_AFTER[@]+"${DRIVE_AFTER[@]}"} )
-        if (( ${#after[@]} > 0 )); then
-            if [[ -n "${TMUX:-}" && -n "${TMUX_PANE:-}" ]]; then
-                # The walker is detached, so a failed delivery has no way back
-                # to the agent; this hook owns the path it records at.
-                export HANDOFF_FAIL_FILE="$cwd/$HANDOFF_REL_DRIVE_FAILED"
-                export HANDOFF_LOG_FILE="$cwd/$HANDOFF_REL_DRIVE_LOG"
-                export HANDOFF_TRANSCRIPT="$hook_transcript"
-                handoff_spawn_detached drive_when_idle.py "$TMUX_PANE" "${after[@]}"
-                notes+=("cleared — will resume with \"${after[0]}\" once the prompt is idle (tmux pane $TMUX_PANE)")
-            else
-                extra="The session was cleared, but the continuation prompt could not be typed (not in tmux). Present this line to the user in a fenced code block so they can paste it:
-$(printf '%s\n' "${after[@]}")"
-                notes+=("not in tmux — continuation not typed; emitted to paste")
-            fi
-        fi
     fi
 fi
 
@@ -100,10 +80,8 @@ printf -v msg '%s; ' "${notes[@]}"
 jq -nc \
     --arg m "handoff: ${msg%; }" \
     --arg c "$assembled" \
-    --arg x "$extra" \
     --arg e "$hook_event" \
     '{systemMessage: $m}
-     + (if $c == "" and $x == "" then {}
-        else {hookSpecificOutput: {hookEventName: $e,
-              additionalContext: ((if $c == "" then "" else $c + "\n" end) + $x)}}
+     + (if $c == "" then {}
+        else {hookSpecificOutput: {hookEventName: $e, additionalContext: ($c + "\n")}}
         end)'

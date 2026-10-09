@@ -4,7 +4,7 @@
 #
 # Every case asserts the branch label alongside the root: the resolver knows
 # which of its four paths it took, and `inside`/`worktree` vs
-# `foreign`/`unrelated` is exactly the drift signal report-watcher-failure.sh
+# `foreign`/`unrelated` is exactly the drift signal report-drive-failure.sh
 # reports on. The root each case resolves to is unchanged.
 from pathlib import Path
 

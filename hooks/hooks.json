@@ -1,13 +1,15 @@
 {
-  "description": "Hooks for the handoff skill: SessionStart load, write guard (handoff-task.md and autodrive, both checkpoint-only), the checkpoint channel's PreToolUse(Bash) root injection (inject-checkpoint-root.sh) and PostToolUse(Bash) manifest consumer, post-write staging (handoff-todo.md), and the driven-transition machinery (Stop arm, SessionStart(compact|clear|resume) resume, SessionEnd exit confirmation, watcher-failure report). See CLAUDE.md for details.",
-  "modules": ["./handoff.ts"],
+  "description": "Hooks for the handoff skill: SessionStart load, write guard (handoff-task.md and autodrive, both checkpoint-only), the checkpoint channel's PreToolUse(Bash) root injection (inject-checkpoint-root.sh) and PostToolUse(Bash) manifest consumer, post-write staging (handoff-todo.md), SessionStart(compact|clear) sentinel consumption and frame injection, and the drive-failure report. The driven transition itself is run by the drive mod (hooks/handoff.ts). See CLAUDE.md for details.",
+  "modules": [
+    "./handoff.ts"
+  ],
   "hooks": {
     "UserPromptSubmit": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/report-watcher-failure.sh",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/report-drive-failure.sh",
             "timeout": 5
           }
         ]
@@ -57,28 +59,6 @@
         ]
       }
     ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/stop-drive.sh",
-            "timeout": 10
-          }
-        ]
-      }
-    ],
-    "SessionEnd": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/session-end.sh",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
     "SessionStart": [
       {
         "hooks": [
@@ -105,16 +85,6 @@
           {
             "type": "command",
             "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/load-compact.sh",
-            "timeout": 10
-          }
-        ]
-      },
-      {
-        "matcher": "resume",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/load-restart.sh",
             "timeout": 10
           }
         ]

@@ -33,8 +33,8 @@ ignore. A non-zero exit names the offending field on stderr.
 
 That is the only tool call. The checkpoint composes the transition file
 and the hooks do the rest at the end of the turn: the session is renamed
-once the prompt goes idle, and outside tmux the lines are emitted for the
-user to paste instead.
+once the turn ends; if the drive mod did not load, the next prompt prints
+the line for the user to type instead.
 
 ## Anti-patterns
 
