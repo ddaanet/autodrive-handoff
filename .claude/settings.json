@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PROJECT_DIR}/plugin-dev/version-guard.sh"
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/plugin-dev/version-guard.sh\""
           }
         ]
       },
