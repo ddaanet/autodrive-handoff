@@ -34,7 +34,7 @@ addopts = [
     "not live",
 ]
 markers = [
-    "live: drives a real Claude Code TUI in tmux; excluded from `just precommit`",
+    "live: drives a real Claude Code (TUI in tmux, or `claude -p`); excluded from `just precommit`",
 ]
 
 [tool.docformatter]

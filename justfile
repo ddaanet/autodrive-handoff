@@ -62,3 +62,10 @@ py-test:
 # nothing, so it costs no tokens. `-rs` so a skip is never mistaken for a pass.
 tui-conformance:
     pytest -m live -v -rs
+
+# Smoke-test the mod against a live `claude -p`: an armed sentinel in a
+# throwaway repo, then the session transcripts say whether the transition ran.
+# Not in `precommit`: needs a real claude (sandbox-excluded) and spends a few
+# haiku turns, ~1 min. `-rs` so a skip is never mistaken for a pass.
+mod-smoke:
+    pytest -m live tests/test_mod_live.py -v -rs
