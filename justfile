@@ -21,6 +21,8 @@ precommit:
     jq . .claude-plugin/plugin.json > /dev/null
     jq . hooks/hooks.json > /dev/null
     jq . .claude/settings.json > /dev/null
+    just validate-plugin
+    claude plugin test
     shellcheck -x bin/* scripts/*.sh tests/*.bats
     ruff check scripts tests
     ruff format --check scripts tests
@@ -30,6 +32,12 @@ precommit:
     bats tests/hook-test.bats tests/checkpoint.bats tests/drive-take.bats
     pytest
     @echo "ok"
+
+# `claude plugin validate --strict`, minus the one warning that cannot be
+# fixed: the repo-root CLAUDE.md is this repo's own agent instructions, not
+# context the plugin ships. Any other error or warning fails the gate.
+validate-plugin:
+    claude plugin validate --strict --json . | jq -e '[.manifest, .contents[]] | map(.errors[], (.warnings[] | select(.path != "root" or (.message | startswith("CLAUDE.md at the plugin root") | not)))) | length == 0' > /dev/null
 
 # Gate the imported `release` recipe depends on
 prerelease: precommit

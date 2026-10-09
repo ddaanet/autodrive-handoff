@@ -9,7 +9,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/report-drive-failure.sh",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/report-drive-failure.sh\"",
             "timeout": 5
           }
         ]
@@ -21,7 +21,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/write-guard.sh",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/write-guard.sh\"",
             "timeout": 5
           }
         ]
@@ -31,7 +31,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/inject-checkpoint-root.sh",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/inject-checkpoint-root.sh\"",
             "timeout": 5
           }
         ]
@@ -43,7 +43,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/write-stage.sh",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/write-stage.sh\"",
             "timeout": 5
           }
         ]
@@ -53,7 +53,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/bash-post.sh",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/bash-post.sh\"",
             "timeout": 10
           }
         ]
@@ -64,7 +64,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/session-pointer.sh",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/session-pointer.sh\"",
             "timeout": 5
           }
         ]
@@ -74,7 +74,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/load-handoff.sh",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/load-handoff.sh\"",
             "timeout": 5
           }
         ]
@@ -84,7 +84,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/load-compact.sh",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/load-compact.sh\"",
             "timeout": 10
           }
         ]
