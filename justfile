@@ -27,7 +27,7 @@ precommit:
     docformatter --check scripts/*.py tests/*.py
     mypy
     ty check
-    bats tests/hook-test.bats tests/checkpoint.bats
+    bats tests/hook-test.bats tests/checkpoint.bats tests/drive-take.bats
     pytest
     @echo "ok"
 
@@ -51,7 +51,7 @@ ty:
 
 # Run the hook + rename test suites (bats) against synthetic tool-event input
 hook-test:
-    bats tests/hook-test.bats tests/checkpoint.bats
+    bats tests/hook-test.bats tests/checkpoint.bats tests/drive-take.bats
 
 # Run the Python unit tests (pytest) — worktree_root.py, checkpoint.py, drive_when_idle.py
 py-test:

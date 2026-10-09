@@ -1,0 +1,1 @@
+{"kind":null,"before":[],"after":[],"failFile":"@ROOT@/.claude/autodrive.failed","message":"handoff: autodrive malformed — kind `clear` takes 4 or 5 lines (found 3); discarded, transition not armed."}
