@@ -96,6 +96,15 @@ It's idempotent — re-running with everything already in place is a no-op. The
 vendored copy at `plugin-dev/install.sh` can be re-run after clone or after
 wiring drift to repair the wiring without re-vendoring.
 
+The hook commands double-quote `${CLAUDE_PROJECT_DIR}`, so a plugin checked out
+under a path with a space still runs them. Earlier releases wrote the
+version-guard command unquoted, and Claude Code treats the failure of that
+command as a non-blocking error: the guard failed open, silently. A re-run
+rewrites that entry to the quoted form in place, under whatever matcher you gave
+it, and reports `version-guard hook requoted`. `update-plugin-dev` does not
+re-run the installer, so a plugin vendored before the change gets the fix by
+running `bash plugin-dev/install.sh` once, from your own shell.
+
 Then define two project-specific recipes in `justfile`: `precommit`, your commit
 gate, and `prerelease`, the gate `release` depends on.
 
@@ -258,11 +267,11 @@ live then depends on what changed:
 - **Agent definitions and hook events** — only in a new session. After
   `just dogfood`, exit and relaunch through the shim; `claude -c` keeps the
   conversation.
-- **Commands** — read at session start, so a relaunch after `just dogfood` makes
-  them live. Whether `/reload-plugins` does too is unverified.
-- **`.mcp.json` and output styles** — whether `/reload-plugins` picks them up is
-  unverified. A relaunch after `just dogfood` does, since it re-reads everything
-  Claude Code reads at start.
+- **Commands, `.mcp.json` and output styles** — after `/reload-plugins` in the
+  session, like skill bodies: a changed or new command, the plugin's MCP
+  servers and a style's body (from the next turn) all go live. A relaunch after
+  `just dogfood` does too, since it re-reads everything Claude Code reads at
+  start.
 
 The sync copies everything git does not ignore, tracked or not, minus every
 `.git` and `dist/plugin/` itself, and deletes from the copy what left the
@@ -283,8 +292,10 @@ does not skip the masks. A character-device mask makes rsync warn
 `skipping non-regular file` and keep the copy's old `.mcp.json`, so a changed
 MCP config goes stale. A zero-byte mask is copied as an empty file, which puts
 an empty `.mcp.json` into the copy of a plugin that ships none; it stays until
-the next sync from your shell deletes it, and how Claude Code reads an empty
-`.mcp.json` is unverified. The shim never syncs, so a launch is unaffected.
+the next sync from your shell deletes it. Claude Code loads the plugin
+regardless, ignores the file and reports nothing in the session, though
+`claude plugin validate` on the copy fails on it. The shim never syncs, so a
+launch is unaffected.
 
 ### Hooks
 

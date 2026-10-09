@@ -117,10 +117,10 @@ list_ignored() {
 # shows a non-blocking hook error, and its own sensitive-file ask still stands
 # before an edit into the copy. A jq failure, reading the payload or building
 # the deny, exits 1 with jq's stderr kept, never with jq's own status: jq exits
-# 2 on a usage or system error, and on a parse error in 1.6, and exit 2 from a
-# PreToolUse hook blocks the tool call. With no jq on PATH the guard stands down
-# in silence rather than fail every edit of the session; the session-start
-# warning is where a missing jq is reported.
+# 2 on a usage or system error, and exit 2 from a PreToolUse hook blocks the
+# tool call. With no jq on PATH the guard stands down in silence rather than
+# fail every edit of the session; the session-start warning is where a missing
+# jq is reported.
 pre_tool() {
     local root path physical rel copy="dist/plugin"
     command -v jq >/dev/null || exit 0
