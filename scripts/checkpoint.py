@@ -324,7 +324,7 @@ def validate_continuation(payload: JSONDict, skill: str, *, typed: bool) -> str:
     if continuation.startswith("/"):
         err("continue", "must not begin with `/`")
     if not typed:
-        err("continue", "must be null when the transition is not typed")
+        err("continue", "must be null when the transition is not driven")
     return continuation
 
 
@@ -558,13 +558,13 @@ def write_manifest(root: Path, manifest_lines: list[str]) -> None:
 def hold_decision(transition: Transition, *, memory: bool, commit: bool) -> bool:
     """Return whether the transition is held pending an explicit release.
 
-    Held iff the sentinel types anything and a memory directive is owed, or the
-    transition is typed and this turn carries a commit. The second disjunct is
-    scoped to `typed` rather than to "types anything": what it protects under a
-    commit is work from a transition that would run over a failed commit, and an
-    untyped handoff's only keystroke is `/rename`, whose misfire costs nothing —
-    holding that case too would add an approval call to the common "handoff and
-    commit" invocation for no protected state.
+    Held iff the sentinel names any command and a memory directive is owed, or
+    the transition is driven (`typed`) and this turn carries a commit. The
+    second disjunct is scoped to `typed` rather than to "names any command":
+    what it protects under a commit is work from a transition that would run
+    over a failed commit, and an untyped handoff's only command is `/rename`,
+    whose misfire costs nothing — holding that case too would add an approval
+    call to the common "handoff and commit" invocation for no protected state.
     """
     return (bool(transition.cmds) and memory) or (transition.typed and commit)
 

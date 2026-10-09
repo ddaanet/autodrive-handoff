@@ -1,5 +1,11 @@
 # The directive owns the procedure (2026-09-18)
 
+> **Superseded 2026-10-08** (see [The plugin becomes a
+> mod](2026-10-08-the-plugin-becomes-a-mod.md)) on two details: `restart` is
+> no longer a skill value, and the hold's first-disjunct reason is now a
+> command run at the turn's end rather than a `/rename` typed into a pane. The
+> printed procedure stands.
+
 After the checkpoint call, `skills/handoff/SKILL.md` steps 2–3 and
 `skills/precompact/SKILL.md` steps 4–5 described a cross product in prose:
 commit or not × held or armed × driven or prepared. The agent had to work out

@@ -1,5 +1,10 @@
 # The stale-clause diagnosis names /handoff:restart, not a three-way split (2026-08-10)
 
+> **Superseded 2026-10-08** (see [The plugin becomes a
+> mod](2026-10-08-the-plugin-becomes-a-mod.md)) on the name of the remedy:
+> `/handoff:restart` is gone and the refusal text names the built-in
+> `/restart`. The diagnosis stands.
+
 `brief-driven-restart.md` asked `handoff-checkpoint`'s gitlore diagnosis to
 split into "gitlore not installed here / key never set / key points at a
 path that no longer exists," quoting the diagnosis as "the gitlore plugin

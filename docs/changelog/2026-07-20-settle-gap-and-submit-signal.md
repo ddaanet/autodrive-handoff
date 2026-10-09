@@ -1,5 +1,11 @@
 # The settle gap and the submit signal (2026-07-20)
 
+> **Superseded 2026-10-08** (see [The plugin becomes a
+> mod](2026-10-08-the-plugin-becomes-a-mod.md)) wholly: the paste window,
+> `send-keys` and the Enter-and-retry submit loop it repaired no longer exist;
+> the walker is removed and the mod's `command.run` and `prompt.submit`
+> resolve when the line has taken effect.
+
 The first live run submitted line 1 and silently failed to submit line 2; the
 operator pressed Enter without it being obvious that the watcher had not.
 

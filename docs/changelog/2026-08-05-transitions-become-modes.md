@@ -1,5 +1,10 @@
 # Transitions become modes of the two boundary skills (2026-08-05)
 
+> **Superseded 2026-10-08** (see [The plugin becomes a
+> mod](2026-10-08-the-plugin-becomes-a-mod.md)) on the wording of the hold:
+> what a held transition protects is now a command run at the turn's end, not
+> keystrokes into a pane. The fields-not-skills decision stands.
+
 `handoff-continue` and `compact-continue` are deleted. What they added over
 their siblings — the transition command and the continuation prompt — becomes
 two payload fields, decided by the base skill the same way `commit` already

@@ -1,5 +1,11 @@
 # 2026-07-29 — Driven transitions
 
+> **Superseded 2026-10-08** (see [The plugin becomes a
+> mod](2026-10-08-the-plugin-becomes-a-mod.md)) on the delivery machinery: one
+> walker typing into the composer, the tmux check and the paste-outside-tmux
+> fallback are replaced by the mod's drive. The kinds, the one sentinel, the
+> optional continuation and the prepare-only compact stand.
+
 Splits the drive-the-TUI half out of `precompact` into its own skill, adds
 the symmetric skill for the `/clear` boundary, and replaces the three
 one-off TUI drivers with a single armed-transition mechanism that both

@@ -1,5 +1,11 @@
 # Mid-turn TUI input: the taxonomy that shapes compaction driving (2026-07-19)
 
+> **Superseded 2026-10-08** (see [The plugin becomes a
+> mod](2026-10-08-the-plugin-becomes-a-mod.md)) on the delivery it shaped: the
+> taxonomy stands as a fact about the TUI, but nothing is typed into a pane
+> any more. The mod runs the lines only at `turn.complete`, after the turn is
+> over, so the idle gate this entry motivated is gone.
+
 The precompact-drive spec (`docs/2026-07-18-precompact-drive-design.md`)
 proposed typing `/compact` and a continuation prompt into the pane via a
 watcher spawned at `PostToolUse` time. That rested on an assumption carried

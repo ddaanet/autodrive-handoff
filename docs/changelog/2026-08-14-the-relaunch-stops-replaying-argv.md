@@ -1,5 +1,9 @@
 # 2026-08-14 — The relaunch stops replaying argv
 
+> **Superseded 2026-10-08** (see [The plugin becomes a
+> mod](2026-10-08-the-plugin-becomes-a-mod.md)) wholly: the `restart` kind is
+> removed, so nothing composes or replays a relaunch line.
+
 The first fully unattended driven restart landed, and its command line read:
 
 ```

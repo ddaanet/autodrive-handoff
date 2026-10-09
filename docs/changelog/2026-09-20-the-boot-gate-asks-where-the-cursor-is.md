@@ -1,5 +1,9 @@
 # 2026-09-20 — The boot gate asks where the cursor is
 
+> **Superseded 2026-10-08** (see [The plugin becomes a
+> mod](2026-10-08-the-plugin-becomes-a-mod.md)) wholly: the boot gate and the
+> cursor predicates are removed with the walker.
+
 The second end-to-end dogfood of a driven restart lost its continuation line
 the same way the first one did, through the gate added to stop it:
 

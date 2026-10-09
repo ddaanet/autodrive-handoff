@@ -15,7 +15,7 @@ HANDOFF_REL_TASK=".claude/handoff-task.md"
 # docs/changelog/2026-07-23-overflow-deserves-persistence.md.
 # shellcheck disable=SC2034
 HANDOFF_REL_TODO=".claude/handoff-todo.md"
-# The transition. One composer, one session, at most one transition in flight —
+# The transition. One session, at most one transition in flight —
 # so one file, whose *body* names both the transition and where it has got to.
 # Line 1 is the state (armed -> pending -> gone), line 2 the kind. See
 # docs/design/decisions.md, "The armed transition is one file whose body
@@ -133,7 +133,7 @@ _handoff_drive_prose() {
 #
 #   held <session-id>
 #            written, but not yet the turn's to arm: a memory approval or,
-#            ahead of a typed transition, the turn's commit is outstanding,
+#            ahead of a driven transition, the turn's commit is outstanding,
 #            and handoff-approved is what releases it. The session
 #            id is the one whose approval it waits on — the state that outlives
 #            its turn by design is the one that must say whose turn
@@ -142,10 +142,10 @@ _handoff_drive_prose() {
 #
 #   rename   /rename <title>
 #   compact  /compact [directive]         [+ continuation prose]
-#   compact  (kind line alone: a transition is expected, nothing is typed)
+#   compact  (kind line alone: a transition is expected, nothing runs)
 #   clear    /rename <title>, /clear      [+ continuation prose]
 #
-# The continuation is optional on both driven kinds: typing the transition and
+# The continuation is optional on both driven kinds: running the transition and
 # submitting a prompt into what it opens are separate decisions, and the payload
 # the checkpoint composes this file from carries them as separate fields.
 #

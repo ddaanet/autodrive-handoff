@@ -2,23 +2,18 @@
 
 Part of [handoff — Design](../design.md).
 
-One skill per boundary, plus the rename and the restart:
+One skill per boundary, plus the rename:
 
 | boundary | skill | transition field |
 |---|---|---|
 | compaction | `/handoff:precompact` | `compact`: `false` \| `true` \| `"<directive>"` |
 | clear | `/handoff:handoff` | `clear`: `false` \| `true` |
 
-`/handoff:restart` is a fourth, separate skill rather than a third row in
-this table — it shares the driven-transition machinery (a `kind` in
-the same sentinel, the same walker) but not the boundary shape: no commit
-awareness, no task/todo drafting, no prepare-only reading, because nothing
-inside a live session can adopt an upgraded plugin, hook, MCP server, or
-`settings.json` — those resolve once, at process startup, so exit-and-relaunch
-is the only remedy and it is always typed, never merely prepared. See
-[Driving the TUI](driving-the-tui.md) for the kind itself.
+There is no restart skill: Claude Code's own `/restart` relaunches with
+`--resume`, which carries the conversation over whole, so there is no
+boundary for this plugin to cross and no frame to carry.
 
-`/handoff:pending` is a fifth skill with no design surface at all: it reports
+`/handoff:pending` is a fourth skill with no design surface at all: it reports
 the `## Current task`, `## Open decisions` and `## Remaining` sections of the
 frame already injected into context, making no tool call and writing no file.
 It appears nowhere else in the design because there is nothing else to say
@@ -26,8 +21,8 @@ about it.
 
 The judgment is per-boundary, not per-drive-mode: commit awareness, memory
 capture, the task/todo drafting rules and the file-vs-prompt seam are
-identical whether or not the agent types the command afterwards. So whether
-the transition is typed is a **field of the payload**, decided the way
+identical whether or not the plugin runs the command afterwards. So whether
+the transition is driven (the code's `typed`) is a **field of the payload**, decided the way
 `commit` already is — one fact the agent supplies, everything downstream
 deterministic — rather than a skill of its own.
 
@@ -48,10 +43,10 @@ precompact  compact:true|"…"     continue:null   compact, then stop
 precompact  compact:true|"…"     continue:"…"    compact and continue
 ```
 
-The transition field is named after the command it types, and its value is
+The transition field is named after the command it runs, and its value is
 that command's argument: `/clear` takes none, so it is a bool; `/compact`
 takes an optional focus directive, so it is a bool or the directive itself.
-`false` does not mean "no sentinel" — it means the command is not typed.
+`false` does not mean "no sentinel" — it means the command is not run.
 
 What the separate skills bought, and what this gives up, is that the
 transition was settled by *which name the description matched* rather than
@@ -67,12 +62,8 @@ larger half of both descriptions, since that is the reading a bare
   directive is composed — its description promises no memory write, and a
   memory directive is an instruction to make one. For `/btw` side
   conversations and any session worth a name while the main thread stays
-  live.
-- **`/handoff:restart`** — exit and relaunch, neither boundary either. Its
-  whole payload is `{"skill": "restart", "continue": …}`: no title (a
-  restart renames nothing), no task/todo, no commit awareness, and every
-  boundary field is a schema error under it by the same key-presence rule
-  autoname uses. No directive is composed, for the same reason as autoname —
-  nothing here implies a memory write. Unlike autoname it does carry
-  `continue`, since a restart can still be handed a continuation prompt for
-  the far side.
+  live. It is a skill rather than a mod command because the host refuses a
+  command run from inside a command handler: the rename would land one
+  ordinary turn late, and never under `-p`. The checkpoint call composes a
+  `rename` sentinel and the mod runs it when the turn ends, like any other
+  kind ([Driving the transition](driving-the-transition.md)).

@@ -1,5 +1,10 @@
 # The design doc becomes a hub (2026-09-20)
 
+> **Superseded 2026-10-08** (see [The plugin becomes a
+> mod](2026-10-08-the-plugin-becomes-a-mod.md)) on one name: the node `driving-the-tui.md`
+> this entry links is now `driving-the-transition.md`, rewritten for the mod. The
+> hub split itself stands.
+
 `docs/design.md` was 1248 lines — three times the 400-line soft cap this repo
 applies to anything a reader takes in at one go. It got there the way living
 docs do: every design change rewrites the prose it invalidates and adds the

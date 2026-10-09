@@ -1,5 +1,10 @@
 # 2026-08-10 — A fourth transition kind: exit and relaunch, conversation intact
 
+> **Superseded 2026-10-08** (see [The plugin becomes a
+> mod](2026-10-08-the-plugin-becomes-a-mod.md)) wholly: the `restart` kind,
+> its skill, `session-end.sh`, `load-restart.sh` and the `/exit` and relaunch
+> lines are removed. Claude Code's built-in `/restart` replaces them.
+
 The design brief, including the probe evidence establishing that hook
 registration is per-process and that `SessionEnd` carries a `reason`, is
 [`brief-driven-restart.md`](../../brief-driven-restart.md) (repo root). This

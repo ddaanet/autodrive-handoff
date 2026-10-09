@@ -1,5 +1,9 @@
 # 2026-08-14 — The relaunch is typed by name, so it re-enters the shims
 
+> **Superseded 2026-10-08** (see [The plugin becomes a
+> mod](2026-10-08-the-plugin-becomes-a-mod.md)) wholly: the `restart` kind is
+> removed, so there is no relaunch line to type by name.
+
 The restart that exposed [the dispatch
 defect](2026-08-14-resume-line-dispatch.md) came up with gitlore reporting
 

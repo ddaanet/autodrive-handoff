@@ -1,5 +1,9 @@
 # 2026-08-13 — Restart drive repair
 
+> **Superseded 2026-10-08** (see [The plugin becomes a
+> mod](2026-10-08-the-plugin-becomes-a-mod.md)) wholly: the `restart` kind and
+> the walker's shell-line path are removed.
+
 The first driven `restart` to run end to end failed twice over, and both
 failures have one root: nothing in the plugin ever identified the `claude`
 process. `handoff_resume_command` assumed `$PPID` was it; `_drive_shell_line`

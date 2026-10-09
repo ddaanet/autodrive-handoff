@@ -26,7 +26,7 @@ Decide the following from the request and the state of the work. None of
 them has a default: a default is the answer given by an agent that never
 considered the question, and considering it is the whole contribution.
 
-**Is the transition typed?** `compact: true` when the user asked for the
+**Is the transition driven?** `compact: true` when the user asked for the
 compaction to be carried out — "compact and continue", "compact then
 continue" — or the focus directive itself (`compact: "keep the parser
 work"`) when one would help the summariser keep the right material.
@@ -35,16 +35,16 @@ work"`) when one would help the summariser keep the right material.
 **is** the authorization to compact; do not ask whether to proceed.
 
 Even under `compact: false` the checkpoint writes the transition file.
-Nothing is typed; what it records is that a compaction is *expected*,
+Nothing runs; what it records is that a compaction is *expected*,
 which is what the frame's re-injection is gated on. Without it the
 compaction re-injects nothing and the summariser's paraphrase is all that
 survives of the files just written.
 
 **Is there a continuation prompt?** `continue` is one line of prose,
 submitted into the compacted context, or `null` when nothing follows it.
-It is only meaningful alongside a typed transition — nothing would type it
+It is only meaningful alongside a driven transition — nothing would submit it
 otherwise, and the checkpoint rejects the combination. Author it
-**silently**: it is typed visibly into the composer and lands in
+**silently**: it is submitted visibly as the next prompt and lands in
 scrollback, so reprinting it in the reply shows the same text twice with
 no veto value.
 
@@ -115,9 +115,9 @@ checkpoint call, and its output is one part, naming the line to end on.
 - Running `/compact` yourself, or telling the user to run it under a driven
   transition. Both are settled by the request and the armed file.
 - Reprinting the continuation prompt, or printing the `/compact` line, as
-  something for the user to run. There is one producer of that pasteable
-  form and it is the hook, for the case where the drive mod never loaded.
-- Authoring a continuation prompt for a prepared compaction. Nothing types
+  something for the user to run. When the drive does not run, the plugin
+  prints the lines itself.
+- Authoring a continuation prompt for a prepared compaction. Nothing submits
   it, and the checkpoint rejects it.
 - Writing `.claude/autodrive` directly. The checkpoint composes it from the
   payload; a hand-written one is a second writer of the same channel.

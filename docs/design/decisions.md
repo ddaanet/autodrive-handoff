@@ -91,37 +91,23 @@ commit intent, the todo list — is either asked of the agent or not asked at
 all, because keying on tool names in JSONL is a maintenance trap the harness
 has already sprung once.
 
-**Nothing that asks whether an action took effect reads the pane.** Every
-pane-derived predicate is a guess about undocumented chrome, and three
-independent ones failed: a stale scrollback timer reading as busy, a queued
-submit showing no spinner, a 103-second compaction showing none either.
-Confirmation comes from harness-authoritative signals — a file the
-transition's own `SessionStart` consumes, or the session transcript. The
-rule holds without exception: the rename was the last holdout, confirming by
-grepping the pane for the title's first 20 characters, which matches
-whenever the title is on screen for any other reason. It now counts
-`custom-title` entries in the transcript, and the harness's own auto-titling
-writes a distinct `type`, so an exact match cannot false-positive on it.
-[The submit signal, a third
-time](../changelog/2026-07-22-confirm-the-compaction.md)
-
 **The armed transition is one file whose body names the transition.** One
-composer, one session, at most one transition in flight — so the invariant
-needs somewhere to live, and the filename is not it. While identity sat in
-the name (`autorename`, `autocompact`), each instance cost a full parallel
-pipeline: a constant pair, a validator, a `Stop` arm, a watcher, a failure
-channel, a stale sweep. Two `Stop` hooks would then race for one composer
-whenever both files existed, and nothing anywhere represented the fact that
-they could not both be armed. Moving the kind into the body makes the
-invariant structural, and collapses three watchers into one walker.
+session, at most one transition in flight — so the invariant needs somewhere
+to live, and the filename is not it. While identity sat in the name
+(`autorename`, `autocompact`), each instance cost a full parallel pipeline: a
+constant pair, a validator, an arm step, a driver, a failure channel, a stale
+sweep. Two arm steps would then race whenever both files existed, and nothing
+anywhere represented the fact that they could not both be armed. Moving the
+kind into the body makes the invariant structural, and collapses three drivers
+into one.
 [Driven transitions](../changelog/2026-07-29-driven-transitions.md)
 
 **The transition carries its own state.** There is exactly one transition in
 flight at a time, and two filenames were one object at two points in its
 life — so every gate read the point it cared about by choosing a name, and
-the machine between them existed only as `mv` calls scattered across four
-hooks. Line 1 of `.claude/autodrive` is the state and the gates are state
-checks, which is the same guarantee stated directly: `Stop` will not re-arm
+the machine between them existed only as `mv` calls scattered across
+several hooks. Line 1 of `.claude/autodrive` is the state and the gates are state
+checks, which is the same guarantee stated directly: `drive-take.sh` will not take
 something already in flight, and the sweep will not take something
 legitimately mid-window. Adding a state is now a value, not a filename and
 four new gates. The state being content rather than a name also makes a
@@ -132,13 +118,25 @@ state](../changelog/2026-08-03-one-transition-one-file.md)
 
 **Observability is not gated on the happy path.** A clean run says nothing
 about whether a dirty one would be noticed, and the failing run is exactly
-the one nobody is watching. Every non-delivery path a watcher can observe
-itself writes a reason to a file. Nothing is inferred from state that is
-legitimately present (a file in state `pending` during the whole Stop →
-compaction window): a false-positive-free signal is worth the tail of
-watchers killed outright.
+the one nobody is watching. The drive runs after the turn that armed it, so a
+rejected line has no one to tell; every non-delivery the mod observes itself
+writes a reason to a file, and the next prompt reports it. Nothing is inferred
+from state that is legitimately present (a file in state `pending` during the
+whole window between the take and the transition): a false-positive-free
+signal is worth the tail of failures that never reach it.
 [A detached watcher's failure has to become a
 file](../changelog/2026-07-20-watcher-failure-becomes-a-file.md)
+
+**The drive runs inline at `turn.complete`, never from `Stop`.** The host
+refuses `$.command.run` from a call context the turn is waiting on, and a
+timer started there inherits the context, so deferring from `Stop` does not
+help; under `-p` a timer fires after the session is gone. `Stop` only records the
+cwd, which keeps the guarantee that an interrupt arms nothing, and the drive
+awaits each command in the first handler the host allows. The sentinel is read
+by `drive-take.sh` and by nothing in the mod: one parser, and the atomic state
+change is a file operation the mods API does not offer.
+[The plugin becomes a mod](../changelog/2026-10-08-the-plugin-becomes-a-mod.md),
+[the mechanism](driving-the-transition.md)
 
 **A foreign tool's state file is detected by liveness, not presence.**
 Layouts move and the old path becomes a declared stray; abandoned files are
@@ -212,28 +210,3 @@ once](../changelog/2026-08-11-decide-with-zero-tool-calls.md),
 step](../changelog/2026-09-17-memory-moves-inside-the-deciding-step.md),
 [The directive owns the
 procedure](../changelog/2026-09-18-the-directive-owns-the-procedure.md)
-
-**The composer row is identified by its U+00A0 gap.** The TUI pads its composer
-glyph with a no-break space; a shell prompt pads the same glyph with an ordinary
-one. That single character is what separates a live composer from a `❯` sitting
-in a prompt or in scrollback, and without it the boot gate opens at the shell
-and a driven restart's continuation is typed into a terminal reading nothing.
-The gap's *width* stays derived from the captured line, so what is pinned is the
-one value that is not layout — and the evidence it can carry that weight is that
-it has already been what separates a real pane from a composed one, in
-2026-08-13's inverted `is_typing`. The direction of failure is the other half: a
-Claude Code that stops emitting it leaves no row reading as a composer, so
-nothing is typed and the walker reports, with `just tui-conformance` seeing it
-before production does. [The mechanism](driving-the-tui.md), [The composer row
-carries its own
-gap](../changelog/2026-09-22-the-composer-row-carries-its-own-gap.md)
-
-**Nothing about the exiting process is read.** A driven restart once
-identified it by a bounded parent-chain walk, to replay its argv — `$PPID`
-inside a hook is the `/bin/sh -c` wrapper Claude Code spawns, whose argv is
-the hook command line, so the naive reading relaunched the hook itself. The
-walk fixed that and the replay then compounded the launcher's flags one copy
-per restart, so both are gone: the line is composed from the session id alone,
-and the one thing still needed from that process — the moment it lets go of
-the terminal — is read from the pane, not from the process table.
-[The relaunch stops replaying argv](../changelog/2026-08-14-the-relaunch-stops-replaying-argv.md)

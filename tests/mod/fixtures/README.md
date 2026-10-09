@@ -3,12 +3,12 @@
 Each `*.json` file is the exact stdout of `scripts/drive-take.sh <cwd>` for one
 sentinel case: one line of compact JSON plus a trailing newline. The token
 `@ROOT@` stands for the absolute session root (the cwd, or the worktree root);
-`tests/drive-take.bats` substitutes it before comparing. The mod tests (step 3)
+`tests/drive-take.bats` substitutes it before comparing. The mod tests
 stub `process.run` with the same files, substituting the same way.
 
 Empty stdout (no fixture) means nothing is armed: no file, `pending`, `held`.
 
-Choices the contract fixed for `drive-take.sh` (the walker-era `stop-drive.sh` it replaced was silent on them):
+Choices the contract fixes for `drive-take.sh`:
 - Key order is `kind, before, after, failFile, message`; `failFile` is always
   `<root>/.claude/autodrive.failed`, even when the plan carries no lines.
 - `message` is `handoff: will run <before[0]> once the turn ends.`

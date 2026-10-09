@@ -1,5 +1,10 @@
 # The submit signal, again: is_busy false-fails a queued continuation (2026-07-22)
 
+> **Superseded 2026-10-08** (see [The plugin becomes a
+> mod](2026-10-08-the-plugin-becomes-a-mod.md)) wholly: no submit is confirmed
+> by the pane or by `is_busy`; `prompt.submit` resolves when the turn starts,
+> and a rejection is recorded.
+
 The prior section ([The settle gap and the submit
 signal](2026-07-20-settle-gap-and-submit-signal.md)) moved line-2
 confirmation to `is_busy` — "the turn actually started" — over the

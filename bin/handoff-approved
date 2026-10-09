@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # handoff-approved: arm the transition the checkpoint left held.
 #
-# The checkpoint writes a transition-typing sentinel in state `held` when a
-# memory approval is outstanding, so the keystrokes cannot reach a pane whose
-# turn is about to end on that question, or when a typed transition follows a
-# commit this turn owes, so it cannot run over a commit that failed. This is
+# The checkpoint writes a sentinel naming commands in state `held` when a
+# memory approval is outstanding, so the drive cannot run them at the end of a
+# turn that is about to end on that question, or when a driven transition
+# follows a commit this turn owes, so it cannot run over a commit that failed. This is
 # the one command that leaves that state, and the directive the checkpoint
 # printed is what names it.
 #

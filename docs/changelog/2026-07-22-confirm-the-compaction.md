@@ -1,5 +1,11 @@
 # The submit signal, a third time: confirm the compaction, not the keystroke (2026-07-22)
 
+> **Superseded 2026-10-08** (see [The plugin becomes a
+> mod](2026-10-08-the-plugin-becomes-a-mod.md)) on how a line is confirmed:
+> the confirmation primitives are removed with the walker.
+> `command.run('compact')` resolves when the compaction has finished, and the
+> confirming `SessionStart` still consumes the `pending` sentinel.
+
 "A long, reliably-busy operation the spinner shows at once" was an assumption,
 never a measurement. A live run falsified it: `/compact` was typed, Entered,
 submitted at 20:06:46, and the compaction ran for 103 seconds — and the watcher

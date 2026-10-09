@@ -1,5 +1,11 @@
 # 2026-08-10 — Held names its owner, and holds whatever types
 
+> **Superseded 2026-10-08** (see [The plugin becomes a
+> mod](2026-10-08-the-plugin-becomes-a-mod.md)) on the hazard it describes: a
+> held transition guards against the mod running `/rename` and `/clear` at the
+> end of a turn that is asking a question, not against a walker typing into a
+> pane. Holding by owner stands.
+
 A code review of `7525961..HEAD` returned five confirmed defects. Two were
 stateful hazards around the `held` state introduced in `617505b`; the rest were
 validation gaps and one latent crash. This entry records the two design changes.

@@ -1,5 +1,9 @@
 # 2026-08-14 — The relaunch line is dispatched by its command, not a prefix
 
+> **Superseded 2026-10-08** (see [The plugin becomes a
+> mod](2026-10-08-the-plugin-becomes-a-mod.md)) wholly: there is no relaunch
+> line and no walker to dispatch it.
+
 The second driven `restart` typed its relaunch line into the shell and stopped
 there. The line sat at the prompt, correct and complete, waiting for an Enter
 nobody had sent; the user pressed it by hand. The failure report named the

@@ -1,5 +1,10 @@
 # One transition, one file, explicit state (2026-08-03)
 
+> **Superseded 2026-10-08** (see [The plugin becomes a
+> mod](2026-10-08-the-plugin-becomes-a-mod.md)) on the consumers: the `Stop`
+> arm and the walker are `drive-take.sh` and the mod. One file whose first
+> line is its state stands.
+
 There is exactly one transition in flight at a time, and its state was encoded
 in the filename. `.claude/autodrive` and `.claude/autodrive.pending` are not
 two files — they are one object at two points in its life, and every consumer

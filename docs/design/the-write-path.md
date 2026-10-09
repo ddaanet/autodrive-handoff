@@ -93,11 +93,9 @@ empty, composes `.claude/autodrive` from the transition fields, leaves
 `.claude/checkpoint-manifest` behind, and prints on stdout what the agent
 does next (see [What the checkpoint
 prints](the-checkpoint-directive.md#what-the-checkpoint-prints)). It **changes no git
-state** and touches tmux not at all — it queries git read-only and stops
-there: it runs in the agent's
+state** — it queries git read-only and stops there: it runs in the agent's
 sandboxed Bash, where `git add` can leave `.git/index.lock` behind and fail
-the *next* command (which in the routine wrap-up is the user's `/commit`),
-and where tmux is unreachable. `PostToolUse(Bash)` (`bash-post.sh`) consumes
+the *next* command (which in the routine wrap-up is the user's `/commit`). `PostToolUse(Bash)` (`bash-post.sh`) consumes
 the manifest instead — `git add -f` for every listed path, deletions
 included, and a path it could not stage named on both channels rather than
 dropped from the counts — that name carries the whole report, a hook's stderr
@@ -112,18 +110,18 @@ index never held. `git add -f` exits 128 there with `did not match any
 files`, and that is the one benign failure in this loop. The guard's own exit
 status is read rather than inferred from its empty output, a failing `ls-files`
 being a repository `add` could not have staged into either. Staging is all it does: a sentinel the checkpoint
-wrote is armed at `Stop` like any other, so spawning the walker here would
-type into a live turn, which is the one thing the `Stop` gate exists to
-prevent.
+wrote is taken at the end of the turn like any other, so consuming it here
+would run a transition inside a live turn, which is the one thing the drive's
+turn-end gate exists to prevent.
 
 `file present ⟹ content pending` is an invariant two writers enforce
 (`checkpoint.py` and `write-stage.sh`, the latter through a
 `_checkpoint_lib.py --is-empty-body` subprocess spawn so the two cannot
 disagree about what counts as empty), not an instruction the agent has to
-remember. `checkpoint.py` and `_checkpoint_lib.py` (with `drive_when_idle.py`
-and `_watcher_lib.py`, in [Driving the TUI](driving-the-tui.md)) are a
+remember. `checkpoint.py` and `_checkpoint_lib.py` are a
 2026-08-10 Python port of what was
-`checkpoint.sh` + `_checkpoint-lib.sh`: both did bash's worst work —
+`checkpoint.sh` + `_checkpoint-lib.sh` (the walker that was ported with them is
+gone: [Driving the transition](driving-the-transition.md)): both did bash's worst work —
 structured data, not text streams — and both run once per boundary, never on
 a hot path, so the interpreter-startup tax lands where it is cheapest to pay.
 The six event hooks that fire on every tool call stay bash. See

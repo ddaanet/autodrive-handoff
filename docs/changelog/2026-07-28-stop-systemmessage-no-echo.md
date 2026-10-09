@@ -1,5 +1,10 @@
 # Stop's systemMessage stops echoing the compact directive (2026-07-28)
 
+> **Superseded 2026-10-08** (see [The plugin becomes a
+> mod](2026-10-08-the-plugin-becomes-a-mod.md)) wholly: the `Stop` hook that
+> armed the walker and its confirmation message are removed; the mod toasts
+> the first line it will run.
+
 `stop-compact.sh`'s `systemMessage` used to interpolate the full `$COMPACT_L1`
 (`/compact <directive text>`) into the arming confirmation: `will run
 "/compact <directive>" once the prompt is idle …`. The directive can be long

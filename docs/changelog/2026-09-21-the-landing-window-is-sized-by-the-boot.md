@@ -1,5 +1,9 @@
 # 2026-09-21 — The landing window is sized by the boot, not a settle
 
+> **Superseded 2026-10-08** (see [The plugin becomes a
+> mod](2026-10-08-the-plugin-becomes-a-mod.md)) wholly: the landing windows
+> and the timing log are removed with the walker.
+
 The gate added the day before was right and the number behind it was sized on
 a reading of the measurement that the measurement does not support. The
 2026-09-20 row typed a marker every 250ms across a `claude --resume` boot and

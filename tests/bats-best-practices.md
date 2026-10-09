@@ -403,9 +403,8 @@ STUB
 }
 ```
 
-This is exactly the pattern `watcher-test.bats` uses to stub `tmux`
-(a per-test `$STUBDIR` script that logs `send-keys` and emits scripted
-`capture-pane` output). Reviewer expectations for a PATH stub: it lives
+This is the pattern `hook-test.bats` uses to stub a command (a per-test
+`$STUBDIR` script that logs its arguments and emits scripted output). Reviewer expectations for a PATH stub: it lives
 under a bats tmpdir (auto-cleaned), it is `chmod +x`, and it is put on
 `PATH` only for the call under test (`run env PATH=… cmd`) so it can't
 leak into other tests. Prefer this over rewriting the script under test

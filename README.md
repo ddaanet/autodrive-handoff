@@ -15,16 +15,12 @@ Two skills sit on that seam, one per boundary:
 | **before `/compact`** | `/handoff:precompact` |
 
 Each one either prepares and stops — writing the task file and leaving you
-to type the command — or, under tmux, carries the transition out for you,
-typing the command and a one-line prompt that resumes the work on the far
-side. Which one you get is decided by what you ask for.
-`/handoff:autoname` is a third skill: the rename alone, for a session worth
-a title while the main thread stays live. `/handoff:restart` is a fourth:
-exit and relaunch with `--resume`, for when a plugin upgrade, a
-`hooks.json` edit, or any other config only a fresh process picks up needs
-adopting — the conversation carries over whole, so unlike `/clear` it costs
-no context at all.
-`/handoff:pending` is a fifth: it lists the pending items — open decisions
+to run the command — or carries the transition out for you: the plugin's mod
+runs the command and submits a one-line prompt that resumes the work on the
+far side, once your turn ends. Which one you get is decided by what you ask
+for. `/handoff:autoname` is a third skill: the rename alone, for a session
+worth a title while the main thread stays live.
+`/handoff:pending` is a fourth: it lists the pending items — open decisions
 and remaining todos — from the task frame injected at session start or
 after a compact, with no tool calls.
 
@@ -81,9 +77,8 @@ summarisation cost — the task frame is what crosses.
 To name the session *without* a handoff — a `/btw` side conversation, or
 any session worth a title while the main thread stays live — invoke
 `/handoff:autoname`. It derives a title from the conversation and renames
-the session (via the same tmux `send-keys`-when-idle path as handoff, or
-a `/rename` line to paste outside tmux); it writes no task file and
-touches no memory.
+the session (the plugin's mod runs `/rename` when your turn ends); it
+writes no task file and touches no memory.
 
 ## Compact and continue
 
@@ -96,8 +91,8 @@ your repo is gitlore-managed, and write the task file.
 Ask for the compaction to be prepared — "precompact", "before I compact" —
 and you run `/compact` yourself; the task file is still re-injected when it
 finishes, because the skill marked the compaction as expected. Ask for it to
-be carried out — "compact and continue" — and `/compact` is typed into the
-prompt once your turn ends, and once it finishes, the task file is
+be carried out — "compact and continue" — and the plugin's mod runs
+`/compact` once your turn ends, and once it finishes, the task file is
 re-injected and a one-line continuation prompt is submitted. You do not run
 `/compact` yourself, and you do not have to type anything to resume.
 
@@ -114,19 +109,27 @@ records what landed, and a done item still listed reads as outstanding and
 gets redone. It is staged for commit like the task file — it is overflow from
 that file, so it belongs in the same trail.
 
-Driving the prompt needs tmux; outside it, the lines are printed for you to
-paste, in order. If a line fails to land — the pane was busy, you were
-mid-sentence, the command was not recognized — the watcher records why, and
-you and the agent are told at your next prompt rather than being left to
-wonder whether the transition happened. A line that cannot be confirmed
-stops the sequence, so a rename that never took costs you a wrong title and
+Carrying a transition out is done by a Claude Code mod that ships in this
+plugin (`hooks/handoff.ts`), so it **requires Claude Code 2.1.287 or newer**;
+the plugin manifest has no field to pin a minimum version, so an older
+install loads the rest of the plugin and silently skips the mod. The mod
+runs the lines when your turn ends, in order, and stops rather than
+running anything over text you have in the prompt. If a line is rejected, the mod
+records why, and you and the agent are told at your next prompt rather than
+being left to wonder whether the transition happened. A rejected line stops
+the sequence, so a rename that never took costs you a wrong title and
 nothing more.
+
+When the mod is not loaded — `--safe-mode`, or a Claude Code older than
+2.1.287 — nothing runs. The next prompt discards the stale transition, says
+so, and prints the lines for you to run yourself, in order. `/restart` is
+Claude Code's own command; this plugin has no restart skill.
 
 Use a compact-boundary skill when the work continues past a long session,
 and a clear-boundary one when the thread itself should restart. Compacting
 right before `/clear` throws away what the compaction just paid for.
 
-The agent updates auto-memory with any durable learnings, then in a single turn decides the task snapshot (if anything is outstanding), the todo remainder (if a task list is in flight), and a session title, and pipes all three to one `handoff-checkpoint` call as a JSON payload. The checkpoint writes or edits `.claude/handoff-task.md` and `.claude/handoff-todo.md`, and `.claude/autodrive` when a rename is wanted, leaving a manifest behind — an empty task or todo body removes the file rather than leaving a stale one, so content decides absence, not a wipe on activation. A `PostToolUse(Bash)` hook consumes that manifest and stages every listed path for commit (deletions included). Anything to be typed waits for the turn to end — and, when the transition is held, for the `handoff-approved` call that releases it: a `Stop` hook arms it and spawns one watcher, which types each line via tmux `send-keys` once the prompt goes idle, confirms each against the harness rather than the screen, and moves on to the next. A guard denies any direct agent Write or Edit to `.claude/handoff-task.md` — it is written by the checkpoint only. `.claude/handoff-todo.md` stays open for the agent to edit directly all session; a `PostToolUse(Write|Edit)` hook stages those edits on the spot. After `/clear` (or in a fresh session), the `SessionStart` hook assembles and injects the handoff frame into the new agent's context automatically. Auto-memory restores independently. The agent's own shell cannot see the project root, so a `PreToolUse(Bash)` hook resolves it and injects it into each `handoff-checkpoint` call as it runs, rather than sampling it once at session start. And if the session's working directory ever leaves the repo it was launched in, the next prompt says so, once per episode.
+The agent updates auto-memory with any durable learnings, then in a single turn decides the task snapshot (if anything is outstanding), the todo remainder (if a task list is in flight), and a session title, and pipes all three to one `handoff-checkpoint` call as a JSON payload. The checkpoint writes or edits `.claude/handoff-task.md` and `.claude/handoff-todo.md`, and `.claude/autodrive` when a rename is wanted, leaving a manifest behind — an empty task or todo body removes the file rather than leaving a stale one, so content decides absence, not a wipe on activation. A `PostToolUse(Bash)` hook consumes that manifest and stages every listed path for commit (deletions included). Anything to be run waits for the turn to end — and, when the transition is held, for the `handoff-approved` call that releases it: when the turn completes, the mod takes the sentinel through `scripts/drive-take.sh` and runs each line through Claude Code's own command and prompt entry points. A guard denies any direct agent Write or Edit to `.claude/handoff-task.md` — it is written by the checkpoint only. `.claude/handoff-todo.md` stays open for the agent to edit directly all session; a `PostToolUse(Write|Edit)` hook stages those edits on the spot. After `/clear` (or in a fresh session), the `SessionStart` hook assembles and injects the handoff frame into the new agent's context automatically. Auto-memory restores independently. The agent's own shell cannot see the project root, so a `PreToolUse(Bash)` hook resolves it and injects it into each `handoff-checkpoint` call as it runs, rather than sampling it once at session start. And if the session's working directory ever leaves the repo it was launched in, the next prompt says so, once per episode.
 
 In a gitlore-managed repository, handoff also offers to commit your memory:
 when the memory submodule has uncommitted changes, it drafts a commit message
@@ -136,7 +139,7 @@ to land the change that memory documents — the one you are about to make, or a
 later one — the memory rides *that* commit instead of committing separately
 first, which saves a step, and it is written as if the change has already
 happened, because it has. When that same turn also has a transition to carry
-out, the keystrokes wait for your answer — clearing or compacting first would
+out, the commands wait for your answer — clearing or compacting first would
 take away the conversation the question belongs to.
 
 ## Staleness and cleanup
@@ -174,7 +177,7 @@ Enabling both reloads the collision this split was made to remove.
 
 ## Requirements
 
-- Claude Code (depends on session JSONL format and plugin hooks)
+- Claude Code 2.1.287 or newer (the transition is run by a mod)
 - `python3` in `$PATH`
 - `jq` in `$PATH`
 
@@ -190,12 +193,11 @@ directly.
 - `handoff-todo.md` — agent-written remainder of an in-flight task list;
   staged for git automatically, same as the task file (track this).
 - `autodrive` — transient file describing the transition to carry out:
-  first line its state, second the kind (`rename`, `compact`, `clear` or
-  `restart`),
-  then the lines to type. Written by the checkpoint and by nothing else — a
-  direct agent write is denied. It starts out `held` when typing now would
-  cost you something: it would type into a pane still holding an unanswered
-  memory question, or it would carry out a transition while a commit your
+  first line its state, second the kind (`rename`, `compact` or `clear`),
+  then the lines to run. Written by the checkpoint and by nothing else — a
+  direct agent write is denied. It starts out `held` when running it now would
+  cost you something: it would run at the end of a turn that is still asking
+  an unanswered memory question, or it would carry out a transition while a commit your
   request called for has not been made yet. `handoff-approved` is the one
   command that releases it to `armed`, and the agent runs it once you have
   approved the memory summary, or once the commit has landed; otherwise the
@@ -203,10 +205,8 @@ directly.
   flight at the end of your turn its state becomes `pending`, and it is
   consumed once the transition completes. At most one exists at a time — one
   prompt, one transition.
-- `autodrive.failed` — written only when a line could not be delivered, and
-  consumed when you are told about it at your next prompt.
-- `autodrive.exited` — written only during a restart, when the session ends,
-  so the relaunch knows the `/exit` it typed actually took.
+- `autodrive.failed` — written only when a line was rejected, and consumed
+  when you are told about it at your next prompt.
 
 Both `handoff-task.md` and `handoff-todo.md` are removed when the checkpoint
 sees an empty body (the "finalize" case): invoke the skill again with
@@ -233,8 +233,6 @@ current project is modified.
   that the agent follows when you ask for a handoff.
 - [`skills/precompact/SKILL.md`](skills/precompact/SKILL.md) — the
   compact-boundary protocol.
-- [`skills/restart/SKILL.md`](skills/restart/SKILL.md) — exit and relaunch
-  with `--resume`, for config a live session cannot adopt.
 
 ## License
 

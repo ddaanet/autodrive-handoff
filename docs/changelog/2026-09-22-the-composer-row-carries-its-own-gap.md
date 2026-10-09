@@ -1,5 +1,9 @@
 # 2026-09-22 — The composer row carries its own gap
 
+> **Superseded 2026-10-08** (see [The plugin becomes a
+> mod](2026-10-08-the-plugin-becomes-a-mod.md)) wholly: the composer row and
+> its U+00A0 gap are removed with the walker's predicates.
+
 The residual the day before left open is closed, and it is closed by one
 character. `wait_for_composer` asks where the terminal cursor is, but *which*
 row it has to be at or below was still decided by the glyph alone: the last row

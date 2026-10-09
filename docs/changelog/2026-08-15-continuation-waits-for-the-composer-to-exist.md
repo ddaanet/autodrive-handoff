@@ -1,5 +1,10 @@
 # 2026-08-15 — The continuation waits for the composer to exist
 
+> **Superseded 2026-10-08** (see [The plugin becomes a
+> mod](2026-10-08-the-plugin-becomes-a-mod.md)) wholly: the continuation is
+> submitted by the mod through `prompt.submit` after `command.run` resolves,
+> with no composer to wait for.
+
 First end-to-end dogfood of a driven restart against the real product (this
 plugin's own repo, real `--plugin-dir`, real tmux pane). `/exit` and the
 relaunch both landed — the resumed session was this exact conversation,

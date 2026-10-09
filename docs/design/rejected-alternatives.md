@@ -141,33 +141,57 @@ and appealing, but a skill that types one of the two lines has no sentence
 that describes it.
 [Driven transitions](../changelog/2026-07-29-driven-transitions.md)
 
-**Every way of identifying the exiting `claude` process** — its argv was once
-replayed as the relaunch line, and three candidates were weighed for finding
-it: the hook script's grandparent (the `/bin/sh -c` wrapper survives or is
-exec-optimised away at the shell's discretion, so a fixed depth is the same
-brittleness under a different constant), a parent-chain walk by argv[0]
-basename (shipped, then withdrawn), and tmux's `#{pane_pid}` (exact and
-indifferent to the process's name, but the composer ran before the tmux check
-and had to serve the not-in-tmux paste path too, where there is no pane to
-ask). The whole question is closed rather than settled: the line is composed
-from the session id alone, so nothing identifies that process at all.
-[Restart drive repair](../changelog/2026-08-13-restart-drive-repair.md),
-[The relaunch stops replaying argv](../changelog/2026-08-14-the-relaunch-stops-replaying-argv.md)
+**Driving the TUI through tmux** — the design before the mod: a detached
+walker typed each line into the composer with `send-keys` once the pane read
+idle, behind a `Stop` hook that armed it, with a `SessionStart` loader spawning
+a second walker for the continuation. It worked, and it cost an undocumented
+surface at every step: the idle and busy chrome, the composer's layout, the
+foreground command of the pane, and a tmux that the agent's sandbox cannot
+reach and a user outside tmux does not have, which is why the lines were
+printed for pasting there. Every defect in its record was the platform moving
+under a guess about that surface. The mods API runs a command "as if the
+person typed it" and resolves when it has taken effect, so the surface the
+walker guessed at is not needed. Ruled out for good, with the whole family of
+fixes it grew: tuning its constants against a shutdown nothing bounds
+(`HANDOFF_WATCHER_SHELL_SETTLE`), a second tmux query to tell a shell's `❯`
+from the TUI's (`#{alternate_on}`), a landing window sized to a measured boot,
+and a gate that tells the composer's row apart by the U+00A0 its glyph is
+padded with.
+[Predicates match the real pane](../changelog/2026-08-13-predicates-match-the-real-pane.md),
+[The composer row carries its own gap](../changelog/2026-09-22-the-composer-row-carries-its-own-gap.md),
+[The plugin becomes a mod](../changelog/2026-10-08-the-plugin-becomes-a-mod.md)
 
-**Requiring `#{alternate_on}` for the boot gate** — the other way to keep a
-shell prompt's `❯` from reading as a live composer: Claude Code runs on the
-alternate screen, and the flag flips 0 → 1 part way through boot. It adds a
-second tmux query to a predicate family that is deliberately pure over captured
-pane text, which is what makes every one of them testable offline against
-captures and re-checkable against a live TUI, and the stub would have to answer
-a new format field. It buys nothing for the replayed-transcript glyph, which is
-already on the alternate screen and which the cursor tells apart. And it ties
-the gate to a terminal mode rather than to the composer, which is the thing the
-caller wants to know about.
-[The composer row carries its own
-gap](../changelog/2026-09-22-the-composer-row-carries-its-own-gap.md)
+**Reading the pane to confirm an action** — three independent pane-derived
+predicates failed on undocumented chrome: a stale scrollback timer reading as
+busy, a queued submit showing no spinner, and a 103-second compaction showing
+none either. Confirmation by a file the transition's own `SessionStart`
+consumes, or by the session transcript, replaced them one at a time, and the
+last pane-reading confirmation (a grep for the title's first 20 characters)
+went with the walker. With the mod the host's own resolution is the
+confirmation, so no signal is read back at all.
+[The submit signal, a third
+time](../changelog/2026-07-22-confirm-the-compaction.md)
 
-**Lengthening `HANDOFF_WATCHER_SHELL_SETTLE`** — tuning a constant against
-an unbounded shutdown. The failure returns under load, and it is silent: the
-pane looks untouched.
+**A `restart` kind, and identifying the exiting process** — an exit and
+relaunch line typed into a bare shell after `/exit`, which needed the walker to
+find a shell prompt it could not observe. Its argv replay compounded the
+launcher's flags one copy per restart, and the composed line
+`claude --resume <sid>` resolved through PATH was the fix that outlived it.
+Claude Code now ships `/restart` as a built-in, and `--resume` already carries
+the conversation whole, so the kind, its skill and its relaunch machinery are
+gone rather than ported.
+[The relaunch stops replaying argv](../changelog/2026-08-14-the-relaunch-stops-replaying-argv.md),
 [Restart drive repair](../changelog/2026-08-13-restart-drive-repair.md)
+
+**A `/autoname` mod command** — a registered command that forks a title and
+runs `/rename`. The host refuses `$.command.run` from inside a command
+handler, so the rename could land only after the next ordinary turn, and never
+under `-p`. `autoname` stays a skill whose checkpoint call composes a `rename`
+sentinel, which the drive runs at the end of the turn that wrote it.
+
+**A second parser of the sentinel in the mod** — reading
+`.claude/autodrive` from TypeScript to skip the process spawn. Four other
+readers already share `handoff_drive_read`; a fifth copy of the grammar drifts,
+and the mods API has no rename or delete for the atomic `armed` → `pending`.
+The cost it would save is paid only on the rare path: the every-turn check is a
+single `exists` on the project root.

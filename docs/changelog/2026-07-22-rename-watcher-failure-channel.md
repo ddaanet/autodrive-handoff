@@ -1,5 +1,10 @@
 # The rename watcher joins the failure channel (2026-07-22)
 
+> **Superseded 2026-10-08** (see [The plugin becomes a
+> mod](2026-10-08-the-plugin-becomes-a-mod.md)) wholly: there is no rename
+> watcher and no `is_typing` bail. `/rename` is a line of the same drive, and
+> its failure is recorded like any other line's.
+
 The 2026-07-20 pass gave the compaction watchers a way to report a line that
 never landed and left the rename watcher out, even while naming its `is_typing`
 bail as the archetype of "the same shape [that] used to `exit 0`,

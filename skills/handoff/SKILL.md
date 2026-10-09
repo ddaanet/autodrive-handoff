@@ -29,7 +29,7 @@ tool calls allowed before `handoff-checkpoint`.
 Decide the following from the request and the state of the work. None of
 them has a default: considering the question is the whole contribution.
 
-**Is the transition typed?** `clear: true` when the user asked for the
+**Is the transition driven?** `clear: true` when the user asked for the
 reset to be carried out — "clear and continue", "continue in a new
 session", "pick this up in a new chat". `clear: false` when they are
 preparing one they will run themselves — "save handoff", "before I clear",
@@ -39,9 +39,9 @@ clear; do not ask whether to proceed.
 **Is there a continuation prompt?** `continue` is one line of prose,
 submitted into the session the clear opens, or `null` when nothing follows
 it. The seam section below decides what it carries. It is only meaningful
-alongside a typed transition — nothing would type it otherwise, and the
-checkpoint rejects the combination. Author it **silently**: it is typed
-visibly into the composer, so reprinting it in the reply shows it twice.
+alongside a driven transition — nothing would submit it otherwise, and the
+checkpoint rejects the combination. Author it **silently**: it is submitted
+visibly as the next prompt, so reprinting it in the reply shows it twice.
 
 **Does the ask imply a commit?** Two answers of equal weight:
 
@@ -164,7 +164,7 @@ Todo file rules:
 ## The seam: files vs. continuation prompt
 
 Both files are re-injected verbatim on the far side of the transition. The
-continuation prompt is one line typed into a composer. So they carry
+continuation prompt is one line submitted as a prompt. So they carry
 different things:
 
 - **Task file** — current task state alone: in-flight threads, what needs
@@ -189,8 +189,7 @@ this conversation. Name the next action, not the topic.
 - Good: `continue with the parser tests per the task file`
 - Bad: `continue` / `keep going with the plugin work`
 
-It must be a **single line**: one Enter is one submit, so an embedded
-newline would submit it early.
+It must be a **single line**: it is submitted as one prompt.
 
 ## Anti-patterns
 
@@ -217,8 +216,8 @@ newline would submit it early.
 - Asking whether to clear, or telling the user to run `/clear`, under a
   driven transition. Both are settled by the request and the armed file.
 - Reprinting the continuation prompt, or printing the `/clear` line, as
-  something for the user to run. The hook is the one producer of that
-  pasteable form.
+  something for the user to run. When the drive does not run, the
+  plugin prints the lines itself.
 - Writing `.claude/autodrive` directly. The checkpoint composes it from
   the payload; a hand-written one is a second writer of the same channel.
 

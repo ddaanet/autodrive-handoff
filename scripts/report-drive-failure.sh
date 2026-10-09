@@ -131,16 +131,16 @@ fi
 # another session was reclassified above, because the approval it waits on
 # cannot arrive and handoff-approved would otherwise arm it into this
 # conversation.
-paste=""   # the armed lines, for the user to type in order
+armed_lines=""   # the armed lines, for the user to type in order
 if [[ -n "$drive_state" && "$drive_state" != "pending" && "$drive_state" != "held" ]]; then
     rm -f "$drive"
     if [[ "$drive_state" == "armed" ]]; then
         msgs+=("stale autodrive discarded — the drive mod did not run it")
         notes+=("A .claude/autodrive file was still armed when this turn began, so the transition it described did not run. Most likely the drive mod did not load (--safe-mode, or a Claude Code older than 2.1.287); an interrupt or crash that ended the turn before it was taken leaves the same trace. The file has been discarded, so it cannot fire into unrelated work later.")
         if (( ${#drive_lines[@]} > 0 )); then
-            paste="$(printf '%s\n' "${drive_lines[@]}")"
+            armed_lines="$(printf '%s\n' "${drive_lines[@]}")"
             notes+=("Present these lines to the user in a fenced code block, to type in order:
-$paste")
+$armed_lines")
         fi
     elif [[ "$drive_state" == "abandoned" ]]; then
         msgs+=("stale autodrive discarded — it was held by a session that is gone")
@@ -158,7 +158,7 @@ printf -v note '%s ' "${notes[@]}"
 
 # Lead with a style reset. This hook speaks only when something went wrong, and
 # the ordinary hook chatter it sits among is rendered dimmed.
-jq -nc --arg m "${msg%; }" --arg n "${note% }" --arg p "$paste" --arg lead $'\033[0m' '{
+jq -nc --arg m "${msg%; }" --arg n "${note% }" --arg p "$armed_lines" --arg lead $'\033[0m' '{
     systemMessage: ($lead + "handoff: " + $m + "." + (if $p == "" then "" else "\nType in order:\n" + $p end)),
     hookSpecificOutput: {
         hookEventName: "UserPromptSubmit",

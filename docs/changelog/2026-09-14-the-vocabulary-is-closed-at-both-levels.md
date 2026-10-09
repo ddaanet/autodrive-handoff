@@ -1,5 +1,10 @@
 # The vocabulary is closed at both levels (2026-09-14)
 
+> **Superseded 2026-10-08** (see [The plugin becomes a
+> mod](2026-10-08-the-plugin-becomes-a-mod.md)) on the `skill` vocabulary:
+> `restart` is no longer a value, so its rows in the table of forbidden fields
+> are gone. The closed vocabulary at both levels stands.
+
 The deliverable review of the payload-union job raised M3 against two places
 where the tagged union's own argument had not been carried through: the action
 objects, and the payload that holds them. Both silently discarded a key they

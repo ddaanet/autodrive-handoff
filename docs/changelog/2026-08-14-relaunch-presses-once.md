@@ -1,5 +1,9 @@
 # 2026-08-14 — The relaunch presses Enter once
 
+> **Superseded 2026-10-08** (see [The plugin becomes a
+> mod](2026-10-08-the-plugin-becomes-a-mod.md)) wholly: there is no relaunch
+> line and no Enter to press.
+
 Three driven restarts in a row left the relaunch line sitting at the shell
 prompt, typed and never submitted:
 

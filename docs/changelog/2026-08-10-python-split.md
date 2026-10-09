@@ -1,5 +1,10 @@
 # 2026-08-10 — checkpoint.sh and the watcher move to Python
 
+> **Superseded 2026-10-08** (see [The plugin becomes a
+> mod](2026-10-08-the-plugin-becomes-a-mod.md)) on the walker half:
+> `drive_when_idle.py` and `_watcher_lib.py` are removed. The `checkpoint`
+> half of the port stands.
+
 The full write-time record — the constraints, the rejected alternatives, the
 sequencing decision — is
 [`plans/2026-07-31-python-rewrite-brief.md`](../../plans/2026-07-31-python-rewrite-brief.md).

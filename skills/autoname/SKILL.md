@@ -32,9 +32,8 @@ no transition — and each is a schema error here rather than a silent
 ignore. A non-zero exit names the offending field on stderr.
 
 That is the only tool call. The checkpoint composes the transition file
-and the hooks do the rest at the end of the turn: the session is renamed
-once the turn ends; if the drive mod did not load, the next prompt prints
-the line for the user to type instead.
+and the plugin's mod runs `/rename` when the turn ends; if the mod did not
+load, the next prompt prints the line for the user to run instead.
 
 ## Anti-patterns
 

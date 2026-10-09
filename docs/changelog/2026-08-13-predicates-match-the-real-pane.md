@@ -1,5 +1,9 @@
 # 2026-08-13 — Composer predicates match the real pane
 
+> **Superseded 2026-10-08** (see [The plugin becomes a
+> mod](2026-10-08-the-plugin-becomes-a-mod.md)) wholly: the composer
+> predicates and their captured fixtures are removed with the walker.
+
 The walker had not delivered a line in some time. Every driven transition
 failed the same way, and the failure report said so:
 

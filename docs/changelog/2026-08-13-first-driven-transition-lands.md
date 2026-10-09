@@ -1,5 +1,9 @@
 # 2026-08-13 — The first driven transition to land
 
+> **Superseded 2026-10-08** (see [The plugin becomes a
+> mod](2026-10-08-the-plugin-becomes-a-mod.md)) wholly: it concerns the
+> walker's submit path against a real pane, which is removed.
+
 The composer-predicate fix shipped in `ef4e82e`. The dogfood for it was the
 obvious one: compact the session that wrote it, driven — a `/compact` carrying
 a focus directive, then a continuation prompt on the far side.

@@ -14,7 +14,7 @@ argument; read the node before making a claim about, or changing, what it
 argues. The routing table under Architecture, and the two indexes under
 Design decisions and Rejected alternatives, are the entry points.
 
-Last updated: 2026-09-22.
+Last updated: 2026-10-08.
 
 ## Problem
 
@@ -127,7 +127,7 @@ scripts' own comments, so they are fixed points: the numbering is never
 compacted, and a requirement that dies leaves its number retired rather than
 reused. They arrived from two plans with independent numbering, which is why
 the driven-transition pair is lettered — `FR-G` and `FR-H` would have
-collided as numbers.
+collided as numbers. `FR-H` is retired.
 
 **[The write path](design/the-write-path.md).**
 
@@ -156,7 +156,7 @@ collided as numbers.
   records the paths in `.claude/checkpoint-manifest` and `PostToolUse(Bash)`
   stages them.
 - **FR8** — The checkpoint composes `.claude/autodrive` from the transition
-  fields — every line that gets typed, including the `/rename` that sets the
+  fields — every line the drive runs, including the `/rename` that sets the
   session title.
 - **FR9** — Everything the agent does after the checkpoint call is printed
   by the checkpoint, in a fixed order, each part present only under its own
@@ -166,25 +166,24 @@ collided as numbers.
   order. See [The checkpoint directive](design/the-checkpoint-directive.md).
 
 **The driven transition** — argued in
-[Driving the TUI](design/driving-the-tui.md).
+[Driving the transition](design/driving-the-transition.md).
 
-- **FR-G** — The prepare-only compact path re-injects the frame. Nothing is
-  typed, but the transition is *expected*, and that expectation is what
+- **FR-G** — The prepare-only compact path re-injects the frame. Nothing
+  runs, but the transition is *expected*, and that expectation is what
   `SessionStart(compact)` gates re-injection on — otherwise a hand-typed
   `/compact` would re-inject nothing.
-- **FR-H** — A multi-line sequence re-gates on idle between lines.
-  Confirming one can take `CONSUME_TIMEOUT` (300s) and the pane is live
-  throughout, so nothing is typed without a fresh idle wait and a fresh
-  composer check.
+- **FR-H** — *Retired.* It re-gated a multi-line sequence on pane idleness
+  between lines. The drive awaits each command's own resolution and checks the
+  prompt for user text before each line, so there is no pane to re-gate on.
 
 **Constraints** — argued in [The write path](design/the-write-path.md) and
 [Scoping](design/scoping.md).
 
-- **NFR1** — No git or tmux work runs in the agent's sandboxed Bash. A
-  sandboxed `git add` can stage successfully while stranding
-  `.git/index.lock`, which fails the *next* command — in the routine wrap-up,
-  the user's `/commit` — naming a git process that does not exist; and tmux
-  is unreachable there at all. This is a constraint, not a preference.
+- **NFR1** — No git work runs in the agent's sandboxed Bash. A sandboxed
+  `git add` can stage successfully while stranding `.git/index.lock`, which
+  fails the *next* command — in the routine wrap-up, the user's `/commit` —
+  naming a git process that does not exist. This is a constraint, not a
+  preference.
 - **NFR2** — The `PostToolUse(Bash)` and `PreToolUse(Bash)` hooks fire on
   every Bash call in every session with the plugin installed. Their negative
   case is one jq parse plus, respectively, one `stat` and one substring test.
@@ -200,7 +199,7 @@ gitlore's numbering has no meaning in this repo.
 
 ## Architecture
 
-Five skills, one write path, eleven hooks, and two files that cross a
+Four skills, one write path, one mod, eight hooks, and two files that cross a
 boundary.
 
 Where the argument lives:
@@ -209,8 +208,9 @@ Where the argument lives:
   is allowed to write it, and what one checkpoint call does?
 - [The skills](design/the-skills.md) — Which skills exist, and why is the
   transition a payload field rather than a skill of its own?
-- [Driving the TUI](design/driving-the-tui.md) — How does a transition get
-  typed into the composer, and what confirms each line landed?
+- [Driving the transition](design/driving-the-transition.md) — How does the
+  plugin's mod run a transition at the end of the turn, and how is a failure
+  or a mod that never loaded reported?
 - [The checkpoint directive](design/the-checkpoint-directive.md) — What does
   the checkpoint print for the agent to do next, when is the transition held,
   and where does gitlore meet this plugin?
@@ -238,9 +238,9 @@ The standing calls, each argued in
 - **Withholding is a mechanism.**
 - **A directive is correct only where in the turn it lands.**
 - **Hooks are mechanical; anything requiring judgment is in a skill.**
-- **Nothing that asks whether an action took effect reads the pane.**
 - **The armed transition is one file whose body names the transition.**
 - **The transition carries its own state.**
+- **The drive runs inline at `turn.complete`, never from `Stop`.**
 - **Observability is not gated on the happy path.**
 - **A foreign tool's state file is detected by liveness, not presence.**
 - **A foreign ledger scopes the todo file; it does not replace it.**
@@ -248,8 +248,6 @@ The standing calls, each argued in
 - **With nothing to approve, the wrap-up completes in a single turn.**
 - **A context-size nudge was tried and dropped.**
 - **Deciding makes no tool call.**
-- **The composer row is identified by its U+00A0 gap.**
-- **Nothing about the exiting process is read.**
 
 ## Rejected alternatives
 
@@ -280,9 +278,9 @@ Ruled out, each argued in
   the resolved gate**, **`--arm` as a flag on `handoff-checkpoint`**
 - **Injecting the frame on any compaction where one exists**, **prepare-only
   with a driven continuation**
-- **Every way of identifying the exiting `claude` process**
-- **Requiring `#{alternate_on}` for the boot gate**
-- **Lengthening `HANDOFF_WATCHER_SHELL_SETTLE`**
+- **Driving the TUI through tmux**, **reading the pane to confirm an action**
+- **A `restart` kind, and identifying the exiting process**
+- **A `/autoname` mod command**, **a second parser of the sentinel in the mod**
 
 ## Non-goals
 

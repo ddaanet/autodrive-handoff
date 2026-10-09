@@ -23,6 +23,12 @@
 > sibling: under with-commit the commit lands before `autocompact` is
 > written, for the same reason.
 
+> **Superseded 2026-10-08** (see [The plugin becomes a
+> mod](2026-10-08-the-plugin-becomes-a-mod.md)) on the mechanism: the
+> compaction is run by the plugin's mod (`command.run`), not typed by a
+> watcher once the pane is idle. The decision that precompact can drive the
+> compaction stands.
+
 precompact used to end by telling the user to run `/compact`, and was
 explicitly forbidden from committing memory. Both are now inverted: the skill
 commits memory through the probe's directive and arms the compaction plus the

@@ -1,5 +1,11 @@
 # A detached watcher's failure has to become a file (2026-07-20)
 
+> **Superseded 2026-10-08** (see [The plugin becomes a
+> mod](2026-10-08-the-plugin-becomes-a-mod.md)) on who writes the file: the
+> watcher is gone. The mod writes `.claude/autodrive.failed` for the one
+> rejection it observes itself, and `report-drive-failure.sh` reads it at the
+> next prompt. The principle — a non-delivery becomes a file — stands.
+
 The second live run was clean end to end — Stop armed, `/compact` typed and
 submitted, the frame injected, the continuation auto-submitted with no keystroke
 from the operator. The task file's open decision said to add failure

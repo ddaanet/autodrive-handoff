@@ -1,5 +1,11 @@
 # A stale autocompact is one a later turn can see (2026-07-22)
 
+> **Superseded 2026-10-08** (see [The plugin becomes a
+> mod](2026-10-08-the-plugin-becomes-a-mod.md)) on who arms: the file is taken
+> by `scripts/drive-take.sh` at the turn end that follows the write, not armed
+> by a `Stop` hook. The sweep of a sentinel still `armed` at the next prompt
+> stands, and its note now names an unloaded mod as the likely cause.
+
 `stop-compact.sh` checked only that `.claude/autocompact` existed. Its header
 claimed the fail-safe direction for free: *"Stop does NOT fire on an Esc
 interrupt, so an interrupted turn cannot arm the compaction."* True of the
