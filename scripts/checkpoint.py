@@ -5,7 +5,8 @@ Reads a JSON payload on stdin, validates it against the schema (FR2 — a
 violation exits 2 naming the offending field on stderr), applies the task/todo
 tagged union — content, or an object naming an action (FR5/FR6) — writes the
 manifest (FR7), composes the sentinel (FR8), and prints the directive output
-(FR9).
+(FR9). Only `handoff` carries a `task`; `precompact` forbids the key and removes
+any task file on disk.
 
 NFR1: nothing here mutates git state — this is the agent's sandboxed Bash.
 scripts/bash-post.sh (PostToolUse(Bash), bash, unmoved) does the staging, driven
@@ -83,7 +84,7 @@ def main() -> int:
 
     manifest_lines: list[str] = []
     if skill in ("handoff", "precompact"):
-        task_action, task_content = validate_task(payload)
+        task_action, task_content = validate_task(payload, skill)
         todo_action, todo_content, todo_old, todo_new = validate_todo(payload)
         task_plan = plan_task(root, task_action, task_content)
         todo_plan = plan_todo(root, todo_action, todo_content, todo_old, todo_new)
@@ -362,8 +363,17 @@ def _reject_unknown_keys(
     err(field, f'unknown key "{extra[0]}", {{"action": "{action}"}} {takes}')
 
 
-def validate_task(payload: JSONDict) -> tuple[str, str]:
-    """("write", content) or ("clear", "")."""
+def validate_task(payload: JSONDict, skill: str) -> tuple[str, str]:
+    """("write", content) or ("clear", "").
+
+    Required under handoff. Forbidden under precompact by key presence, whatever
+    the value, and the absent key resolves to ("clear", ""): the removal runs
+    through the same plan as an explicit clear.
+    """
+    if skill == "precompact":
+        if "task" in payload:
+            err("task", 'forbidden when skill is "precompact"')
+        return "clear", ""
     if "task" not in payload:
         err("task", 'required, a content string or {"action": "clear"}')
     task = payload["task"]

@@ -332,7 +332,6 @@ def test_each_of_two_skill_values_accepted(tmp_path: Path) -> None:
         "commit": "without-commit",
         "compact": False,
         "continue": None,
-        "task": task_clear(),
         "todo": todo_keep(),
     }
     assert run_checkpoint(repo, payload).returncode == 0
@@ -373,7 +372,6 @@ def test_rename_present_under_precompact_errors(tmp_path: Path) -> None:
         "rename": "Not Allowed",
         "compact": False,
         "continue": None,
-        "task": task_clear(),
         "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)
@@ -392,7 +390,6 @@ def test_empty_or_null_rename_under_precompact_errors(
         "commit": "with-commit",
         "compact": False,
         "continue": None,
-        "task": task_clear(),
         "todo": todo_keep(),
         "rename": value,
     }
@@ -400,6 +397,96 @@ def test_empty_or_null_rename_under_precompact_errors(
     assert result.returncode == 2
     assert "rename" in result.stderr
     assert "precompact" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "value",
+    [task_content("## Current task\n\nreplacement\n"), task_clear(), None],
+    ids=["content", "clear", "null"],
+)
+def test_task_present_under_precompact_errors(tmp_path: Path, value: object) -> None:
+    """`task` is forbidden under precompact by key presence, whatever its value.
+
+    The pre-existing frame and the absent manifest pin where the check runs: a
+    payload rejected after the task half was applied would pass the message
+    assertions and still replace or remove the file.
+    """
+    repo = make_repo(tmp_path)
+    stale = "## Current task\n\nIMPORTANT UNSAVED\n"
+    (repo / ".claude" / "handoff-task.md").write_text(stale)
+    payload = {
+        "skill": "precompact",
+        "commit": "with-commit",
+        "compact": False,
+        "continue": None,
+        "todo": todo_keep(),
+        "task": value,
+    }
+    result = run_checkpoint(repo, payload)
+    assert result.returncode == 2
+    assert "task" in result.stderr
+    assert 'forbidden when skill is "precompact"' in result.stderr
+    assert (repo / ".claude" / "handoff-task.md").read_text() == stale
+    assert not (repo / ".claude" / "checkpoint-manifest").exists()
+
+
+def test_precompact_without_task_removes_pre_existing_file_manifest_records_d(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    (repo / ".claude" / "handoff-task.md").write_text("## Current task\n\nstale\n")
+    result = run_checkpoint(
+        repo,
+        precompact_payload("with-commit", todo_content("## Remaining\n\n- an item\n")),
+    )
+    assert result.returncode == 0
+    assert not (repo / ".claude" / "handoff-task.md").exists()
+    manifest = (repo / ".claude" / "checkpoint-manifest").read_text()
+    # The todo line proves the manifest is live, so the D line is a claim about
+    # the task route rather than a leftover of some other write.
+    assert "W .claude/handoff-todo.md" in manifest.splitlines()
+    assert "D .claude/handoff-task.md" in manifest.splitlines()
+
+
+def test_precompact_without_task_never_existed_writes_nothing_no_d(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    result = run_checkpoint(
+        repo,
+        precompact_payload("with-commit", todo_content("## Remaining\n\n- an item\n")),
+    )
+    assert result.returncode == 0
+    assert not (repo / ".claude" / "handoff-task.md").exists()
+    manifest = (repo / ".claude" / "checkpoint-manifest").read_text()
+    assert "W .claude/handoff-todo.md" in manifest.splitlines()
+    assert "handoff-task.md" not in manifest
+
+
+def test_precompact_task_removal_leaves_kept_todo_byte_identical(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    todo = "## Remaining\n\n- keep me\n"
+    (repo / ".claude" / "handoff-task.md").write_text("## Current task\n\nstale\n")
+    (repo / ".claude" / "handoff-todo.md").write_text(todo)
+    result = run_checkpoint(repo, precompact_payload("with-commit", todo_keep()))
+    assert result.returncode == 0
+    assert not (repo / ".claude" / "handoff-task.md").exists()
+    assert (repo / ".claude" / "handoff-todo.md").read_text() == todo
+
+
+def test_precompact_task_removal_with_todo_content_writes_the_todo(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    todo = "## Remaining\n\n- fresh item\n"
+    (repo / ".claude" / "handoff-task.md").write_text("## Current task\n\nstale\n")
+    (repo / ".claude" / "handoff-todo.md").write_text("## Remaining\n\n- old\n")
+    result = run_checkpoint(repo, precompact_payload("with-commit", todo_content(todo)))
+    assert result.returncode == 0
+    assert not (repo / ".claude" / "handoff-task.md").exists()
+    assert (repo / ".claude" / "handoff-todo.md").read_text() == todo
 
 
 @pytest.mark.parametrize("value", [{"title": "Fix parser"}, 42, ["A Title"], True])
@@ -427,7 +514,6 @@ def test_precompact_with_rename_omitted_accepted(tmp_path: Path) -> None:
         "commit": "without-commit",
         "compact": False,
         "continue": None,
-        "task": task_clear(),
         "todo": todo_keep(),
     }
     assert run_checkpoint(repo, payload).returncode == 0
@@ -632,7 +718,6 @@ def test_top_level_unknown_key_errors_under_precompact(tmp_path: Path) -> None:
         "commit": "without-commit",
         "compact": False,
         "continue": None,
-        "task": task_clear(),
         "todo": todo_keep(),
         "bogus": "x",
     }
@@ -649,23 +734,29 @@ def test_top_level_unknown_key_errors_under_autoname(tmp_path: Path) -> None:
     assert "bogus" in result.stderr
 
 
-@pytest.mark.parametrize("skill", ["handoff", "precompact"])
 @pytest.mark.parametrize(
-    ("field", "shape", "reason"),
+    ("skill", "field", "shape", "reason"),
     [
-        ("task", "null", "got null"),
-        ("task", "absent", "required"),
-        ("todo", "null", "got null"),
-        ("todo", "absent", "required"),
+        pytest.param(skill, field, shape, reason, id=f"{field}_{shape}-{skill}")
+        for skill in ("handoff", "precompact")
+        for field, shape, reason in (
+            ("task", "null", "got null"),
+            ("task", "absent", "required"),
+            ("todo", "null", "got null"),
+            ("todo", "absent", "required"),
+        )
+        # `task` is required only under handoff; precompact forbids it, and
+        # test_task_present_under_precompact_errors owns that side.
+        if not (skill == "precompact" and field == "task")
     ],
-    ids=["task_null", "task_absent", "todo_null", "todo_absent"],
 )
 def test_task_or_todo_null_or_absent_errors_naming_field(
     tmp_path: Path, skill: str, field: str, shape: str, reason: str
 ) -> None:
-    """Both `task` and `todo` are required by key presence, with no default.
+    """`todo` is required at both boundaries and `task` under handoff, by key
+    presence, with no default.
 
-    `null` and an absent key are distinct, named errors on both fields — the
+    `null` and an absent key are distinct, named errors on each field — the
     defect being fixed is an agent choosing a spelling that silently did the
     wrong thing, so both wrong spellings must fail loudly with their own
     reason, and neither may write its target file before failing. Run at both
@@ -677,9 +768,10 @@ def test_task_or_todo_null_or_absent_errors_naming_field(
         "skill": skill,
         "commit": "with-commit",
         "continue": None,
-        "task": task_clear(),
         "todo": todo_keep(),
     }
+    if skill == "handoff":
+        payload["task"] = task_clear()
     if skill == "handoff":
         payload["rename"] = "T"
         payload["clear"] = False
@@ -702,31 +794,19 @@ def test_task_or_todo_null_or_absent_errors_naming_field(
 # ==========================================================================
 
 
-@pytest.mark.parametrize("skill", ["handoff", "precompact"])
-def test_task_write_creates_file_manifest_records_w(tmp_path: Path, skill: str) -> None:
-    """Run at both boundaries: `main`'s `if skill in ("handoff", "precompact")`
-    gate must not merely validate the payload for precompact — it must also
-    apply it.
-
-    A gate narrowed to `handoff` alone would still validate a precompact payload
-    correctly and then skip the write, which every prior row here left
-    unobserved because it never ran a `precompact` payload through this
-    assertion.
-    """
+def test_task_write_creates_file_manifest_records_w(tmp_path: Path) -> None:
+    """Handoff only: precompact forbids `task`, so it never writes one."""
     repo = make_repo(tmp_path)
     content = "## Current task\n\nreal content\n"
     payload: dict[str, object] = {
-        "skill": skill,
+        "skill": "handoff",
         "commit": "with-commit",
+        "rename": "T",
+        "clear": False,
         "continue": None,
         "task": task_content(content),
         "todo": todo_keep(),
     }
-    if skill == "handoff":
-        payload["rename"] = "T"
-        payload["clear"] = False
-    else:
-        payload["compact"] = False
     result = run_checkpoint(repo, payload)
     assert result.returncode == 0
     assert (repo / ".claude" / "handoff-task.md").is_file()
@@ -1007,21 +1087,24 @@ def test_heading_indent_bound_is_markdowns_own(
 
 @pytest.mark.parametrize("skill", ["handoff", "precompact"])
 def test_todo_write_creates_file_manifest_records_w(tmp_path: Path, skill: str) -> None:
-    """Mirrors test_task_write_creates_file_manifest_records_w's own note: the
-    `precompact` half proves `main` applies the payload it validates, not merely
-    validates it."""
+    """Run at both boundaries: the `precompact` half proves `main` applies the
+    payload it validates, not merely validates it.
+
+    A gate narrowed to `handoff` alone would still validate a precompact payload
+    correctly and then skip the write.
+    """
     repo = make_repo(tmp_path)
     content = "## Remaining\n\n- an item\n"
     payload: dict[str, object] = {
         "skill": skill,
         "commit": "with-commit",
         "continue": None,
-        "task": task_clear(),
         "todo": todo_content(content),
     }
     if skill == "handoff":
         payload["rename"] = "T"
         payload["clear"] = False
+        payload["task"] = task_clear()
     else:
         payload["compact"] = False
     result = run_checkpoint(repo, payload)
@@ -1355,7 +1438,6 @@ def test_precompact_nothing_touched_manifest_still_written_empty(
         "commit": "without-commit",
         "compact": False,
         "continue": None,
-        "task": task_clear(),
         "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)
@@ -1426,7 +1508,6 @@ def test_clear_present_under_precompact_errors(tmp_path: Path) -> None:
         "clear": True,
         "compact": False,
         "continue": None,
-        "task": task_clear(),
         "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)
@@ -1440,7 +1521,6 @@ def test_compact_missing_under_precompact_errors(tmp_path: Path) -> None:
         "skill": "precompact",
         "commit": "with-commit",
         "continue": None,
-        "task": task_clear(),
         "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)
@@ -1472,7 +1552,6 @@ def test_compact_neither_boolean_nor_string_errors(tmp_path: Path) -> None:
         "commit": "with-commit",
         "compact": ["focus"],
         "continue": None,
-        "task": task_clear(),
         "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)
@@ -1487,7 +1566,6 @@ def test_empty_compact_directive_errors(tmp_path: Path) -> None:
         "commit": "with-commit",
         "compact": "",
         "continue": None,
-        "task": task_clear(),
         "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)
@@ -1502,7 +1580,6 @@ def test_multiline_compact_directive_errors(tmp_path: Path) -> None:
         "commit": "with-commit",
         "compact": "keep the parser\nand the tests",
         "continue": None,
-        "task": task_clear(),
         "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)
@@ -1528,7 +1605,6 @@ def test_continue_missing_errors_at_either_boundary(tmp_path: Path) -> None:
         "skill": "precompact",
         "commit": "with-commit",
         "compact": True,
-        "task": task_clear(),
         "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)
@@ -1556,7 +1632,6 @@ def test_continuation_against_untyped_transition_errors(tmp_path: Path) -> None:
         "commit": "with-commit",
         "compact": False,
         "continue": "pick up per the task file",
-        "task": task_clear(),
         "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)
@@ -1676,7 +1751,6 @@ def test_precompact_compact_false_two_line_marker(tmp_path: Path) -> None:
         "commit": "without-commit",
         "compact": False,
         "continue": None,
-        "task": task_clear(),
         "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)
@@ -1691,7 +1765,6 @@ def test_precompact_compact_true_no_continuation_bare_compact(tmp_path: Path) ->
         "commit": "without-commit",
         "compact": True,
         "continue": None,
-        "task": task_clear(),
         "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)
@@ -1709,7 +1782,6 @@ def test_precompact_focus_directive_and_continuation_both_carried(
         "commit": "without-commit",
         "compact": "keep the parser work",
         "continue": "continue with task 3",
-        "task": task_clear(),
         "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)
@@ -1812,7 +1884,6 @@ def test_sentinel_typing_nothing_arms_even_with_memory_gate_pending(
         "commit": commit,
         "compact": False,
         "continue": None,
-        "task": task_clear(),
         "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)
@@ -1919,14 +1990,13 @@ def handoff_payload(commit: str) -> dict[str, object]:
     }
 
 
-def precompact_payload(commit: str) -> dict[str, object]:
+def precompact_payload(commit: str, todo: object = None) -> dict[str, object]:
     return {
         "skill": "precompact",
         "commit": commit,
         "compact": False,
         "continue": None,
-        "task": task_clear(),
-        "todo": todo_keep(),
+        "todo": todo_keep() if todo is None else todo,
     }
 
 
@@ -2492,7 +2562,6 @@ def test_each_boundary_composes_own_directive_not_the_others(
             "commit": "without-commit",
             "compact": False,
             "continue": None,
-            "task": task_clear(),
             "todo": todo_keep(),
         }
     result = run_checkpoint(repo, payload)
