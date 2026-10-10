@@ -34,6 +34,19 @@ Decided in conversation on 2026-10-10/11:
   > cap or list item 42.9%). Era 2, before the todo file took the step lists,
   > accounts for the gap (93.3% fail there). What still stands: the cap and
   > the list rule target era 3's behaviour, where they reject 13-14%.
+
+  > **Corrected at review, 2026-10-11.** This bullet said the cap "is capped
+  > at 1500 characters" as decided, and the note above said "What still
+  > stands: the cap and the list rule target era 3's behaviour". My human
+  > partner reopened the number: a threshold fitted to how often raw files
+  > exceed it measures the symptom. It is set instead from what is left of a
+  > task file once its overflow is sent where it belongs — the plan to execute
+  > and open decisions to `TODO.md`, standing rules and conventions to memory
+  > through the approval gate, what was just completed cut to one sentence —
+  > leaving the task in hand and its immediate continuity.
+  > `reports/overflow-analysis.md` measures that residual; the cap is written
+  > **N** below until my human partner confirms a value. What still stands:
+  > a character cap on the body and the no-list rule.
 - The toolkit's `.claude/` release exemption is asked to go
   (`claude-plugin-dev/inbox/brief-remove-claude-exemption.md`, already
   dropped). A dirty `TASK.md`/`TODO.md` refusing a release is accepted.
@@ -74,11 +87,12 @@ if wrong:
   - New `validate_task_shape(content)`, run from `validate_task` so it fails
     before any write (the existing plan-then-apply order already guarantees
     this): body is the content minus ATX heading lines (reuse
-    `lib._ATX_HEADING`, made public), stripped; `len(body) > 1500` or any line
+    `lib._ATX_HEADING`, made public), stripped; `len(body) > N` or any line
     matching `^\s*([-*+]|\d+[.)])\s` is an `err("task", …)`. Each message
     names the measured fact (the count; the line number and its first words)
     and where the overflow goes: remaining steps and open decisions to
-    `todo`, finished work dropped, standing conventions to memory.
+    `todo`, finished work cut to one sentence, standing rules and conventions
+    to memory through its approval gate.
   - `compose_sentinel` creates `.claude/` if absent — with the frame in the
     root, the sentinel is the only thing left that needs the directory.
 - `_checkpoint_lib.py`: `sdd_directive` and `todo_boundary` name `TODO.md`;
@@ -161,8 +175,13 @@ the loader notes, `craft:removing-cleanly` before step 4,
 
 1. **Evidence into `plans/`**: the survey report beside this plan, committed
    with it. No code.
+1a. **The overflow analysis** (added 2026-10-11): every task-file version
+   since 2026-07-22 split into sentence units, each labelled by a Haiku
+   reader as task-in-hand, plan, convention or done-log, counted by script;
+   `reports/overflow-analysis.md` proposes N from the residual. No code.
+   Step 2 waits on my human partner's value; steps 3 to 5 do not.
 2. **The task shape rule** (`tests/test_checkpoint.py`, `checkpoint.py`).
-   Rows: 1500 passes and 1501 fails naming `task` and the count; heading
+   Rows: N passes and N+1 fails naming `task` and the count; heading
    lines do not count; a multi-byte body is counted in characters; each list
    marker fails naming its line; `**bold**` and a mid-line hyphen pass;
    nothing is written on either failure. Mutation-check the boundary and the
