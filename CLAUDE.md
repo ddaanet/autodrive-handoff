@@ -343,7 +343,9 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
   (no `Stop`) driving nothing, the recorded cwd consumed once, the project-root
   fast path, the worktree/subdir fall-through, empty stdout, FR-G, a malformed
   plan, the prompt bail before the first and mid-sequence, and
-  stop-on-first-failure with the `failFile` write. The load-bearing rows are
+  stop-on-first-failure with the `failFile` write (no live test reaches that
+  path: no sentinel the parser accepts makes the host reject, see
+  `docs/design/driving-the-transition.md`). The load-bearing rows are
   mutation-checked, not observed passing: driving inside `Stop`, dropping the
   prompt bail, continuing after a rejection, dropping the consume-once reset,
   skipping the fast path. Its fixtures are the same plans `drive-take.sh`

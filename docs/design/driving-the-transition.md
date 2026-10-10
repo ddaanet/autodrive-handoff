@@ -188,3 +188,15 @@ The live test is what found the `Stop` refusal: the first design deferred the
 drive with a zero-delay timer from `Stop` and was wrong, which no stub could
 have shown, because the stub answers whatever it is told to. A change to the
 mod or to a loader lands with a `just mod-smoke` run for the same reason.
+
+**The rejection path has no live coverage.** `handoff_drive_read` pins every
+slot to a literal the host accepts and the mod drives from `turn.complete`,
+where the call-context refusal does not apply, so no sentinel can make the host
+reject a line today. A forced-failure dogfood with a well-formed `/compact`
+was accepted and compacted the session (step 7, check 3). The `failFile`
+write, the toast and the next prompt's report rest on the stub rig's
+stop-on-first-failure row and the `report-drive-failure.sh` rows in
+`tests/hook-test.bats`. The path stays because a host change is the failure
+class the live test has already caught once, and without it a rejection would
+end the drive with nothing said. No test seam is added to reach it: that would
+loosen the pinned slots to test code that exists to report a failure.
