@@ -3,18 +3,18 @@
 # (see hooks/hooks.json), and does two things:
 #
 #   - assembles the frame in memory — a timestamp header plus the inlined
-#     agent-authored task file and todo remainder — and emits it via
-#     hookSpecificOutput.additionalContext so the fresh agent sees the handoff
-#     in its input for this turn, plus a curt systemMessage with content size
-#     and age;
+#     agent-authored task file and todo remainder, whichever count — and emits
+#     it via hookSpecificOutput.additionalContext so the fresh agent sees the
+#     handoff in its input for this turn, plus a curt systemMessage with
+#     content size and age. A missing half, or both, is named on both channels;
 #   - on `clear`, consumes a pending transition of kind `clear`. The mod
 #     (hooks/handoff.ts) ran the `/clear` and submits the continuation itself;
 #     the file disappearing is what leaves the sentinel clean for the next
 #     transition.
 #
-# Those two are independent: a driven clear whose task file is empty must still
-# consume, so the consume comes BEFORE the no-frame exit. Silent only when there
-# is nothing to inject and nothing was pending.
+# Those two are independent: a driven clear with no frame must still consume,
+# so the consume comes BEFORE the frame is assembled. Always emits one JSON
+# object, except when the root does not resolve.
 set -euo pipefail
 
 # shellcheck source-path=SCRIPTDIR source=_lib.sh
@@ -41,28 +41,32 @@ if [[ "$hook_source" == "clear" && -f "$drive" ]]; then
     fi
 fi
 
-# The frame is the header plus the agent-authored files inlined verbatim, and
-# it gates itself: either file alone is enough, neither means nothing to
-# inject. The prior session's working set is served by the harness's own
+# The frame is the header plus the agent-authored files that count, inlined
+# verbatim: either file alone is enough. A file missing from it is named to the
+# user and the agent, so a fresh session never reads an absent half as an
+# oversight. The prior session's working set is served by the harness's own
 # gitStatus block, not reproduced here (see
 # docs/changelog/2026-07-17-task-frame-drops-transcript.md).
 task="$cwd/$HANDOFF_REL_TASK"
 todo="$cwd/$HANDOFF_REL_TODO"
-assembled="$(handoff_frame "$task" "$todo")" || assembled=""
+handoff_frame "$task" "$todo" || true
 
-if [[ -n "$assembled" ]]; then
-    bytes=${#assembled}
+context="$FRAME"
+if [[ -n "$FRAME" ]]; then
+    bytes=${#FRAME}
     if (( bytes < 1024 )); then
         size="${bytes} B"
     else
         size=$(awk -v b="$bytes" 'BEGIN { printf "%.1f KiB", b/1024 }')
     fi
 
-    # Age of the frame is the newest of whichever files it drew on — the frame
-    # assembled, so at least one of them exists.
+    # Age of the frame is the newest of the files that count: a file the frame
+    # left out does not make it younger.
+    counted=()
+    (( FRAME_TASK )) && counted+=("$task")
+    (( FRAME_TODO )) && counted+=("$todo")
     mtime=$(python3 -c 'import os,sys
-print(int(max(os.path.getmtime(p) for p in sys.argv[1:] if os.path.exists(p))))' \
-        "$task" "$todo")
+print(int(max(os.path.getmtime(p) for p in sys.argv[1:])))' "${counted[@]}")
     now=$(date +%s)
     delta=$(( now - mtime ))
     if (( delta < 60 )); then age="just now"
@@ -70,18 +74,25 @@ print(int(max(os.path.getmtime(p) for p in sys.argv[1:] if os.path.exists(p))))'
     elif (( delta < 86400 )); then age="$((delta / 3600))h ago"
     else age="$((delta / 86400))d ago"
     fi
-    notes=("loaded — ${size}, saved ${age}" ${notes[@]+"${notes[@]}"})
-fi
+    notes+=("loaded — ${size}, saved ${age}")
 
-(( ${#notes[@]} > 0 )) || exit 0
+    if (( ! FRAME_TODO )); then
+        notes+=("No todo")
+        context+=$'\n\n'"No todo."
+    elif (( ! FRAME_TASK )); then
+        notes+=("No task frame")
+        context+=$'\n\n'"No task frame."
+    fi
+else
+    notes+=("No task frame or todo.")
+    context="No task frame or todo."
+fi
 
 printf -v msg '%s; ' "${notes[@]}"
 
 jq -nc \
     --arg m "handoff: ${msg%; }" \
-    --arg c "$assembled" \
+    --arg c "$context" \
     --arg e "$hook_event" \
-    '{systemMessage: $m}
-     + (if $c == "" then {}
-        else {hookSpecificOutput: {hookEventName: $e, additionalContext: ($c + "\n")}}
-        end)'
+    '{systemMessage: $m,
+      hookSpecificOutput: {hookEventName: $e, additionalContext: ($c + "\n")}}'

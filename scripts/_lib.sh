@@ -36,29 +36,42 @@ HANDOFF_REL_DRIVE_FAILED=".claude/autodrive.failed"
 # drift marker is still session-keyed the same way, so the literal path stays.
 HANDOFF_POINTER_DIR="${HANDOFF_POINTER_DIR:-/tmp/claude}"
 
-# Assemble the injectable frame from the task file ($1) and the optional todo
-# remainder ($2): a timestamp header plus each file inlined verbatim, in that
-# order. Either file alone is enough; prints nothing and returns 1 only when
-# both are missing or empty, so callers can gate on the exit status. Shared by
-# load-handoff.sh (startup|clear) and load-compact.sh (compact) — one frame
-# shape for both transitions, since both inject the same files.
+# Assemble the injectable frame from the task file ($1) and the todo file
+# ($2): a timestamp header plus each file that counts inlined verbatim, task
+# first. A file counts when it exists and has a body (`is_empty_body` in
+# _checkpoint_lib.py, through its CLI): a missing, zero-byte, whitespace-only
+# or headings-only file does not. Either file alone is enough.
+# Shared by load-handoff.sh (startup|clear) and load-compact.sh (compact) — one
+# frame shape for both transitions.
+#
+# Prints nothing; sets FRAME (empty when neither file counts), FRAME_TASK and
+# FRAME_TODO (1 when that file counts, else 0) in the caller's scope on every
+# call, and returns 1 when FRAME is empty. Callers under `set -e` absorb the 1
+# (`handoff_frame … || true`) and read the variables; a `$(…)` capture would
+# lose them with the subshell.
 #
 # The hook does not re-state either template: each file carries its own `##`
 # section headings (SKILL.md is the single source of truth) and is concatenated
 # verbatim under the one `#` header prepended here.
+# shellcheck disable=SC2034  # assigned for the caller's scope
 handoff_frame() {
-    local task="$1" todo="${2:-}" out=""
-    if [[ ! -s "$task" && ( -z "$todo" || ! -s "$todo" ) ]]; then
-        return 1
+    local task="$1" todo="$2" lib
+    lib="$(dirname "${BASH_SOURCE[0]}")/_checkpoint_lib.py"
+    FRAME="" FRAME_TASK=0 FRAME_TODO=0
+    if [[ -f "$task" ]] && ! python3 "$lib" --is-empty-body <"$task"; then
+        FRAME_TASK=1
     fi
-    out="# Task — $(date '+%Y-%m-%d %H:%M:%S %z')"
-    if [[ -s "$task" ]]; then
-        out+=$'\n\n'"$(cat "$task")"
+    if [[ -f "$todo" ]] && ! python3 "$lib" --is-empty-body <"$todo"; then
+        FRAME_TODO=1
     fi
-    if [[ -n "$todo" && -s "$todo" ]]; then
-        out+=$'\n\n'"$(cat "$todo")"
+    (( FRAME_TASK + FRAME_TODO > 0 )) || return 1
+    FRAME="# Task — $(date '+%Y-%m-%d %H:%M:%S %z')"
+    if (( FRAME_TASK )); then
+        FRAME+=$'\n\n'"$(cat "$task")"
     fi
-    printf '%s\n' "$out"
+    if (( FRAME_TODO )); then
+        FRAME+=$'\n\n'"$(cat "$todo")"
+    fi
 }
 
 # Shape helpers for handoff_drive_read. Each sets DRIVE_ERR and returns 1.

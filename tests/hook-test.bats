@@ -174,53 +174,149 @@ inside" ]
 }
 
 # --- _lib.sh: handoff_frame assembly ---
-# One header, then whichever of the two agent-authored files have content,
-# task first. Either alone is enough; neither means no frame at all.
+# A file counts when it exists and still has a body once headings and blank
+# lines are set aside. The function prints nothing: it sets FRAME (one header
+# line, then each counting file preceded by a blank line, task first; empty
+# when neither counts) and the flags FRAME_TASK / FRAME_TODO (1 or 0) in the
+# caller's scope, and returns 1 when FRAME is empty. These rows call it
+# directly: `run` is a subshell, and a variable it set would never reach the
+# test.
 
-@test "handoff_frame: task + todo -> one header, both inlined, task first" {
+# <text> <expected> — text is one header line followed by exactly the expected
+# rest, so a frame or an injected context is checked whole, not by grep.
+assert_framed() {
+    local header="${1%%$'\n'*}"
+    local re='^# Task — [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} [+-][0-9]{4}$'
+    [[ "$header" =~ $re ]] || return 1
+    [ "${1#"$header"}" = "$2" ] || return 1
+}
+
+@test "handoff_frame (task and todo count): header, task, then todo; both flags 1" {
     fr="$BATS_TEST_TMPDIR/frame"; mkdir -p "$fr"
     printf '## Current task\n\ntask body\n' > "$fr/task.md"
     printf '## Remaining\n\n- todo body\n' > "$fr/todo.md"
-    run handoff_frame "$fr/task.md" "$fr/todo.md"
-    [ "$status" -eq 0 ]
-    [ "$(echo "$output" | grep -c '^# Task — ')" -eq 1 ]
-    echo "$output" | grep -q 'task body'
-    echo "$output" | grep -q '^- todo body'
-    # Task section precedes the remainder.
-    [ "$(echo "$output" | grep -n 'task body' | cut -d: -f1)" \
-      -lt "$(echo "$output" | grep -n 'todo body' | cut -d: -f1)" ]
+    rc=0; handoff_frame "$fr/task.md" "$fr/todo.md" || rc=$?
+    [ "$rc" -eq 0 ]
+    assert_framed "${FRAME-}" $'\n\n## Current task\n\ntask body\n\n## Remaining\n\n- todo body'
+    [ "${FRAME_TASK:-unset}" = "1" ]
+    [ "${FRAME_TODO:-unset}" = "1" ]
 }
 
-@test "handoff_frame: todo alone -> frame still assembles" {
+@test "handoff_frame (todo alone): the frame is the header and the todo; task flag 0" {
     fr="$BATS_TEST_TMPDIR/frame-todo"; mkdir -p "$fr"
     printf '## Remaining\n\n- lone remainder\n' > "$fr/todo.md"
-    run handoff_frame "$fr/task.md" "$fr/todo.md"
-    [ "$status" -eq 0 ]
-    echo "$output" | grep -q '^# Task — '
-    echo "$output" | grep -q 'lone remainder'
+    rc=0; handoff_frame "$fr/task.md" "$fr/todo.md" || rc=$?
+    [ "$rc" -eq 0 ]
+    assert_framed "${FRAME-}" $'\n\n## Remaining\n\n- lone remainder'
+    [ "${FRAME_TASK:-unset}" = "0" ]
+    [ "${FRAME_TODO:-unset}" = "1" ]
 }
 
-@test "handoff_frame: task alone -> unchanged single-file shape" {
+@test "handoff_frame (task alone): the frame is the header and the task; todo flag 0" {
     fr="$BATS_TEST_TMPDIR/frame-task"; mkdir -p "$fr"
     printf '## Current task\n\nsolo task\n' > "$fr/task.md"
-    run handoff_frame "$fr/task.md" "$fr/todo.md"
-    [ "$status" -eq 0 ]
-    echo "$output" | grep -q 'solo task'
-    [ "$(echo "$output" | grep -c '^# Task — ')" -eq 1 ]
+    rc=0; handoff_frame "$fr/task.md" "$fr/todo.md" || rc=$?
+    [ "$rc" -eq 0 ]
+    assert_framed "${FRAME-}" $'\n\n## Current task\n\nsolo task'
+    [ "${FRAME_TASK:-unset}" = "1" ]
+    [ "${FRAME_TODO:-unset}" = "0" ]
 }
 
-@test "handoff_frame: neither file -> rc 1, no output" {
+@test "handoff_frame (neither file exists): rc 1, FRAME empty, both flags 0" {
     fr="$BATS_TEST_TMPDIR/frame-none"; mkdir -p "$fr"
-    run handoff_frame "$fr/task.md" "$fr/todo.md"
-    [ "$status" -eq 1 ]
-    [ "$output" = "" ]
+    rc=0; handoff_frame "$fr/task.md" "$fr/todo.md" || rc=$?
+    [ "$rc" -eq 1 ]
+    [ "${FRAME-unset}" = "" ]
+    [ "${FRAME_TASK:-unset}" = "0" ]
+    [ "${FRAME_TODO:-unset}" = "0" ]
 }
 
-@test "handoff_frame: empty files count as absent" {
+@test "handoff_frame (zero-byte files): do not count" {
     fr="$BATS_TEST_TMPDIR/frame-empty"; mkdir -p "$fr"
     : > "$fr/task.md"; : > "$fr/todo.md"
-    run handoff_frame "$fr/task.md" "$fr/todo.md"
-    [ "$status" -eq 1 ]
+    rc=0; handoff_frame "$fr/task.md" "$fr/todo.md" || rc=$?
+    [ "$rc" -eq 1 ]
+    [ "${FRAME-unset}" = "" ]
+    [ "${FRAME_TASK:-unset}" = "0" ]
+    [ "${FRAME_TODO:-unset}" = "0" ]
+}
+
+@test "handoff_frame (headings-only task beside a todo): the task headings stay out of FRAME" {
+    fr="$BATS_TEST_TMPDIR/frame-heads"; mkdir -p "$fr"
+    printf '## Current task\n\n## Open decisions\n' > "$fr/task.md"
+    printf '## Remaining\n\n- real item\n' > "$fr/todo.md"
+    rc=0; handoff_frame "$fr/task.md" "$fr/todo.md" || rc=$?
+    [ "$rc" -eq 0 ]
+    # The positive: the todo is there. The exact rest rules the task headings out.
+    assert_framed "${FRAME-}" $'\n\n## Remaining\n\n- real item'
+    [ "${FRAME_TASK:-unset}" = "0" ]
+    [ "${FRAME_TODO:-unset}" = "1" ]
+}
+
+@test "handoff_frame (headings-only on both sides): rc 1, FRAME empty, both flags 0" {
+    fr="$BATS_TEST_TMPDIR/frame-heads-both"; mkdir -p "$fr"
+    printf '## Current task\n\n## Open decisions\n' > "$fr/task.md"
+    printf '## Remaining\n' > "$fr/todo.md"
+    rc=0; handoff_frame "$fr/task.md" "$fr/todo.md" || rc=$?
+    [ "$rc" -eq 1 ]
+    [ "${FRAME-unset}" = "" ]
+    [ "${FRAME_TASK:-unset}" = "0" ]
+    [ "${FRAME_TODO:-unset}" = "0" ]
+}
+
+@test "handoff_frame (whitespace-only task beside a todo): the task does not count" {
+    fr="$BATS_TEST_TMPDIR/frame-blank"; mkdir -p "$fr"
+    printf '   \n\n\t\n' > "$fr/task.md"
+    printf '## Remaining\n\n- real item\n' > "$fr/todo.md"
+    rc=0; handoff_frame "$fr/task.md" "$fr/todo.md" || rc=$?
+    [ "$rc" -eq 0 ]
+    assert_framed "${FRAME-}" $'\n\n## Remaining\n\n- real item'
+    [ "${FRAME_TASK:-unset}" = "0" ]
+    [ "${FRAME_TODO:-unset}" = "1" ]
+}
+
+# `#tag` and `#!/bin/sh` begin with a `#` and are body all the same: the rule is
+# markdown's heading test, not a prefix test.
+@test "handoff_frame (a #tag line and a #!/bin/sh line): both are body and both count" {
+    fr="$BATS_TEST_TMPDIR/frame-hash"; mkdir -p "$fr"
+    printf '#tag\n' > "$fr/task.md"
+    printf '#!/bin/sh\n' > "$fr/todo.md"
+    rc=0; handoff_frame "$fr/task.md" "$fr/todo.md" || rc=$?
+    [ "$rc" -eq 0 ]
+    assert_framed "${FRAME-}" $'\n\n#tag\n\n#!/bin/sh'
+    [ "${FRAME_TASK:-unset}" = "1" ]
+    [ "${FRAME_TODO:-unset}" = "1" ]
+}
+
+@test "handoff_frame (a second call): resets FRAME and both flags" {
+    fr="$BATS_TEST_TMPDIR/frame-reset"; mkdir -p "$fr"
+    printf '## Current task\n\ntask body\n' > "$fr/task.md"
+    printf '## Remaining\n\n- todo body\n' > "$fr/todo.md"
+    rc=0; handoff_frame "$fr/task.md" "$fr/todo.md" || rc=$?
+    [ "$rc" -eq 0 ]
+    # The first call counts, or the reset below proves nothing.
+    [ "${FRAME_TASK:-unset}" = "1" ]
+    [ "${FRAME_TODO:-unset}" = "1" ]
+    [ -n "${FRAME-}" ]
+    rc=0; handoff_frame "$fr/gone-task.md" "$fr/gone-todo.md" || rc=$?
+    [ "$rc" -eq 1 ]
+    [ "${FRAME-unset}" = "" ]
+    [ "${FRAME_TASK:-unset}" = "0" ]
+    [ "${FRAME_TODO:-unset}" = "0" ]
+}
+
+# The one place a `$(…)` capture is right: proving nothing is printed, with a
+# missing file to show the shell's own redirect error stays out of it too.
+@test "handoff_frame (output): nothing on stdout or stderr, with a missing todo" {
+    fr="$BATS_TEST_TMPDIR/frame-quiet"; mkdir -p "$fr"
+    printf '## Current task\n\nsolo task\n' > "$fr/task.md"
+    out="$(handoff_frame "$fr/task.md" "$fr/todo.md" 2>"$fr/err")" || true
+    [ "$out" = "" ]
+    [ ! -s "$fr/err" ]
+    # The same call, direct, does produce a frame: the silence is not a failure.
+    rc=0; handoff_frame "$fr/task.md" "$fr/todo.md" || rc=$?
+    [ "$rc" -eq 0 ]
+    assert_framed "${FRAME-}" $'\n\n## Current task\n\nsolo task'
 }
 
 # --- _lib.sh: handoff_drive_read shape matrix ---
@@ -668,6 +764,23 @@ run_write_guard() {  # <tool> <cwd> <file_path> [CLAUDE_PROJECT_DIR]
     [ "$output" = "" ]
 }
 
+# <json> — a loader's output (the $output of a `run`) split into the two
+# channels, exact: MSG is systemMessage and CTX is additionalContext. The
+# trailing X keeps the command substitution from eating the newlines the
+# contexts end on.
+split_output() {
+    MSG="$(jq -j '(.systemMessage // "") + "X"' <<<"$1")"; MSG="${MSG%X}"
+    CTX="$(jq -j '(.hookSpecificOutput.additionalContext // "") + "X"' <<<"$1")"; CTX="${CTX%X}"
+}
+
+# <regex> — the whole systemMessage is `handoff: ` and then the regex.
+assert_msg_matches() {
+    local re="^handoff: $1\$"
+    [[ "$MSG" =~ $re ]]
+}
+
+loaded_re='loaded — ([0-9]+ B|[0-9]+\.[0-9] KiB), saved (just now|[0-9]+[mhd] ago)'
+
 # --- load-handoff ---
 
 @test "load-handoff (read-time assembly): injects header + task, echoes event" {
@@ -694,43 +807,98 @@ ASMTASK
     echo "$output" | jq -e '.hookSpecificOutput.hookEventName == "clear"' >/dev/null
 }
 
-@test "load-handoff (read-time assembly): silent no-op without task file" {
+# With no task and no todo that count, the loader still speaks on both
+# channels: the user and the agent each learn there was nothing to load. $asm_tmp
+# is a bare directory, so no seeded TASK.md is in play.
+@test "load-handoff (read-time assembly): no file at all -> No task frame or todo on both channels" {
     asm_tmp="$BATS_TEST_TMPDIR/asm"; mkdir -p "$asm_tmp"
     run bash -c '
         jq -nc --arg e "clear" "{hook_event_name:\$e}" \
         | CLAUDE_PROJECT_DIR="$1" bash scripts/load-handoff.sh
     ' _ "$asm_tmp"
     [ "$status" -eq 0 ]
-    [ "$output" = "" ]
+    split_output "$output"
+    [ "$MSG" = "handoff: No task frame or todo." ]
+    [ "$CTX" = $'No task frame or todo.\n' ]
+    echo "$output" | jq -e '.hookSpecificOutput.hookEventName == "clear"' >/dev/null
 }
 
-@test "load-handoff (read-time assembly): injects the todo remainder too" {
-    asm_tmp="$BATS_TEST_TMPDIR/asm-todo"; mkdir -p "$asm_tmp"
-    printf '## Current task\n\ntask body\n' > "$asm_tmp/TASK.md"
-    printf '## Remaining\n\n- wire the loader\n' > "$asm_tmp/TODO.md"
-    run bash -c '
-        jq -nc --arg e "clear" "{hook_event_name:\$e}" \
-        | CLAUDE_PROJECT_DIR="$1" bash scripts/load-handoff.sh
-    ' _ "$asm_tmp"
+# setup() seeds $tmp/TASK.md; both files are written out here so the row does
+# not lean on it.
+@test "load-handoff (read-time assembly): task and todo count -> the frame, no gap note" {
+    printf '## Current task\n\ntask body\n' > "$tmp/TASK.md"
+    printf '## Remaining\n\n- wire the loader\n' > "$tmp/TODO.md"
+    run_load_handoff "$tmp" clear
     [ "$status" -eq 0 ]
-    ctx="$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')"
-    echo "$ctx" | grep -q 'task body'
-    echo "$ctx" | grep -q '^- wire the loader'
-    [ "$(echo "$ctx" | grep -c '^# Task — ')" -eq 1 ]
+    split_output "$output"
+    assert_msg_matches "$loaded_re"
+    assert_framed "$CTX" $'\n\n## Current task\n\ntask body\n\n## Remaining\n\n- wire the loader\n'
+    echo "$output" | jq -e '.hookSpecificOutput.hookEventName == "SessionStart"' >/dev/null
+}
+
+# setup() seeds $tmp/TASK.md, which is the task; no TODO.md is written. The
+# size in the note is the frame's, not the frame plus the agent's gap line.
+@test "load-handoff (read-time assembly): task alone -> No todo on both channels" {
+    rm -f "$tmp/TODO.md"
+    run_load_handoff "$tmp" clear
+    [ "$status" -eq 0 ]
+    split_output "$output"
+    framed="${CTX%$'\n\nNo todo.\n'}"
+    [ "$framed" != "$CTX" ]
+    assert_framed "$framed" $'\n\n## Current task\n\nhook smoke test\n\n## Open decisions\n\n- none'
+    assert_msg_matches "loaded — ${#framed} B, saved (just now|[0-9]+[mhd] ago); No todo"
 }
 
 # A remainder with no active task still has to cross: the todo file alone
-# must not read as "nothing pending".
-@test "load-handoff (read-time assembly): todo alone still injects" {
-    asm_tmp="$BATS_TEST_TMPDIR/asm-todo-only"; mkdir -p "$asm_tmp"
-    printf '## Remaining\n\n- lone remainder\n' > "$asm_tmp/TODO.md"
-    run bash -c '
-        jq -nc --arg e "clear" "{hook_event_name:\$e}" \
-        | CLAUDE_PROJECT_DIR="$1" bash scripts/load-handoff.sh
-    ' _ "$asm_tmp"
+# must not read as "nothing pending". The seeded task is removed first.
+@test "load-handoff (read-time assembly): todo alone -> No task frame on both channels" {
+    rm -f "$tmp/TASK.md"
+    printf '## Remaining\n\n- lone remainder\n' > "$tmp/TODO.md"
+    run_load_handoff "$tmp" clear
     [ "$status" -eq 0 ]
-    echo "$output" | jq -r '.hookSpecificOutput.additionalContext' \
-        | grep -q 'lone remainder'
+    split_output "$output"
+    framed="${CTX%$'\n\nNo task frame.\n'}"
+    [ "$framed" != "$CTX" ]
+    assert_framed "$framed" $'\n\n## Remaining\n\n- lone remainder'
+    assert_msg_matches "loaded — ${#framed} B, saved (just now|[0-9]+[mhd] ago); No task frame"
+}
+
+# The seeded task is overwritten with headings and nothing else: that reads as
+# no task, and the headings stay out of what the agent is shown.
+@test "load-handoff (read-time assembly): headings-only task beside a todo -> the todo-alone state" {
+    printf '## Current task\n\n## Open decisions\n' > "$tmp/TASK.md"
+    printf '## Remaining\n\n- lone remainder\n' > "$tmp/TODO.md"
+    run_load_handoff "$tmp" clear
+    [ "$status" -eq 0 ]
+    split_output "$output"
+    assert_msg_matches "$loaded_re; No task frame"
+    assert_framed "$CTX" $'\n\n## Remaining\n\n- lone remainder\n\nNo task frame.\n'
+}
+
+# Both files overwritten with headings only: nothing counts.
+@test "load-handoff (read-time assembly): headings-only task and todo -> the neither state" {
+    printf '## Current task\n\n## Open decisions\n' > "$tmp/TASK.md"
+    printf '## Remaining\n' > "$tmp/TODO.md"
+    run_load_handoff "$tmp" clear
+    [ "$status" -eq 0 ]
+    split_output "$output"
+    [ "$MSG" = "handoff: No task frame or todo." ]
+    [ "$CTX" = $'No task frame or todo.\n' ]
+    echo "$output" | jq -e '.hookSpecificOutput.hookEventName == "SessionStart"' >/dev/null
+}
+
+# The todo is two days old with a body; the task was written just now but holds
+# only headings. The age is the newest file that counts, so the fresh headings
+# do not make the frame read as just saved.
+@test "load-handoff (age): taken from the files that count, not from a headings-only one" {
+    printf '## Remaining\n\n- old item\n' > "$tmp/TODO.md"
+    touch -d '2 days ago' "$tmp/TODO.md"
+    printf '## Current task\n\n## Open decisions\n' > "$tmp/TASK.md"
+    run_load_handoff "$tmp" clear
+    [ "$status" -eq 0 ]
+    split_output "$output"
+    assert_msg_matches "loaded — [0-9]+ B, saved 2d ago; No task frame"
+    assert_framed "$CTX" $'\n\n## Remaining\n\n- old item\n\nNo task frame.\n'
 }
 
 @test "load-handoff (size formatting: KiB threshold)" {
@@ -796,16 +964,18 @@ run_load_handoff() {
 }
 
 # The ordering hazard, and the regression this row exists to catch: the script
-# exits when handoff_frame finds nothing to inject, so the consume has to come
-# first. Otherwise a driven clear whose task file is empty strands the pending
-# file, and the next transition's sentinel is read as one still in flight.
-@test "load-handoff (clear, pending present but NO frame: still consumes)" {
+# must consume before it reports there is nothing to inject. Otherwise a driven
+# clear whose task file is empty strands the pending file, and the next
+# transition's sentinel is read as one still in flight.
+@test "load-handoff (clear, pending present but NO frame: still consumes, and says so)" {
     rm -f "$tmp/TASK.md" "$tmp/TODO.md"
     seed_pending "$tmp" "clear" "/rename A Title" "/clear" "resume anyway"
     run_load_handoff "$tmp" clear
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
-    [ "$output" = "" ]
+    split_output "$output"
+    [ "$MSG" = "handoff: No task frame or todo." ]
+    [ "$CTX" = $'No task frame or todo.\n' ]
 }
 
 # A driven clear with no continuation: the mod ran the `/clear` at turn end, and
@@ -855,6 +1025,17 @@ run_load_handoff() {
     echo "$output" | jq -e '.systemMessage | test("malformed")' >/dev/null
 }
 
+# The transition's note leads and the frame's notes follow it, with the same
+# `; ` between them. The seeded TASK.md is the task; there is no todo.
+@test "load-handoff (clear, malformed pending: its note precedes the frame notes)" {
+    seed_pending "$tmp" "clear" "/rename A Title" "not a clear" "resume"
+    run_load_handoff "$tmp" clear
+    [ "$status" -eq 0 ]
+    [ ! -e "$tmp/.claude/autodrive" ]
+    split_output "$output"
+    assert_msg_matches "autodrive malformed — [^;]+; not resuming; $loaded_re; No todo"
+}
+
 # Each loader consumes only a transition in flight. An armed file belongs to a
 # turn end that has not come — the agent wrote it and the turn ended on an Esc
 # (or the mod never loaded), so the sweep is what deals with it, not this.
@@ -891,14 +1072,48 @@ run_load_compact() {
     [ "$output" = "" ]
 }
 
-@test "load-compact (pending present: consumes it, frame re-injected)" {
+# A transition in flight with a todo: the todo is what is re-injected, and the
+# user is told so. The seeded TASK.md is removed first, which is the state the
+# checkpoint leaves behind.
+@test "load-compact (pending present, todo present: consumes it, todo re-injected)" {
+    rm -f "$tmp/TASK.md"
+    printf '## Remaining\n\n- finish the parser\n' > "$tmp/TODO.md"
     seed_pending "$tmp" "compact" "/compact" "continue with task 3"
     run_load_compact "$tmp"
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
-    echo "$output" | jq -e '.systemMessage | test("frame re-injected")' >/dev/null
+    split_output "$output"
+    [ "$MSG" = "handoff: compacted — todo re-injected." ]
+    assert_framed "$CTX" $'\n\n## Remaining\n\n- finish the parser\n'
+    echo "$output" | jq -e '.hookSpecificOutput.hookEventName == "SessionStart"' >/dev/null
     # The continuation is the mod's to submit, so it is not echoed here.
-    echo "$output" | jq -e '.systemMessage | test("continue with task 3") | not' >/dev/null
+    [[ "$output" != *"continue with task 3"* ]]
+}
+
+# The seeded TASK.md is removed and no todo is written: nothing to re-inject.
+# The message goes to the user alone; the agent is told nothing.
+@test "load-compact (pending present, no todo, no task: consumed, No todo, nothing injected)" {
+    rm -f "$tmp/TASK.md" "$tmp/TODO.md"
+    seed_pending "$tmp" "compact" "/compact" "continue with task 3"
+    run_load_compact "$tmp"
+    [ "$status" -eq 0 ]
+    [ ! -e "$tmp/.claude/autodrive" ]
+    split_output "$output"
+    [ "$MSG" = "handoff: compacted — No todo." ]
+    echo "$output" | jq -e 'has("hookSpecificOutput") | not' >/dev/null
+}
+
+# A todo that is headings and nothing else is no todo.
+@test "load-compact (pending present, headings-only todo, no task: consumed, No todo, nothing injected)" {
+    rm -f "$tmp/TASK.md"
+    printf '## Remaining\n' > "$tmp/TODO.md"
+    seed_pending "$tmp" "compact" "/compact" "continue with task 3"
+    run_load_compact "$tmp"
+    [ "$status" -eq 0 ]
+    [ ! -e "$tmp/.claude/autodrive" ]
+    split_output "$output"
+    [ "$MSG" = "handoff: compacted — No todo." ]
+    echo "$output" | jq -e 'has("hookSpecificOutput") | not' >/dev/null
 }
 
 @test "load-compact (pending of kind clear: left for SessionStart(clear))" {
@@ -909,51 +1124,54 @@ run_load_compact() {
     [ "$(sed -n 2p "$tmp/.claude/autodrive")" = "clear" ]
 }
 
-# The task file carries the content across compaction; the continuation prompt is only
-# a handle to it. So the frame has to be injected here, the same way
-# load-handoff.sh injects it at startup|clear.
-@test "load-compact (task file present: injects the frame)" {
+# The checkpoint removes TASK.md at this boundary, so the only way one is there
+# when the compaction completes is a hand-written file. It is still the task
+# frame, and it is injected.
+@test "load-compact (a hand-written TASK.md alone: injected, and the message says No todo)" {
     seed_pending "$tmp" "compact" "/compact" "resume per the task file"
     printf '%s\n' "## Now" "- rewire the parser" > "$tmp/TASK.md"
     run_load_compact "$tmp"
     [ "$status" -eq 0 ]
-    echo "$output" | jq -e '.hookSpecificOutput.additionalContext | test("rewire the parser")' >/dev/null
+    split_output "$output"
+    [ "$MSG" = "handoff: compacted — No todo." ]
+    assert_framed "$CTX" $'\n\n## Now\n- rewire the parser\n'
     echo "$output" | jq -e '.hookSpecificOutput.hookEventName == "SessionStart"' >/dev/null
     # The task file survives — it is not consumed by being read.
     [ -s "$tmp/TASK.md" ]
 }
 
-@test "load-compact (no task file: consumed, no frame)" {
-    rm -f "$tmp/TASK.md"
-    seed_pending "$tmp" "compact" "/compact" "continue with task 3"
+@test "load-compact (a hand-written TASK.md beside a todo: both injected, task first)" {
+    seed_pending "$tmp" "compact" "/compact" "resume per the task file"
+    printf '%s\n' "## Now" "- rewire the parser" > "$tmp/TASK.md"
+    printf '## Remaining\n\n- finish the parser\n' > "$tmp/TODO.md"
     run_load_compact "$tmp"
     [ "$status" -eq 0 ]
-    [ ! -e "$tmp/.claude/autodrive" ]
-    echo "$output" | jq -e '.systemMessage | test("frame re-injected")' >/dev/null
-    echo "$output" | jq -e 'has("hookSpecificOutput") | not' >/dev/null
+    split_output "$output"
+    [ "$MSG" = "handoff: compacted — todo re-injected." ]
+    assert_framed "$CTX" $'\n\n## Now\n- rewire the parser\n\n## Remaining\n\n- finish the parser\n'
 }
 
 # A driven compaction with no continuation — the /compact line ran, and nothing
 # follows it. Same effect here as the prepare-only marker, from a different
-# sentinel: consume, inject.
+# sentinel: consume, inject what there is.
 @test "load-compact (pending with no continuation: consumed, frame only)" {
     seed_pending "$tmp" "compact" "/compact keep the parser work"
     run_load_compact "$tmp"
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
     echo "$output" | jq -e '.hookSpecificOutput.additionalContext | test("hook smoke test")' >/dev/null
-    echo "$output" | jq -e '.systemMessage | test("frame re-injected")' >/dev/null
+    echo "$output" | jq -e '.systemMessage == "handoff: compacted — No todo."' >/dev/null
 }
 
 # FR-G's other half: the prepare-only marker arrives here as a pending file with
-# no after-line. Inject the frame.
+# no after-line. Inject what there is.
 @test "load-compact (empty after-sequence: frame injected)" {
     seed_pending "$tmp" "compact"
     run_load_compact "$tmp"
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
     echo "$output" | jq -e '.hookSpecificOutput.additionalContext | test("hook smoke test")' >/dev/null
-    echo "$output" | jq -e '.systemMessage | test("frame re-injected")' >/dev/null
+    echo "$output" | jq -e '.systemMessage == "handoff: compacted — No todo."' >/dev/null
 }
 
 @test "load-compact (worktree cwd: consumes the worktree pending file)" {

@@ -37,17 +37,24 @@ fi
 # Consume unconditionally: a transition is taken at most once.
 rm -f "$drive"
 
-# The task file and the todo remainder carry the content across the compaction;
-# the continuation prompt is only a handle to it. Inject the frame here so the handle
+# The todo remainder carries the content across the compaction; the
+# continuation prompt is only a handle to it. Inject the frame here so the handle
 # resolves against the real thing rather than the summariser's paraphrase. Not
-# consumed by reading — both stay on disk for the next
-# SessionStart(startup|clear).
-frame="$(handoff_frame "$cwd/$HANDOFF_REL_TASK" "$cwd/$HANDOFF_REL_TODO")" \
-    || frame=""
+# consumed by reading — the files stay on disk for the next
+# SessionStart(startup|clear). The checkpoint removes the task file at this
+# boundary, so one with a body was written by hand since, and is injected too.
+# The message is about the todo either way.
+handoff_frame "$cwd/$HANDOFF_REL_TASK" "$cwd/$HANDOFF_REL_TODO" || true
 
-jq -nc --arg f "$frame" \
+if (( FRAME_TODO )); then
+    msg="handoff: compacted — todo re-injected."
+else
+    msg="handoff: compacted — No todo."
+fi
+
+jq -nc --arg f "$FRAME" --arg m "$msg" \
     'if $f == "" then {}
      else {hookSpecificOutput: {hookEventName: "SessionStart",
            additionalContext: ($f + "\n")}}
      end
-     + {systemMessage: "handoff: compacted — frame re-injected."}'
+     + {systemMessage: $m}'
