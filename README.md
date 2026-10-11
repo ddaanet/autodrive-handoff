@@ -46,16 +46,26 @@ generated file is involved, and the transcript is never touched: the live
 working set is the harness's own git status.
 
 **Upgrading from 0.15 or earlier**: the two files used to live under
-`.claude/`. Move them once, in each project that has them:
+`.claude/`, and the plugin moves them for you. When the root file has no body,
+the loader reads `.claude/handoff-task.md` or `.claude/handoff-todo.md` instead
+and says so at session start, and the next checkpoint moves the todo onto
+`TODO.md` and replaces the task with the new `TASK.md`, removing the old file.
+A root file that has a body wins: the old file is left as it is, and every
+session start reports it as ignored until you delete it. Under a wrap-up that
+asked for a commit, the checkpoint also prints a `git rm --cached
+--ignore-unmatch -q -- :/…` line over the old paths it moved or removed, so
+git records a rename. A wrap-up that asked for no commit prints nothing, and
+the deletion stays unstaged in `git status`.
+
+To move them yourself, once per project that has them:
 
 ```
 git mv .claude/handoff-task.md TASK.md
 git mv .claude/handoff-todo.md TODO.md
 ```
 
-Nothing reads the old paths. If your project already has a `TODO.md`, the
-plugin shares it: that is the same list, and the agent keeps the shape it
-finds.
+If your project already has a `TODO.md`, the plugin shares it: that is the
+same list, and the agent keeps the shape it finds.
 
 **Migrating from v0.2.x**: if your project's `CLAUDE.md` contains a
 `## Handoff` section with `@.claude/handoff.md` (added by the old
@@ -149,8 +159,9 @@ The agent updates auto-memory with any durable learnings, then in a single
 turn decides the task snapshot (if anything is outstanding), the todo
 remainder (if a task list is in flight), and a session title, and pipes all
 three to one `handoff-checkpoint` call as a JSON payload. The checkpoint
-writes `TASK.md` and writes or edits `TODO.md`, and writes `.claude/autodrive`
-when there is something to run at the end of the turn. It stages nothing:
+writes `TASK.md` and writes or edits `TODO.md`, moves or removes a file left
+at an old `.claude/handoff-*.md` path, and writes `.claude/autodrive` when
+there is something to run at the end of the turn. It stages nothing:
 both are ordinary tracked files, and when your request called for a commit
 the agent makes it with both in it. Anything to be run waits for the turn to
 end — and, when the transition is held, for the `handoff-approved` call that

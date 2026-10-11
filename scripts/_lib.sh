@@ -13,6 +13,16 @@ HANDOFF_REL_TASK="TASK.md"
 # docs/changelog/2026-07-22-a-place-for-the-todo-list.md.
 # shellcheck disable=SC2034
 HANDOFF_REL_TODO="TODO.md"
+
+# The paths the task and todo files lived at before they moved to the project
+# root. The loaders read them as a fallback and the checkpoint moves a file off
+# them, and this pair is the one marker for that fallback: `grep -rni legacy`
+# over scripts/ and tests/ lists all of it. It goes once no sibling repository
+# still has a `.claude/handoff-*.md`.
+# shellcheck disable=SC2034
+HANDOFF_LEGACY_REL_TASK=".claude/handoff-task.md"
+# shellcheck disable=SC2034
+HANDOFF_LEGACY_REL_TODO=".claude/handoff-todo.md"
 # The transition. One session, at most one transition in flight —
 # so one file, whose *body* names both the transition and where it has got to.
 # Line 1 is the state (armed -> pending -> gone), line 2 the kind. See
@@ -37,40 +47,91 @@ HANDOFF_REL_DRIVE_FAILED=".claude/autodrive.failed"
 HANDOFF_POINTER_DIR="${HANDOFF_POINTER_DIR:-/tmp/claude}"
 
 # Assemble the injectable frame from the task file ($1) and the todo file
-# ($2): a timestamp header plus each file that counts inlined verbatim, task
-# first. A file counts when it exists and has a body (`is_empty_body` in
-# _checkpoint_lib.py, through its CLI): a missing, zero-byte, whitespace-only
-# or headings-only file does not. Either file alone is enough.
+# ($2): a timestamp header plus each half that counts inlined verbatim, task
+# first. $3 and $4 are the legacy task and todo paths, optional; an absent or
+# empty one is a path that does not exist. Per half, the root file counts when
+# it has a body (`is_empty_body` in _checkpoint_lib.py, through its CLI), and
+# otherwise the legacy file does when it has a body. A missing, zero-byte,
+# whitespace-only or headings-only file has none. Either half alone is enough.
 # Shared by load-handoff.sh (startup|clear) and load-compact.sh (compact) — one
 # frame shape for both transitions.
 #
-# Prints nothing; sets FRAME (empty when neither file counts), FRAME_TASK and
-# FRAME_TODO (1 when that file counts, else 0) in the caller's scope on every
-# call, and returns 1 when FRAME is empty. Callers under `set -e` absorb the 1
+# Prints nothing; sets in the caller's scope on every call. FRAME is the frame,
+# empty when neither half counts, and never holds a note; the rest are each 1 or 0:
+#   FRAME_TASK, FRAME_TODO   the half is in the frame
+#   FRAME_TASK_LEGACY, FRAME_TODO_LEGACY
+#                            the half came from its legacy path
+#   FRAME_TASK_SHADOWED, FRAME_TODO_SHADOWED
+#                            the half came from the root file and a legacy
+#                            file exists beside it, whatever that one holds
+# and returns 1 when FRAME is empty. Callers under `set -e` absorb the 1
 # (`handoff_frame … || true`) and read the variables; a `$(…)` capture would
-# lose them with the subshell.
+# lose them with the subshell. `handoff_frame_notes` turns the flags into the
+# notes the loaders append.
 #
 # The hook does not re-state either template: each file carries its own `##`
 # section headings (SKILL.md is the single source of truth) and is concatenated
 # verbatim under the one `#` header prepended here.
 # shellcheck disable=SC2034  # assigned for the caller's scope
 handoff_frame() {
-    local task="$1" todo="$2" lib
+    local task="$1" todo="$2" legacy_task="${3:-}" legacy_todo="${4:-}" lib
+    local task_src="$task" todo_src="$todo"
     lib="$(dirname "${BASH_SOURCE[0]}")/_checkpoint_lib.py"
     FRAME="" FRAME_TASK=0 FRAME_TODO=0
-    if [[ -f "$task" ]] && ! python3 "$lib" --is-empty-body <"$task"; then
+    FRAME_TASK_LEGACY=0 FRAME_TODO_LEGACY=0
+    FRAME_TASK_SHADOWED=0 FRAME_TODO_SHADOWED=0
+    if _handoff_has_body "$lib" "$task"; then
         FRAME_TASK=1
+        [[ -n "$legacy_task" && -f "$legacy_task" ]] && FRAME_TASK_SHADOWED=1
+    elif _handoff_has_body "$lib" "$legacy_task"; then
+        FRAME_TASK=1 FRAME_TASK_LEGACY=1
+        task_src="$legacy_task"
     fi
-    if [[ -f "$todo" ]] && ! python3 "$lib" --is-empty-body <"$todo"; then
+    if _handoff_has_body "$lib" "$todo"; then
         FRAME_TODO=1
+        [[ -n "$legacy_todo" && -f "$legacy_todo" ]] && FRAME_TODO_SHADOWED=1
+    elif _handoff_has_body "$lib" "$legacy_todo"; then
+        FRAME_TODO=1 FRAME_TODO_LEGACY=1
+        todo_src="$legacy_todo"
     fi
     (( FRAME_TASK + FRAME_TODO > 0 )) || return 1
     FRAME="# Task — $(date '+%Y-%m-%d %H:%M:%S %z')"
     if (( FRAME_TASK )); then
-        FRAME+=$'\n\n'"$(cat "$task")"
+        FRAME+=$'\n\n'"$(cat "$task_src")"
     fi
     if (( FRAME_TODO )); then
-        FRAME+=$'\n\n'"$(cat "$todo")"
+        FRAME+=$'\n\n'"$(cat "$todo_src")"
+    fi
+}
+
+# <is_empty_body library> <path>. True when the path is a file with a body.
+_handoff_has_body() {
+    [[ -n "$2" && -f "$2" ]] && ! python3 "$1" --is-empty-body <"$2"
+}
+
+# The notes for the legacy flags `handoff_frame` just set, in the order both
+# channels carry them: task from legacy, todo from legacy, task ignored, todo
+# ignored. Sets FRAME_NOTES_CTX (full sentences for the agent) and
+# FRAME_NOTES_MSG (fragments for the user's one-line message), parallel arrays
+# reset on every call. Expand them as `${A[@]+"${A[@]}"}` (bash 3.2).
+# shellcheck disable=SC2034  # assigned for the caller's scope
+handoff_frame_notes() {
+    FRAME_NOTES_CTX=() FRAME_NOTES_MSG=()
+    if (( FRAME_TASK_LEGACY )); then
+        FRAME_NOTES_CTX+=("Task loaded from legacy $HANDOFF_LEGACY_REL_TASK; the next checkpoint moves it to $HANDOFF_REL_TASK.")
+        FRAME_NOTES_MSG+=("task from $HANDOFF_LEGACY_REL_TASK, next checkpoint moves it")
+    fi
+    if (( FRAME_TODO_LEGACY )); then
+        FRAME_NOTES_CTX+=("Todo loaded from legacy $HANDOFF_LEGACY_REL_TODO; edit it there until the next checkpoint moves it to $HANDOFF_REL_TODO.")
+        FRAME_NOTES_MSG+=("todo from $HANDOFF_LEGACY_REL_TODO, next checkpoint moves it")
+    fi
+    if (( FRAME_TASK_SHADOWED )); then
+        FRAME_NOTES_CTX+=("Legacy $HANDOFF_LEGACY_REL_TASK is ignored: $HANDOFF_REL_TASK has a body.")
+        FRAME_NOTES_MSG+=("$HANDOFF_LEGACY_REL_TASK ignored, $HANDOFF_REL_TASK wins")
+    fi
+    if (( FRAME_TODO_SHADOWED )); then
+        FRAME_NOTES_CTX+=("Legacy $HANDOFF_LEGACY_REL_TODO is ignored: $HANDOFF_REL_TODO has a body.")
+        FRAME_NOTES_MSG+=("$HANDOFF_LEGACY_REL_TODO ignored, $HANDOFF_REL_TODO wins")
     fi
 }
 

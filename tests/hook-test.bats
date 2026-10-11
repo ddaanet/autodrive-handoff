@@ -319,6 +319,175 @@ assert_framed() {
     assert_framed "${FRAME-}" $'\n\n## Current task\n\nsolo task'
 }
 
+# --- _lib.sh: handoff_frame, legacy paths ---
+# The call takes four paths: <task> <todo> <legacy-task> <legacy-todo>, the last
+# two optional (absent is the same as a path that does not exist). Per half the
+# root file counts when it has a body, else the legacy file when it has a body;
+# FRAME inlines whichever counted, task first, exactly as before. Four more
+# variables say what the loader must tell the agent, each 1 or 0 and reset on
+# every call: FRAME_TASK_LEGACY / FRAME_TODO_LEGACY (the half came from the
+# legacy path) and FRAME_TASK_SHADOWED / FRAME_TODO_SHADOWED (the half came from
+# the root file and a legacy file exists beside it, so it is ignored). A
+# headings-only root file does not shadow: the legacy file's body is loaded.
+
+@test "handoff_frame (legacy task alone): the legacy task is the frame; task flag and task-legacy flag 1" {
+    fr="$BATS_TEST_TMPDIR/frame-leg-task"; mkdir -p "$fr"
+    printf '## Current task\n\nlegacy task body\n' > "$fr/legacy-task.md"
+    rc=0; handoff_frame "$fr/task.md" "$fr/todo.md" "$fr/legacy-task.md" "$fr/legacy-todo.md" || rc=$?
+    [ "$rc" -eq 0 ]
+    assert_framed "${FRAME-}" $'\n\n## Current task\n\nlegacy task body'
+    [ "${FRAME_TASK:-unset}" = "1" ]
+    [ "${FRAME_TODO:-unset}" = "0" ]
+    [ "${FRAME_TASK_LEGACY:-unset}" = "1" ]
+    [ "${FRAME_TODO_LEGACY:-unset}" = "0" ]
+    [ "${FRAME_TASK_SHADOWED:-unset}" = "0" ]
+    [ "${FRAME_TODO_SHADOWED:-unset}" = "0" ]
+}
+
+@test "handoff_frame (legacy todo alone): the legacy todo is the frame; todo flag and todo-legacy flag 1" {
+    fr="$BATS_TEST_TMPDIR/frame-leg-todo"; mkdir -p "$fr"
+    printf '## Remaining\n\n- legacy item\n' > "$fr/legacy-todo.md"
+    rc=0; handoff_frame "$fr/task.md" "$fr/todo.md" "$fr/legacy-task.md" "$fr/legacy-todo.md" || rc=$?
+    [ "$rc" -eq 0 ]
+    assert_framed "${FRAME-}" $'\n\n## Remaining\n\n- legacy item'
+    [ "${FRAME_TASK:-unset}" = "0" ]
+    [ "${FRAME_TODO:-unset}" = "1" ]
+    [ "${FRAME_TASK_LEGACY:-unset}" = "0" ]
+    [ "${FRAME_TODO_LEGACY:-unset}" = "1" ]
+    [ "${FRAME_TASK_SHADOWED:-unset}" = "0" ]
+    [ "${FRAME_TODO_SHADOWED:-unset}" = "0" ]
+}
+
+@test "handoff_frame (both halves legacy): task then todo, both legacy flags 1" {
+    fr="$BATS_TEST_TMPDIR/frame-leg-both"; mkdir -p "$fr"
+    printf '## Current task\n\nlegacy task body\n' > "$fr/legacy-task.md"
+    printf '## Remaining\n\n- legacy item\n' > "$fr/legacy-todo.md"
+    rc=0; handoff_frame "$fr/task.md" "$fr/todo.md" "$fr/legacy-task.md" "$fr/legacy-todo.md" || rc=$?
+    [ "$rc" -eq 0 ]
+    assert_framed "${FRAME-}" $'\n\n## Current task\n\nlegacy task body\n\n## Remaining\n\n- legacy item'
+    [ "${FRAME_TASK:-unset}" = "1" ]
+    [ "${FRAME_TODO:-unset}" = "1" ]
+    [ "${FRAME_TASK_LEGACY:-unset}" = "1" ]
+    [ "${FRAME_TODO_LEGACY:-unset}" = "1" ]
+    [ "${FRAME_TASK_SHADOWED:-unset}" = "0" ]
+    [ "${FRAME_TODO_SHADOWED:-unset}" = "0" ]
+}
+
+@test "handoff_frame (root with a body beside a legacy file): root wins, the legacy file is shadowed" {
+    fr="$BATS_TEST_TMPDIR/frame-shadow"; mkdir -p "$fr"
+    printf '## Current task\n\nroot task body\n' > "$fr/task.md"
+    printf '## Remaining\n\n- root item\n' > "$fr/todo.md"
+    printf '## Current task\n\nlegacy task body\n' > "$fr/legacy-task.md"
+    printf '## Remaining\n\n- legacy item\n' > "$fr/legacy-todo.md"
+    rc=0; handoff_frame "$fr/task.md" "$fr/todo.md" "$fr/legacy-task.md" "$fr/legacy-todo.md" || rc=$?
+    [ "$rc" -eq 0 ]
+    # The exact rest rules the legacy bodies out.
+    assert_framed "${FRAME-}" $'\n\n## Current task\n\nroot task body\n\n## Remaining\n\n- root item'
+    [ "${FRAME_TASK:-unset}" = "1" ]
+    [ "${FRAME_TODO:-unset}" = "1" ]
+    [ "${FRAME_TASK_LEGACY:-unset}" = "0" ]
+    [ "${FRAME_TODO_LEGACY:-unset}" = "0" ]
+    [ "${FRAME_TASK_SHADOWED:-unset}" = "1" ]
+    [ "${FRAME_TODO_SHADOWED:-unset}" = "1" ]
+}
+
+@test "handoff_frame (root task shadows a legacy task, todo only legacy): the halves are told apart" {
+    fr="$BATS_TEST_TMPDIR/frame-mixed"; mkdir -p "$fr"
+    printf '## Current task\n\nroot task body\n' > "$fr/task.md"
+    printf '## Current task\n\nlegacy task body\n' > "$fr/legacy-task.md"
+    printf '## Remaining\n\n- legacy item\n' > "$fr/legacy-todo.md"
+    rc=0; handoff_frame "$fr/task.md" "$fr/todo.md" "$fr/legacy-task.md" "$fr/legacy-todo.md" || rc=$?
+    [ "$rc" -eq 0 ]
+    assert_framed "${FRAME-}" $'\n\n## Current task\n\nroot task body\n\n## Remaining\n\n- legacy item'
+    [ "${FRAME_TASK_LEGACY:-unset}" = "0" ]
+    [ "${FRAME_TODO_LEGACY:-unset}" = "1" ]
+    [ "${FRAME_TASK_SHADOWED:-unset}" = "1" ]
+    [ "${FRAME_TODO_SHADOWED:-unset}" = "0" ]
+}
+
+# Shadowed is decided by the legacy file existing, not by its having a body: the
+# checkpoint reports a legacy file beside a root file with a body as ignored
+# whatever it holds, and the loader and the checkpoint must not disagree about
+# the same file. Each half uses a different kind of body-less legacy file.
+@test "handoff_frame (root with a body beside a legacy file with no body): still shadowed, by existence" {
+    fr="$BATS_TEST_TMPDIR/frame-shadow-empty"; mkdir -p "$fr"
+    printf '## Current task\n\nroot task body\n' > "$fr/task.md"
+    printf '## Remaining\n\n- root item\n' > "$fr/todo.md"
+    printf '## Current task\n\n## Open decisions\n' > "$fr/legacy-task.md"
+    : > "$fr/legacy-todo.md"
+    rc=0; handoff_frame "$fr/task.md" "$fr/todo.md" "$fr/legacy-task.md" "$fr/legacy-todo.md" || rc=$?
+    [ "$rc" -eq 0 ]
+    assert_framed "${FRAME-}" $'\n\n## Current task\n\nroot task body\n\n## Remaining\n\n- root item'
+    [ "${FRAME_TASK_LEGACY:-unset}" = "0" ]
+    [ "${FRAME_TODO_LEGACY:-unset}" = "0" ]
+    [ "${FRAME_TASK_SHADOWED:-unset}" = "1" ]
+    [ "${FRAME_TODO_SHADOWED:-unset}" = "1" ]
+}
+
+@test "handoff_frame (headings-only root beside a legacy body): the legacy body is loaded, nothing shadowed" {
+    fr="$BATS_TEST_TMPDIR/frame-heads-leg"; mkdir -p "$fr"
+    printf '## Current task\n\n## Open decisions\n' > "$fr/task.md"
+    printf '## Remaining\n' > "$fr/todo.md"
+    printf '## Current task\n\nlegacy task body\n' > "$fr/legacy-task.md"
+    printf '## Remaining\n\n- legacy item\n' > "$fr/legacy-todo.md"
+    rc=0; handoff_frame "$fr/task.md" "$fr/todo.md" "$fr/legacy-task.md" "$fr/legacy-todo.md" || rc=$?
+    [ "$rc" -eq 0 ]
+    assert_framed "${FRAME-}" $'\n\n## Current task\n\nlegacy task body\n\n## Remaining\n\n- legacy item'
+    [ "${FRAME_TASK_LEGACY:-unset}" = "1" ]
+    [ "${FRAME_TODO_LEGACY:-unset}" = "1" ]
+    [ "${FRAME_TASK_SHADOWED:-unset}" = "0" ]
+    [ "${FRAME_TODO_SHADOWED:-unset}" = "0" ]
+}
+
+@test "handoff_frame (neither root nor legacy has a body): rc 1, FRAME empty, every flag 0" {
+    fr="$BATS_TEST_TMPDIR/frame-leg-none"; mkdir -p "$fr"
+    printf '## Current task\n\n## Open decisions\n' > "$fr/task.md"
+    : > "$fr/legacy-task.md"
+    printf '## Remaining\n' > "$fr/legacy-todo.md"
+    rc=0; handoff_frame "$fr/task.md" "$fr/todo.md" "$fr/legacy-task.md" "$fr/legacy-todo.md" || rc=$?
+    [ "$rc" -eq 1 ]
+    [ "${FRAME-unset}" = "" ]
+    [ "${FRAME_TASK:-unset}" = "0" ]
+    [ "${FRAME_TODO:-unset}" = "0" ]
+    [ "${FRAME_TASK_LEGACY:-unset}" = "0" ]
+    [ "${FRAME_TODO_LEGACY:-unset}" = "0" ]
+    [ "${FRAME_TASK_SHADOWED:-unset}" = "0" ]
+    [ "${FRAME_TODO_SHADOWED:-unset}" = "0" ]
+}
+
+@test "handoff_frame (a second call): resets the legacy and shadowed flags" {
+    fr="$BATS_TEST_TMPDIR/frame-leg-reset"; mkdir -p "$fr"
+    printf '## Current task\n\nroot task body\n' > "$fr/task.md"
+    printf '## Current task\n\nlegacy task body\n' > "$fr/legacy-task.md"
+    printf '## Remaining\n\n- legacy item\n' > "$fr/legacy-todo.md"
+    rc=0; handoff_frame "$fr/task.md" "$fr/todo.md" "$fr/legacy-task.md" "$fr/legacy-todo.md" || rc=$?
+    [ "$rc" -eq 0 ]
+    # Each call sets two flags and leaves the other two at 0: a task cannot be
+    # both legacy and shadowed in one call. Two calls with complementary pairs
+    # make every flag go 1 and then back to 0, or a flag that is only
+    # initialised when unset passes.
+    [ "${FRAME_TASK_LEGACY:-unset}" = "0" ]
+    [ "${FRAME_TODO_LEGACY:-unset}" = "1" ]
+    [ "${FRAME_TASK_SHADOWED:-unset}" = "1" ]
+    [ "${FRAME_TODO_SHADOWED:-unset}" = "0" ]
+    fr2="$BATS_TEST_TMPDIR/frame-leg-reset-2"; mkdir -p "$fr2"
+    printf '## Remaining\n\n- root item\n' > "$fr2/todo.md"
+    printf '## Current task\n\nlegacy task body\n' > "$fr2/legacy-task.md"
+    printf '## Remaining\n\n- legacy item\n' > "$fr2/legacy-todo.md"
+    rc=0; handoff_frame "$fr2/task.md" "$fr2/todo.md" "$fr2/legacy-task.md" "$fr2/legacy-todo.md" || rc=$?
+    [ "$rc" -eq 0 ]
+    [ "${FRAME_TASK_LEGACY:-unset}" = "1" ]
+    [ "${FRAME_TODO_LEGACY:-unset}" = "0" ]
+    [ "${FRAME_TASK_SHADOWED:-unset}" = "0" ]
+    [ "${FRAME_TODO_SHADOWED:-unset}" = "1" ]
+    rc=0; handoff_frame "$fr/gone-task.md" "$fr/gone-todo.md" "$fr/gone-legacy-task.md" "$fr/gone-legacy-todo.md" || rc=$?
+    [ "$rc" -eq 1 ]
+    [ "${FRAME_TASK_LEGACY:-unset}" = "0" ]
+    [ "${FRAME_TODO_LEGACY:-unset}" = "0" ]
+    [ "${FRAME_TASK_SHADOWED:-unset}" = "0" ]
+    [ "${FRAME_TODO_SHADOWED:-unset}" = "0" ]
+}
+
 # --- _lib.sh: handoff_drive_read shape matrix ---
 #
 # Line 1 is the kind and the kind fixes the shape, so the remaining lines need
@@ -781,6 +950,21 @@ assert_msg_matches() {
 
 loaded_re='loaded — ([0-9]+ B|[0-9]+\.[0-9] KiB), saved (just now|[0-9]+[mhd] ago)'
 
+# The legacy-path notes, one pair per half and per case. `_ctx` is the line the
+# agent reads in additionalContext, `_msg` the fragment the user reads in the
+# systemMessage. Both loaders say the same thing on each channel; the checkpoint
+# repeats the move on its own stdout.
+#   from-legacy: the half was loaded from the old path, the next checkpoint moves it.
+#   shadowed:    the root file has a body, so the old file is ignored.
+legacy_task_ctx='Task loaded from legacy .claude/handoff-task.md; the next checkpoint moves it to TASK.md.'
+legacy_todo_ctx='Todo loaded from legacy .claude/handoff-todo.md; edit it there until the next checkpoint moves it to TODO.md.'
+legacy_task_msg='task from .claude/handoff-task.md, next checkpoint moves it'
+legacy_todo_msg='todo from .claude/handoff-todo.md, next checkpoint moves it'
+shadowed_task_ctx='Legacy .claude/handoff-task.md is ignored: TASK.md has a body.'
+shadowed_todo_ctx='Legacy .claude/handoff-todo.md is ignored: TODO.md has a body.'
+shadowed_task_msg='.claude/handoff-task.md ignored, TASK.md wins'
+shadowed_todo_msg='.claude/handoff-todo.md ignored, TODO.md wins'
+
 # --- load-handoff ---
 
 @test "load-handoff (read-time assembly): injects header + task, echoes event" {
@@ -885,6 +1069,189 @@ ASMTASK
     [ "$MSG" = "handoff: No task frame or todo." ]
     [ "$CTX" = $'No task frame or todo.\n' ]
     echo "$output" | jq -e '.hookSpecificOutput.hookEventName == "SessionStart"' >/dev/null
+}
+
+# --- load-handoff: legacy paths (.claude/handoff-task.md, .claude/handoff-todo.md) ---
+#
+# Per half the root file wins when it has a body, else the legacy file when it
+# has a body. A half loaded from a legacy path, and a legacy file ignored behind
+# a root file, are each named on both channels, after the frame and before the
+# gap line: from-legacy notes (task, todo), then ignored notes (task, todo), then
+# the gap note. The size in the message is the frame's alone.
+
+# <frame-size> <tail> — the whole systemMessage is the loaded note for a frame of
+# that size, then exactly <tail> (the "; "-joined notes that follow it).
+assert_notes() {
+    local re="^handoff: loaded — $1 B, saved (just now|[0-9]+[mhd] ago); "
+    [[ "$MSG" =~ $re ]] && [ "${MSG#"${BASH_REMATCH[0]}"}" = "$2" ]
+}
+
+# setup() seeds $tmp/TASK.md; a row that wants no root task removes it, and a
+# row that keeps it says so in its expected frame.
+@test "load-handoff (legacy task alone): loaded from the old path, noted on both channels, No todo last" {
+    rm -f "$tmp/TASK.md"
+    printf '## Current task\n\nlegacy task body\n' > "$tmp/.claude/handoff-task.md"
+    run_load_handoff "$tmp" clear
+    [ "$status" -eq 0 ]
+    split_output "$output"
+    framed="${CTX%$'\n\n'"$legacy_task_ctx"$'\n\nNo todo.\n'}"
+    [ "$framed" != "$CTX" ]
+    assert_framed "$framed" $'\n\n## Current task\n\nlegacy task body'
+    assert_notes "${#framed}" "$legacy_task_msg; No todo"
+    # Reading is not consuming.
+    [ -s "$tmp/.claude/handoff-task.md" ]
+}
+
+@test "load-handoff (legacy todo alone): loaded from the old path, noted on both channels, No task frame last" {
+    rm -f "$tmp/TASK.md"
+    printf '## Remaining\n\n- legacy item\n' > "$tmp/.claude/handoff-todo.md"
+    run_load_handoff "$tmp" clear
+    [ "$status" -eq 0 ]
+    split_output "$output"
+    framed="${CTX%$'\n\n'"$legacy_todo_ctx"$'\n\nNo task frame.\n'}"
+    [ "$framed" != "$CTX" ]
+    assert_framed "$framed" $'\n\n## Remaining\n\n- legacy item'
+    assert_notes "${#framed}" "$legacy_todo_msg; No task frame"
+    [ -s "$tmp/.claude/handoff-todo.md" ]
+}
+
+@test "load-handoff (both halves legacy): task then todo, one note each, no gap note" {
+    rm -f "$tmp/TASK.md"
+    printf '## Current task\n\nlegacy task body\n' > "$tmp/.claude/handoff-task.md"
+    printf '## Remaining\n\n- legacy item\n' > "$tmp/.claude/handoff-todo.md"
+    run_load_handoff "$tmp" startup
+    [ "$status" -eq 0 ]
+    split_output "$output"
+    framed="${CTX%$'\n\n'"$legacy_task_ctx"$'\n\n'"$legacy_todo_ctx"$'\n'}"
+    [ "$framed" != "$CTX" ]
+    assert_framed "$framed" $'\n\n## Current task\n\nlegacy task body\n\n## Remaining\n\n- legacy item'
+    assert_notes "${#framed}" "$legacy_task_msg; $legacy_todo_msg"
+    [ -s "$tmp/.claude/handoff-task.md" ]
+    [ -s "$tmp/.claude/handoff-todo.md" ]
+}
+
+# The case a project's own TODO.md makes real: the root file is the frame, the
+# old one is never read, and the agent is told it is there.
+@test "load-handoff (root files with a body shadow legacy files): the root frame, an ignored note per half on both channels" {
+    printf '## Current task\n\nroot task body\n' > "$tmp/TASK.md"
+    printf '## Remaining\n\n- root item\n' > "$tmp/TODO.md"
+    printf '## Current task\n\nlegacy task body\n' > "$tmp/.claude/handoff-task.md"
+    printf '## Remaining\n\n- legacy item\n' > "$tmp/.claude/handoff-todo.md"
+    run_load_handoff "$tmp" clear
+    [ "$status" -eq 0 ]
+    split_output "$output"
+    framed="${CTX%$'\n\n'"$shadowed_task_ctx"$'\n\n'"$shadowed_todo_ctx"$'\n'}"
+    [ "$framed" != "$CTX" ]
+    assert_framed "$framed" $'\n\n## Current task\n\nroot task body\n\n## Remaining\n\n- root item'
+    assert_notes "${#framed}" "$shadowed_task_msg; $shadowed_todo_msg"
+    # Never merged, never removed: the legacy bodies are untouched and unread.
+    [[ "$CTX" != *"legacy task body"* && "$CTX" != *"legacy item"* ]]
+    [ "$(cat "$tmp/.claude/handoff-task.md")" = $'## Current task\n\nlegacy task body' ]
+    [ "$(cat "$tmp/.claude/handoff-todo.md")" = $'## Remaining\n\n- legacy item' ]
+}
+
+@test "load-handoff (root task shadows a legacy task, todo only legacy): from-legacy note first, then the ignored one" {
+    printf '## Current task\n\nroot task body\n' > "$tmp/TASK.md"
+    printf '## Current task\n\nlegacy task body\n' > "$tmp/.claude/handoff-task.md"
+    printf '## Remaining\n\n- legacy item\n' > "$tmp/.claude/handoff-todo.md"
+    run_load_handoff "$tmp" clear
+    [ "$status" -eq 0 ]
+    split_output "$output"
+    framed="${CTX%$'\n\n'"$legacy_todo_ctx"$'\n\n'"$shadowed_task_ctx"$'\n'}"
+    [ "$framed" != "$CTX" ]
+    assert_framed "$framed" $'\n\n## Current task\n\nroot task body\n\n## Remaining\n\n- legacy item'
+    assert_notes "${#framed}" "$legacy_todo_msg; $shadowed_task_msg"
+}
+
+# A root file that is headings and nothing else is no task, so it does not
+# shadow: the legacy file's body is the frame and nothing is ignored.
+@test "load-handoff (headings-only root task beside a legacy task body): the legacy task is loaded, nothing ignored" {
+    printf '## Current task\n\n## Open decisions\n' > "$tmp/TASK.md"
+    printf '## Current task\n\nlegacy task body\n' > "$tmp/.claude/handoff-task.md"
+    run_load_handoff "$tmp" clear
+    [ "$status" -eq 0 ]
+    split_output "$output"
+    framed="${CTX%$'\n\n'"$legacy_task_ctx"$'\n\nNo todo.\n'}"
+    [ "$framed" != "$CTX" ]
+    assert_framed "$framed" $'\n\n## Current task\n\nlegacy task body'
+    assert_notes "${#framed}" "$legacy_task_msg; No todo"
+    [[ "$CTX" != *"is ignored"* ]]
+}
+
+@test "load-handoff (headings-only root todo beside a legacy todo body): the legacy todo is loaded, nothing ignored" {
+    printf '## Remaining\n' > "$tmp/TODO.md"
+    printf '## Remaining\n\n- legacy item\n' > "$tmp/.claude/handoff-todo.md"
+    run_load_handoff "$tmp" clear
+    [ "$status" -eq 0 ]
+    split_output "$output"
+    framed="${CTX%$'\n\n'"$legacy_todo_ctx"$'\n'}"
+    [ "$framed" != "$CTX" ]
+    assert_framed "$framed" $'\n\n## Current task\n\nhook smoke test\n\n## Open decisions\n\n- none\n\n## Remaining\n\n- legacy item'
+    assert_notes "${#framed}" "$legacy_todo_msg"
+    [[ "$CTX" != *"is ignored"* ]]
+}
+
+# The legacy paths hang off the root the loader anchors on, never off
+# CLAUDE_PROJECT_DIR (the main tree, in a worktree session). The main tree has
+# its own legacy task with a different body, so reading from the wrong root
+# shows.
+@test "load-handoff (worktree cwd: reads the worktree's legacy task, not main's)" {
+    wt="$(make_worktree wtLeg)"
+    rm -f "$tmp/TASK.md"
+    printf '## Current task\n\nworktree legacy task body\n' > "$wt/.claude/handoff-task.md"
+    printf '## Current task\n\nmain legacy task body\n' > "$tmp/.claude/handoff-task.md"
+    run_load_handoff "$wt" clear
+    [ "$status" -eq 0 ]
+    split_output "$output"
+    framed="${CTX%$'\n\n'"$legacy_task_ctx"$'\n\nNo todo.\n'}"
+    [ "$framed" != "$CTX" ]
+    assert_framed "$framed" $'\n\n## Current task\n\nworktree legacy task body'
+    assert_notes "${#framed}" "$legacy_task_msg; No todo"
+    [[ "$CTX" != *"main legacy task body"* ]]
+}
+
+# The age is the newest file that counts, and a legacy file counts only when its
+# half was loaded from it. The first row puts the old mtime on the legacy file
+# the frame came from; the second puts it on the root file and a fresh mtime on
+# the legacy file it shadows, which must not make the frame read as just saved.
+@test "load-handoff (age): a half loaded from a legacy path is aged by that file" {
+    printf '## Current task\n\n## Open decisions\n' > "$tmp/TASK.md"
+    printf '## Remaining\n\n- legacy item\n' > "$tmp/.claude/handoff-todo.md"
+    touch -d '2 days ago' "$tmp/.claude/handoff-todo.md"
+    run_load_handoff "$tmp" clear
+    [ "$status" -eq 0 ]
+    split_output "$output"
+    framed="${CTX%$'\n\n'"$legacy_todo_ctx"$'\n\nNo task frame.\n'}"
+    [ "$framed" != "$CTX" ]
+    assert_framed "$framed" $'\n\n## Remaining\n\n- legacy item'
+    [ "$MSG" = "handoff: loaded — ${#framed} B, saved 2d ago; $legacy_todo_msg; No task frame" ]
+}
+
+@test "load-handoff (age): a legacy file shadowed by a root file does not make the frame younger" {
+    rm -f "$tmp/TASK.md"
+    printf '## Remaining\n\n- root item\n' > "$tmp/TODO.md"
+    touch -d '2 days ago' "$tmp/TODO.md"
+    printf '## Remaining\n\n- legacy item\n' > "$tmp/.claude/handoff-todo.md"
+    run_load_handoff "$tmp" clear
+    [ "$status" -eq 0 ]
+    split_output "$output"
+    framed="${CTX%$'\n\n'"$shadowed_todo_ctx"$'\n\nNo task frame.\n'}"
+    [ "$framed" != "$CTX" ]
+    assert_framed "$framed" $'\n\n## Remaining\n\n- root item'
+    [ "$MSG" = "handoff: loaded — ${#framed} B, saved 2d ago; $shadowed_todo_msg; No task frame" ]
+}
+
+# A guard, not a red row: it holds before the change and must keep holding. A
+# legacy file with no body is no more a frame than a root one, and says nothing.
+@test "load-handoff (legacy files with no body, no root file): the neither state, no legacy note" {
+    rm -f "$tmp/TASK.md"
+    : > "$tmp/.claude/handoff-task.md"
+    printf '## Remaining\n' > "$tmp/.claude/handoff-todo.md"
+    run_load_handoff "$tmp" clear
+    [ "$status" -eq 0 ]
+    split_output "$output"
+    [ "$MSG" = "handoff: No task frame or todo." ]
+    [ "$CTX" = $'No task frame or todo.\n' ]
 }
 
 # The todo is two days old with a body; the task was written just now but holds
@@ -1107,6 +1474,109 @@ run_load_compact() {
 @test "load-compact (pending present, headings-only todo, no task: consumed, No todo, nothing injected)" {
     rm -f "$tmp/TASK.md"
     printf '## Remaining\n' > "$tmp/TODO.md"
+    seed_pending "$tmp" "compact" "/compact" "continue with task 3"
+    run_load_compact "$tmp"
+    [ "$status" -eq 0 ]
+    [ ! -e "$tmp/.claude/autodrive" ]
+    split_output "$output"
+    [ "$MSG" = "handoff: compacted — No todo." ]
+    echo "$output" | jq -e 'has("hookSpecificOutput") | not' >/dev/null
+}
+
+# --- load-compact: legacy paths ---
+#
+# The same two notes as the other loader, on both channels. The message keeps its
+# `compacted — todo re-injected` / `compacted — No todo` lead and appends the
+# notes, "; "-joined, before the closing full stop; the context is the frame, a
+# blank line, then each note (from-legacy task, todo, then ignored task, todo)
+# as its own paragraph. There is no gap line on this channel.
+
+@test "load-compact (legacy todo alone, no task): re-injected from the old path, noted on both channels" {
+    rm -f "$tmp/TASK.md"
+    printf '## Remaining\n\n- legacy item\n' > "$tmp/.claude/handoff-todo.md"
+    seed_pending "$tmp" "compact" "/compact" "continue with task 3"
+    run_load_compact "$tmp"
+    [ "$status" -eq 0 ]
+    [ ! -e "$tmp/.claude/autodrive" ]
+    split_output "$output"
+    [ "$MSG" = "handoff: compacted — todo re-injected; $legacy_todo_msg." ]
+    assert_framed "$CTX" $'\n\n## Remaining\n\n- legacy item\n\n'"$legacy_todo_ctx"$'\n'
+    [ -s "$tmp/.claude/handoff-todo.md" ]
+}
+
+@test "load-compact (legacy task alone): injected from the old path, the message says No todo and names it" {
+    rm -f "$tmp/TASK.md"
+    printf '## Current task\n\nlegacy task body\n' > "$tmp/.claude/handoff-task.md"
+    seed_pending "$tmp" "compact" "/compact" "continue with task 3"
+    run_load_compact "$tmp"
+    [ "$status" -eq 0 ]
+    [ ! -e "$tmp/.claude/autodrive" ]
+    split_output "$output"
+    [ "$MSG" = "handoff: compacted — No todo; $legacy_task_msg." ]
+    assert_framed "$CTX" $'\n\n## Current task\n\nlegacy task body\n\n'"$legacy_task_ctx"$'\n'
+}
+
+@test "load-compact (both halves legacy): task then todo, one note each" {
+    rm -f "$tmp/TASK.md"
+    printf '## Current task\n\nlegacy task body\n' > "$tmp/.claude/handoff-task.md"
+    printf '## Remaining\n\n- legacy item\n' > "$tmp/.claude/handoff-todo.md"
+    seed_pending "$tmp" "compact" "/compact" "continue with task 3"
+    run_load_compact "$tmp"
+    [ "$status" -eq 0 ]
+    split_output "$output"
+    [ "$MSG" = "handoff: compacted — todo re-injected; $legacy_task_msg; $legacy_todo_msg." ]
+    assert_framed "$CTX" $'\n\n## Current task\n\nlegacy task body\n\n## Remaining\n\n- legacy item\n\n'"$legacy_task_ctx"$'\n\n'"$legacy_todo_ctx"$'\n'
+}
+
+@test "load-compact (root todo with a body shadows a legacy todo): the root frame, an ignored note on both channels" {
+    rm -f "$tmp/TASK.md"
+    printf '## Remaining\n\n- root item\n' > "$tmp/TODO.md"
+    printf '## Remaining\n\n- legacy item\n' > "$tmp/.claude/handoff-todo.md"
+    seed_pending "$tmp" "compact" "/compact" "continue with task 3"
+    run_load_compact "$tmp"
+    [ "$status" -eq 0 ]
+    [ ! -e "$tmp/.claude/autodrive" ]
+    split_output "$output"
+    [ "$MSG" = "handoff: compacted — todo re-injected; $shadowed_todo_msg." ]
+    assert_framed "$CTX" $'\n\n## Remaining\n\n- root item\n\n'"$shadowed_todo_ctx"$'\n'
+    [[ "$CTX" != *"legacy item"* ]]
+    [ "$(cat "$tmp/.claude/handoff-todo.md")" = $'## Remaining\n\n- legacy item' ]
+}
+
+@test "load-compact (headings-only root todo beside a legacy todo body): the legacy todo is re-injected, nothing ignored" {
+    rm -f "$tmp/TASK.md"
+    printf '## Remaining\n' > "$tmp/TODO.md"
+    printf '## Remaining\n\n- legacy item\n' > "$tmp/.claude/handoff-todo.md"
+    seed_pending "$tmp" "compact" "/compact" "continue with task 3"
+    run_load_compact "$tmp"
+    [ "$status" -eq 0 ]
+    split_output "$output"
+    [ "$MSG" = "handoff: compacted — todo re-injected; $legacy_todo_msg." ]
+    assert_framed "$CTX" $'\n\n## Remaining\n\n- legacy item\n\n'"$legacy_todo_ctx"$'\n'
+}
+
+# Both kinds of note on this boundary: the todo comes from the old path while a
+# hand-written root task has a body, so the legacy task is ignored. The order is
+# the one the other loader uses, from-legacy before ignored.
+@test "load-compact (root task shadows a legacy task, todo only legacy): from-legacy note first, then the ignored one" {
+    printf '## Current task\n\nroot task body\n' > "$tmp/TASK.md"
+    printf '## Current task\n\nlegacy task body\n' > "$tmp/.claude/handoff-task.md"
+    printf '## Remaining\n\n- legacy item\n' > "$tmp/.claude/handoff-todo.md"
+    seed_pending "$tmp" "compact" "/compact" "continue with task 3"
+    run_load_compact "$tmp"
+    [ "$status" -eq 0 ]
+    [ ! -e "$tmp/.claude/autodrive" ]
+    split_output "$output"
+    [ "$MSG" = "handoff: compacted — todo re-injected; $legacy_todo_msg; $shadowed_task_msg." ]
+    assert_framed "$CTX" $'\n\n## Current task\n\nroot task body\n\n## Remaining\n\n- legacy item\n\n'"$legacy_todo_ctx"$'\n\n'"$shadowed_task_ctx"$'\n'
+    [[ "$CTX" != *"legacy task body"* ]]
+}
+
+# A guard, not a red row: legacy files with no body are no frame and no note.
+@test "load-compact (legacy files with no body, no root file): consumed, No todo, nothing injected" {
+    rm -f "$tmp/TASK.md"
+    : > "$tmp/.claude/handoff-task.md"
+    printf '## Remaining\n' > "$tmp/.claude/handoff-todo.md"
     seed_pending "$tmp" "compact" "/compact" "continue with task 3"
     run_load_compact "$tmp"
     [ "$status" -eq 0 ]

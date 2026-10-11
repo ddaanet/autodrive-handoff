@@ -116,6 +116,12 @@ for everything above them. The closing line now reads the same way.
 
 ## The refusal prints alone
 
+> **Superseded 2026-10-11** (see [Legacy paths are read, and the checkpoint
+> moves them](2026-10-11-legacy-paths-are-read-and-moved.md)): the refusal
+> prints last, not alone. The legacy reports and, under `with-commit`, the git
+> line for the legacy paths the call moved or removed print ahead of it; the
+> commit sentence, arming instruction and closing line stay suppressed.
+
 `memory_directive` returns a `MemoryPart(text, refusal)`. The clause-file
 refusal (`gitlore.memoryApprovalClauseFile` unset, or its file missing) says to
 restart and retry. A commit act, an arming instruction or a closing line after

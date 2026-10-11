@@ -44,15 +44,28 @@ rm -f "$drive"
 # SessionStart(startup|clear). The checkpoint removes the task file at this
 # boundary, so one with a body was written by hand since, and is injected too.
 # The message is about the todo either way.
-handoff_frame "$cwd/$HANDOFF_REL_TASK" "$cwd/$HANDOFF_REL_TODO" || true
+handoff_frame "$cwd/$HANDOFF_REL_TASK" "$cwd/$HANDOFF_REL_TODO" \
+    "$cwd/$HANDOFF_LEGACY_REL_TASK" "$cwd/$HANDOFF_LEGACY_REL_TODO" || true
+handoff_frame_notes
 
 if (( FRAME_TODO )); then
-    msg="handoff: compacted — todo re-injected."
+    msg="handoff: compacted — todo re-injected"
 else
-    msg="handoff: compacted — No todo."
+    msg="handoff: compacted — No todo"
 fi
 
-jq -nc --arg f "$FRAME" --arg m "$msg" \
+# A half read from a legacy path, or a legacy file left unread beside a root
+# one, is named on both channels, the same notes as load-handoff.sh.
+context="$FRAME"
+for note in ${FRAME_NOTES_CTX[@]+"${FRAME_NOTES_CTX[@]}"}; do
+    context+=$'\n\n'"$note"
+done
+for note in ${FRAME_NOTES_MSG[@]+"${FRAME_NOTES_MSG[@]}"}; do
+    msg+="; $note"
+done
+msg+="."
+
+jq -nc --arg f "$context" --arg m "$msg" \
     'if $f == "" then {}
      else {hookSpecificOutput: {hookEventName: "SessionStart",
            additionalContext: ($f + "\n")}}

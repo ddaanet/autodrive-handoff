@@ -9,8 +9,10 @@ output (FR9). Only `handoff` carries a `task`; `precompact` forbids the key and
 removes any task file on disk.
 
 NFR1: nothing here mutates git state — this is the agent's sandboxed Bash, and
-both files are plain tracked files whichever commit comes next picks up. At turn
-end the sentinel is taken by scripts/drive-take.sh and run by the drive mod.
+both files are plain tracked files whichever commit comes next picks up. A file
+left at a legacy path is renamed or removed on the filesystem, and what the next
+commit owes git for it is printed, not run. At turn end the sentinel is taken by
+scripts/drive-take.sh and run by the drive mod.
 
 Port of checkpoint.sh — see docs/changelog/2026-08-10-python-split.md. The
 composer reads its own sentinel back through handoff_drive_read, which stays the
@@ -22,12 +24,15 @@ the drift the single-parser design exists to prevent.
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any, Literal, NamedTuple, NoReturn, cast
 
@@ -44,6 +49,13 @@ JSONDict = dict[str, Any]
 HANDOFF_REL_TASK = "TASK.md"
 HANDOFF_REL_TODO = "TODO.md"
 HANDOFF_REL_DRIVE = ".claude/autodrive"
+
+# Mirrors _lib.sh's HANDOFF_LEGACY_REL_*: where the task and todo files lived
+# before they moved to the root. The checkpoint moves a file off them; the
+# fallback goes once no sibling repository still has a `.claude/handoff-*.md`.
+# `grep -rni legacy scripts/ tests/` lists all of it.
+HANDOFF_LEGACY_REL_TASK = ".claude/handoff-task.md"
+HANDOFF_LEGACY_REL_TODO = ".claude/handoff-todo.md"
 
 _LIB_SH = Path(__file__).resolve().parent / "_lib.sh"
 
@@ -80,17 +92,21 @@ def main() -> int:
             "transition", "cannot compose a held sentinel naming the session holding it"
         )
 
+    plans: list[FilePlan] = []
     if skill in ("handoff", "precompact"):
         task_action, task_content = validate_task(payload, skill)
         todo_action, todo_content, todo_old, todo_new = validate_todo(payload)
-        task_plan = plan_task(root, task_action, task_content)
-        todo_plan = plan_todo(root, todo_action, todo_content, todo_old, todo_new)
-        apply_plan(task_plan)
-        apply_plan(todo_plan)
+        plans = [
+            plan_task(root, task_action, task_content),
+            plan_todo(root, todo_action, todo_content, todo_old, todo_new),
+        ]
+        for plan in plans:
+            apply_plan(plan)
 
     compose_sentinel(root, transition, continuation, held=held)
     ending = Ending(held=held, typed=transition.typed)
-    parts = compose_directives(skill, root, commit_mode, memory, ending)
+    boundary = Boundary(skill, root, commit_mode)
+    parts = compose_directives(boundary, memory, ending, plans)
     print_output(parts)
     return 0
 
@@ -486,17 +502,47 @@ def _todo_edit_strings(todo: JSONDict) -> tuple[str, str]:
     return strings[0], strings[1]
 
 
+class Legacy(NamedTuple):
+    """What a plan does about the file at its half's legacy path.
+
+    `moved`: its bytes become the root file. `removed`: it goes, its bytes
+    carried nowhere. `ignored`: the root file wins and it stays as it is.
+    """
+
+    path: Path
+    rel: str
+    fate: Literal["moved", "removed", "ignored"]
+
+
 class FilePlan(NamedTuple):
     """What one half will do to its file, resolved before anything is written.
 
     A NamedTuple, like Transition beside it, so the record itself is frozen.
-    `none` is `keep`'s plan alone: the list is left as it is, without a stat
-    (FR4).
+    `none` leaves the list as it is: with no legacy file it neither reads nor
+    stats the root file (FR4). `move` carries the legacy file onto `path` with
+    its modification time; a `write` or a `remove` also takes its legacy file
+    away unless that one is `ignored`.
     """
 
-    act: Literal["write", "remove", "none"]
+    act: Literal["write", "remove", "move", "none"]
     path: Path
     body: str
+    legacy: Legacy | None = None
+
+
+class Half(NamedTuple):
+    """One half's root file and legacy path, and whether the root file counts.
+
+    A root file counts when it has a body: the loader's own test, so what the
+    checkpoint treats as the frame is what the next session is shown. Only a
+    half with a legacy file asks; any other reads `False` and its root file is
+    left unread.
+    """
+
+    path: Path
+    legacy_path: Path
+    legacy_rel: str
+    has_body: bool
 
 
 def edited_body(field: str, path: Path, old: str, new: str) -> str:
@@ -515,49 +561,155 @@ def edited_body(field: str, path: Path, old: str, new: str) -> str:
     return content.replace(old, new, 1)
 
 
+def read_half(field: str, root: Path, rel: str, legacy_rel: str) -> Half:
+    """Return the half's paths, or error when its legacy file cannot be handled.
+
+    Errors when a directory sits on the root file, which leaves the legacy file
+    nowhere to go, and when the legacy path is a symlink to a file, whose
+    relative target would not resolve from the root. The root file is read only
+    when a legacy file exists.
+    """
+    path = root / rel
+    legacy_path = root / legacy_rel
+    if not legacy_path.is_file():
+        return Half(path, legacy_path, legacy_rel, has_body=False)
+    if legacy_path.is_symlink():
+        err(field, f"{legacy_rel} is a symbolic link, not a file")
+    if path.is_dir():
+        err(field, f"{rel} is a directory, not a file")
+    counts = path.is_file() and not lib.is_empty_body(
+        path.read_text(encoding="utf-8", errors="replace")
+    )
+    return Half(path, legacy_path, legacy_rel, counts)
+
+
+def legacy_fate(half: Half, *, after: bool, carried: bool) -> Legacy | None:
+    """Return what becomes of the half's legacy file, None when there is none.
+
+    `after` is whether the root file will have a body once the plan is applied;
+    `carried` is whether the legacy file's bytes are what it will hold. A root
+    file with a body before and after is the frame and the legacy file stays.
+    Any other outcome would leave the legacy file as a frame the loader could
+    pick up again, so it goes.
+    """
+    if not half.legacy_path.is_file():
+        return None
+    if half.has_body and after:
+        return Legacy(half.legacy_path, half.legacy_rel, "ignored")
+    fate: Literal["moved", "removed"] = "moved" if carried else "removed"
+    return Legacy(half.legacy_path, half.legacy_rel, fate)
+
+
 def plan_task(root: Path, action: str, content: str) -> FilePlan:
     """Resolve the task write or clear to a plan (FR5).
 
-    A content string is written as given; only `clear` removes.
+    A content string is written as given; only `clear` removes the root file.
     """
-    path = root / HANDOFF_REL_TASK
+    half = read_half("task", root, HANDOFF_REL_TASK, HANDOFF_LEGACY_REL_TASK)
     if action == "clear":
-        return FilePlan("remove", path, "")
-    return FilePlan("write", path, content)
+        legacy = legacy_fate(half, after=False, carried=False)
+        return FilePlan("remove", half.path, "", legacy)
+    after = not lib.is_empty_body(content)
+    legacy = legacy_fate(half, after=after, carried=False)
+    return FilePlan("write", half.path, content, legacy)
 
 
 def plan_todo(root: Path, action: str, content: str, old: str, new: str) -> FilePlan:
     """Resolve the todo write, edit, clear or keep to a plan (FR5).
 
     A content string and an edit's result are written as given, whatever is left
-    in them; only `clear` removes. `edit` errors here, ahead of any write, when
-    the file is absent or `old` does not occur in it exactly once.
+    in them; only `clear` removes the root file. `edit` errors here, ahead of
+    any write, when the file is absent or `old` does not occur in it exactly
+    once. The file is the root one when it has a body, else the legacy one.
     """
-    path = root / HANDOFF_REL_TODO
+    half = read_half("todo", root, HANDOFF_REL_TODO, HANDOFF_LEGACY_REL_TODO)
     if action == "keep":
-        return FilePlan("none", path, "")
+        legacy = legacy_fate(half, after=half.has_body, carried=True)
+        if legacy is not None and legacy.fate == "moved":
+            return FilePlan("move", half.path, "", legacy)
+        return FilePlan("none", half.path, "", legacy)
     if action == "clear":
-        return FilePlan("remove", path, "")
+        legacy = legacy_fate(half, after=False, carried=False)
+        return FilePlan("remove", half.path, "", legacy)
     if action == "edit":
-        if not path.is_file():
+        use_legacy = not half.has_body and half.legacy_path.is_file()
+        source = half.legacy_path if use_legacy else half.path
+        if not source.is_file():
             err(
                 "todo.old_string",
                 f"edit requested but {HANDOFF_REL_TODO} does not exist",
             )
-        return FilePlan("write", path, edited_body("todo", path, old, new))
-    return FilePlan("write", path, content)
+        body = edited_body("todo", source, old, new)
+        legacy = legacy_fate(
+            half, after=not lib.is_empty_body(body), carried=use_legacy
+        )
+        return FilePlan("write", half.path, body, legacy)
+    legacy = legacy_fate(half, after=not lib.is_empty_body(content), carried=False)
+    return FilePlan("write", half.path, content, legacy)
 
 
 def apply_plan(plan: FilePlan) -> None:
-    """Perform the write or the unlink a plan names.
+    """Perform the write, unlink or move a plan names.
 
-    Neither arm calls err(): a removal of a file that is not there is no error,
-    so nothing can fail between the two halves.
+    Then take the legacy file off its path unless it is ignored, so the root
+    file is current before the legacy one goes. A failed move errors; the other
+    arms leave a filesystem failure to surface as it is, every payload failure
+    having been found while the plans were being resolved.
     """
+    legacy = plan.legacy
     if plan.act == "write":
         plan.path.write_text(plan.body, encoding="utf-8")
     elif plan.act == "remove":
         plan.path.unlink(missing_ok=True)
+    elif plan.act == "move" and legacy is not None:
+        move_legacy(legacy, plan.path)
+    if legacy is not None and legacy.fate != "ignored":
+        legacy.path.unlink(missing_ok=True)
+
+
+def move_legacy(legacy: Legacy, path: Path) -> None:
+    """Put the legacy file's bytes and modification time at `path`.
+
+    A rename when the two share a device. Across devices, a copy lands beside
+    `path` and is renamed onto it, so the root file is whole or untouched; the
+    caller removes the legacy file after. Any other failure errors naming it.
+    """
+    try:
+        legacy.path.replace(path)
+    except OSError as exc:
+        if exc.errno != errno.EXDEV:
+            err(legacy.rel, f"cannot be moved to {path.name}: {exc.strerror}")
+        copy_across_devices(legacy, path)
+
+
+def copy_across_devices(legacy: Legacy, path: Path) -> None:
+    """Copy the legacy file onto `path` through a sibling temporary file."""
+    fd, name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    os.close(fd)
+    try:
+        shutil.copy2(legacy.path, name)
+        Path(name).replace(path)
+    except OSError as exc:
+        Path(name).unlink(missing_ok=True)
+        err(legacy.rel, f"cannot be moved to {path.name}: {exc.strerror}")
+
+
+def legacy_reports(plans: list[FilePlan]) -> str:
+    """Return one line per legacy file the plans found, or "" for none."""
+    lines = []
+    for plan in plans:
+        legacy = plan.legacy
+        if legacy is None:
+            continue
+        if legacy.fate == "moved":
+            lines.append(f"Legacy {legacy.rel} moved to {plan.path.name}.")
+        elif legacy.fate == "removed":
+            lines.append(f"Legacy {legacy.rel} removed.")
+        else:
+            lines.append(
+                f"Legacy {legacy.rel} is ignored: {plan.path.name} has a body."
+            )
+    return "".join(f"{line}\n" for line in lines)
 
 
 def hold_decision(transition: Transition, *, memory: bool, commit: bool) -> bool:
@@ -631,29 +783,49 @@ class Ending(NamedTuple):
     typed: bool
 
 
+class Boundary(NamedTuple):
+    """The boundary this call serves: its skill, root and commit mode."""
+
+    skill: str
+    root: Path
+    commit_mode: str
+
+
 def compose_directives(
-    skill: str, root: Path, commit_mode: str, memory: lib.MemoryPart, ending: Ending
+    boundary: Boundary,
+    memory: lib.MemoryPart,
+    ending: Ending,
+    plans: list[FilePlan],
 ) -> list[str]:
     """Return the ordered, non-empty directive parts for this boundary.
 
-    Print order: memory, then the todo boundary/SDD nudge, then the commit act
-    (present only under "with-commit"), then either the arming instruction
-    (held) or the closing line (not held) — always last, and mutually
-    exclusive. [] under autoname. The clause-file refusal
-    (`memory.refusal`) suppresses every other part — the checkpoint prints it
-    alone.
+    Print order: the legacy reports, then memory, then the todo boundary/SDD
+    nudge, then the commit act (present only under "with-commit"), then either
+    the arming instruction (held) or the closing line (not held) — always last,
+    and mutually exclusive. [] under autoname. The clause-file refusal
+    (`memory.refusal`) suppresses every other part but the legacy reports and
+    the act that stages the legacy paths: it prints last.
     """
+    skill, root, commit_mode = boundary
     if skill not in ("handoff", "precompact"):
         return []
+    reports = legacy_reports(plans)
+    gone = [
+        plan.legacy.rel
+        for plan in plans
+        if plan.legacy is not None and plan.legacy.fate != "ignored"
+    ]
+    with_commit = commit_mode == "with-commit"
     if memory.refusal:
-        return [memory.text]
+        unstage = lib.legacy_unstage_directive(gone) if with_commit else ""
+        return [part for part in (reports, unstage, memory.text) if part]
     root_s = str(root)
     if skill == "handoff":
         second = lib.todo_boundary(root_s)
     else:
         second = lib.sdd_directive(root_s)
-    commit = lib.commit_directive() if commit_mode == "with-commit" else ""
-    parts = [part for part in (memory.text, second, commit) if part]
+    commit = lib.commit_directive(gone) if with_commit else ""
+    parts = [part for part in (reports, memory.text, second, commit) if part]
     if ending.held:
         parts.append(lib.arming_directive())
     else:

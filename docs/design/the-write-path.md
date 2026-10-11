@@ -39,6 +39,21 @@ ran.
 [A heading is not a leading `#`](../changelog/2026-09-14-a-heading-is-not-a-leading-hash.md),
 [TASK.md and TODO.md move to the root](../changelog/2026-10-11-task-and-todo-move-to-the-root.md)
 
+The two files lived at `.claude/handoff-task.md` and `.claude/handoff-todo.md`
+before they moved to the root, and a repository that crossed the move still has
+them. They are the *legacy* files, and the frame reads them as a bridge: per
+half, the root file when it has a body, else the legacy file when it has a
+body. The root file wins, and a legacy file that exists beside a root file with
+a body, whatever it holds, is left as it is and reported ignored. The loader
+names a half read from a legacy path and a legacy file left ignored on both
+channels, from one producer, `handoff_frame_notes`, so the two channels and the
+two loaders word them alike; the note carries a fact, and no advice to delete.
+A todo read from a legacy path is told to be edited there until the checkpoint
+moves it, since a new `TODO.md` written first would shadow the list the session
+inherited. What a legacy file is, and when the bridge goes, is argued in
+[Design decisions](decisions.md).
+[Legacy paths are read, and the checkpoint moves them](../changelog/2026-10-11-legacy-paths-are-read-and-moved.md)
+
 ## One channel, one writer
 
 Both wrap-up skills decide their content and then make exactly one Bash
@@ -82,9 +97,12 @@ write instead. There is no `file_path` —
 payload-supplied one would ask the agent to derive a path from a root it
 cannot read, only to be checked against the one the write uses anyway. A
 violation exits non-zero naming the offending field. The wrap-up is applied
-whole or not at all: both halves resolve to a plan — the path, the act and
-the body — before either file is touched, so every failure the two halves
-raise leaves the disk as it was.
+whole or not at all: both halves resolve to a plan — the path, the act, the
+body and what becomes of the half's legacy file — before either file is
+touched, so every failure the payload and the files can raise leaves the disk
+as it was. A failure of the filesystem itself, found while a plan is applied,
+is the one thing resolution cannot see: it can follow the first half having
+been applied, as two writes in a row always could.
 [The payload names its actions](../changelog/2026-09-07-the-payload-names-its-actions.md),
 [Nothing is written until both halves resolve](../changelog/2026-09-13-nothing-is-written-until-both-halves-resolve.md),
 [The vocabulary is closed at both levels](../changelog/2026-09-14-the-vocabulary-is-closed-at-both-levels.md)
@@ -109,17 +127,44 @@ transition fields — creating `.claude/` when the project has none, the
 sentinel being the one thing left that needs it — and prints on stdout what
 the agent does next (see [What the checkpoint
 prints](the-checkpoint-directive.md#what-the-checkpoint-prints)). A content
-string is written as given, whatever is in it; a file is removed by
+string is written as given, whatever is in it; a root file is removed by
 `{"action": "clear"}` and, for the task file, by the compact boundary, and by
 nothing else. An empty `TODO.md` somebody keeps for another purpose is not the
 checkpoint's to delete.
 
+What the call does to a half's legacy file is decided in the same plan, by one
+rule. The effective content of a half is the root file when it has a body,
+else the legacy file. A root file with a body before the call and after it is
+the frame, and the legacy file stays and is reported ignored. In any other
+case the legacy file goes, because it would otherwise come back as the frame:
+`keep` on the todo renames it onto `TODO.md`, keeping its modification time
+(across devices, by a copy to a sibling temporary file and a rename onto the
+root name); `edit` applies to the effective content and writes the result;
+a content string replaces it; `clear` removes both files. The task file is
+never moved, only replaced or removed, since the checkpoint always authors it
+whole or clears it. The root file is read only when a legacy file exists. Two
+cases are refused during resolution, naming the field: a directory at the root
+name, which leaves the legacy file nowhere to go, and a legacy path that is a
+symlink to a file, whose relative target would dangle once moved. A dangling
+symlink is no legacy file. The legacy file is taken off its path after the root
+file is written, never before, so a failed write loses nothing.
+[Legacy paths are read, and the checkpoint moves them](../changelog/2026-10-11-legacy-paths-are-read-and-moved.md)
+
 It **changes no git state** — it queries git read-only and stops there: it
 runs in the agent's sandboxed Bash, where `git add` can leave
 `.git/index.lock` behind and fail the *next* command (which in the routine
-wrap-up is the user's `/commit`). Nothing else stages on its behalf. Under
-`with-commit` the commit act the checkpoint prints names the two files; under
-`without-commit` they are left modified in the tree like any edited file.
+wrap-up is the user's `/commit`). Nothing else stages on its behalf. Moving or
+removing a legacy file is a filesystem act and stays inside that line. Under
+`with-commit` the commit act the checkpoint prints names the two files, and
+leads with one line for the legacy paths this call moved or removed, `git rm
+--cached --ignore-unmatch -q -- :/<path> …`, so git records a rename once the
+files are added. `:/` anchors each pathspec at the top of the repository,
+because the agent's working directory can be anywhere under the root and a
+bare relative one matched nothing from a subdirectory, silently. The line is
+owed only by the call that moved or removed the file: under `without-commit`
+nothing is printed and the files are left modified in the tree like any edited
+file, and a `with-commit` call after it has no legacy file left to report, so
+the deletion shows as unstaged in `git status`.
 
 ## The task is bounded
 

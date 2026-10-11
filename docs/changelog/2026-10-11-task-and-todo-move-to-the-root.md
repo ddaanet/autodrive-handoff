@@ -105,6 +105,11 @@ is what the survey measured failing.
 
 ## What was decided without being asked
 
+> **Superseded 2026-10-11** (see [Legacy paths are read, and the checkpoint
+> moves them](2026-10-11-legacy-paths-are-read-and-moved.md)): item 5 only.
+> There is a fallback read of the old paths, and the checkpoint moves the
+> files; it is retired by a condition, not a version. Items 1 to 4 and 6 stand.
+
 My human partner settled the points above in conversation. Six more were
 taken as defaults, written out, and confirmed together.
 
@@ -121,6 +126,11 @@ taken as defaults, written out, and confirmed together.
    `todo re-injected` or `No todo`.
 
 ## Moving an existing frame
+
+> **Superseded 2026-10-11** (see [Legacy paths are read, and the checkpoint
+> moves them](2026-10-11-legacy-paths-are-read-and-moved.md)): the loader
+> reads the old paths when the root file has no body, and the next checkpoint
+> moves them. The two `git mv` lines remain the manual route.
 
 ```
 git mv .claude/handoff-task.md TASK.md

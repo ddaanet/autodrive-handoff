@@ -14,6 +14,7 @@ import os
 import re
 import subprocess
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 from typing import NamedTuple
 
@@ -175,16 +176,35 @@ class MemoryPart(NamedTuple):
     refusal: bool
 
 
-def commit_directive() -> str:
+def commit_directive(legacy_paths: Sequence[str] = ()) -> str:
     """Return the commit act, printed under "with-commit".
 
-    Names no git verb: the request may call for an amend or a fresh commit, and
-    the checkpoint does not know which. Names the two files because nothing has
-    staged what this call did to them.
+    Names no git verb for the commit itself: the request may call for an amend
+    or a fresh commit, and the checkpoint does not know which. Names the two
+    files because nothing has staged what this call did to them. Legacy paths
+    this call moved or removed lead it, as `legacy_unstage_directive`.
     """
-    return _printf_lines(
+    commit = _printf_lines(
         "Once everything above is done, make the commit the request called for, "
         "including any change to `TASK.md` and `TODO.md`."
+    )
+    unstage = legacy_unstage_directive(legacy_paths)
+    return f"{unstage}\n{commit}" if unstage else commit
+
+
+def legacy_unstage_directive(paths: Sequence[str]) -> str:
+    """Return the act that stages legacy paths as deleted, or "" for none.
+
+    One line, the paths on it: the legacy files this call moved or removed,
+    never one it left in place. The line does not ask which are tracked. Each
+    path takes git's top-level form (`:/`), so the line runs from any directory
+    of the repository, the agent's own working directory included.
+    """
+    if not paths:
+        return ""
+    pathspecs = " ".join(f":/{path}" for path in paths)
+    return _printf_lines(
+        f"Before committing, run `git rm --cached --ignore-unmatch -q -- {pathspecs}`."
     )
 
 

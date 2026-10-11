@@ -92,13 +92,33 @@ done-log and working conventions, not because tasks are long. The cap is set
 from the task in hand once the rest has left.
 [TASK.md and TODO.md move to the root](../changelog/2026-10-11-task-and-todo-move-to-the-root.md)
 
-**Reading the old paths as a fallback** when `TASK.md` is absent — a branch
-that covers one restart for a user base of one and then outlives it; two `git
-mv` lines do the same once. Also rejected: **protecting a foreign `TODO.md`**
-from a whole-content write. The file is tracked and was injected at session
-start, so the write is informed and recoverable, and the collision is the
-point: it is the same list.
+**A fallback for the old paths that retires by version, by tripwire or by
+nothing** — the loader does read `.claude/handoff-task.md` and
+`.claude/handoff-todo.md` ([the decision](decisions.md)), and what stays ruled
+out is every way of leaving it unattended. A version gate, or a tripwire that
+warns or fails from one, says nothing about which repositories still hold a
+frame under the old names, and turns a release into the moment that frame stops
+loading. A fallback with no stated condition outlives the migration it exists
+for, which is the argument that first rejected it and still holds; it is why
+the condition is written down, and the removal is an item in `TODO.md`. Also
+rejected: **advising the agent to delete a legacy file that a root file
+shadows**. The note states that it is ignored and nothing more, since advice
+in that channel reads as authorisation to delete a file nobody asked about.
+[Legacy paths are read, and the checkpoint moves them](../changelog/2026-10-11-legacy-paths-are-read-and-moved.md),
 [TASK.md and TODO.md move to the root](../changelog/2026-10-11-task-and-todo-move-to-the-root.md)
+
+**Protecting a foreign `TODO.md`** from a whole-content write. The file is
+tracked and was injected at session start, so the write is informed and
+recoverable, and the collision is the point: it is the same list.
+[TASK.md and TODO.md move to the root](../changelog/2026-10-11-task-and-todo-move-to-the-root.md)
+
+**A bare relative path in the printed `git rm --cached` line**, and **`git -C
+<root>`** in its place. The bare form is relative to the agent's Bash working
+directory, which persists across calls and can be any directory under the root;
+from a subdirectory it matched nothing, and `--ignore-unmatch -q` kept the miss
+silent. `-C` puts the root on the line, where a newline in it splits the line.
+`:/` embeds no root and runs from anywhere.
+[Legacy paths are read, and the checkpoint moves them](../changelog/2026-10-11-legacy-paths-are-read-and-moved.md)
 
 **A parallel pipeline per transition** — the driven clear's first draft:
 `.claude/autoclear` beside `autocompact`, its own validator, `Stop` arm,

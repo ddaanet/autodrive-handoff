@@ -6,7 +6,8 @@
 #     agent-authored task file and todo remainder, whichever count — and emits
 #     it via hookSpecificOutput.additionalContext so the fresh agent sees the
 #     handoff in its input for this turn, plus a curt systemMessage with
-#     content size and age. A missing half, or both, is named on both channels;
+#     content size and age. A missing half, or both, is named on both channels,
+#     and so is a half read from a legacy path or a legacy file left ignored;
 #   - on `clear`, consumes a pending transition of kind `clear`. The mod
 #     (hooks/handoff.ts) ran the `/clear` and submits the continuation itself;
 #     the file disappearing is what leaves the sentinel clean for the next
@@ -49,7 +50,10 @@ fi
 # docs/changelog/2026-07-17-task-frame-drops-transcript.md).
 task="$cwd/$HANDOFF_REL_TASK"
 todo="$cwd/$HANDOFF_REL_TODO"
-handoff_frame "$task" "$todo" || true
+legacy_task="$cwd/$HANDOFF_LEGACY_REL_TASK"
+legacy_todo="$cwd/$HANDOFF_LEGACY_REL_TODO"
+handoff_frame "$task" "$todo" "$legacy_task" "$legacy_todo" || true
+handoff_frame_notes
 
 context="$FRAME"
 if [[ -n "$FRAME" ]]; then
@@ -61,10 +65,13 @@ if [[ -n "$FRAME" ]]; then
     fi
 
     # Age of the frame is the newest of the files that count: a file the frame
-    # left out does not make it younger.
+    # left out does not make it younger, and a legacy file counts when its half
+    # came from it.
     counted=()
-    (( FRAME_TASK )) && counted+=("$task")
-    (( FRAME_TODO )) && counted+=("$todo")
+    if (( FRAME_TASK_LEGACY )); then counted+=("$legacy_task")
+    elif (( FRAME_TASK )); then counted+=("$task"); fi
+    if (( FRAME_TODO_LEGACY )); then counted+=("$legacy_todo")
+    elif (( FRAME_TODO )); then counted+=("$todo"); fi
     mtime=$(python3 -c 'import os,sys
 print(int(max(os.path.getmtime(p) for p in sys.argv[1:])))' "${counted[@]}")
     now=$(date +%s)
@@ -76,6 +83,13 @@ print(int(max(os.path.getmtime(p) for p in sys.argv[1:])))' "${counted[@]}")
     fi
     notes+=("loaded — ${size}, saved ${age}")
 
+    # Legacy notes on both channels, ahead of the gap note.
+    for note in ${FRAME_NOTES_CTX[@]+"${FRAME_NOTES_CTX[@]}"}; do
+        context+=$'\n\n'"$note"
+    done
+    for note in ${FRAME_NOTES_MSG[@]+"${FRAME_NOTES_MSG[@]}"}; do
+        notes+=("$note")
+    done
     if (( ! FRAME_TODO )); then
         notes+=("No todo")
         context+=$'\n\n'"No todo."

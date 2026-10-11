@@ -147,6 +147,18 @@ re-injects is the todo, and it tells the user `todo re-injected` or `No todo`.
 With no `pending` compaction it is silent, which is what keeps a hand-typed
 `/compact` or a threshold auto-compaction from re-injecting a stale list.
 
+Both loaders read a half from its legacy path when the root file has no body,
+and both say so, with the same notes from `handoff_frame_notes`: a half read
+from a legacy path, and a legacy file left ignored beside a root file with a
+body. `load-handoff.sh` puts the notes after the frame and before the gap note,
+and a legacy fragment per note in its message, between the size and age and
+`No todo`. The age is taken from the files that count, which includes a legacy
+file when its half came from it. `load-compact.sh` appends the fragments to its
+`todo re-injected` or `No todo`, so a compaction with no legacy file says what
+it always said. The bridge, and the condition that retires it, are argued in
+[Design decisions](decisions.md).
+[Legacy paths are read, and the checkpoint moves them](../changelog/2026-10-11-legacy-paths-are-read-and-moved.md)
+
 ## Reporting a failure, sweeping a stale sentinel
 
 A rejected line has no turn left to speak in, so the mod's report is the
