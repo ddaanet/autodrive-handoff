@@ -599,6 +599,47 @@ run_write_guard() {  # <tool> <cwd> <file_path> [CLAUDE_PROJECT_DIR]
     done
 }
 
+# Resolving follows symlinks, so the sentinel's own resolved name need not be
+# `autodrive`. The verdict is on where the write lands against where the
+# sentinel lands, and on the name at either end.
+@test "write-guard (the sentinel is a symlink: a write through it is still denied)" {
+    printf 'armed\n' > "$tmp/.claude/real-sentinel"
+    ln -s real-sentinel "$tmp/.claude/autodrive"
+    run_write_guard Write "$tmp" "$tmp/.claude/autodrive"
+    [ "$status" -eq 0 ]
+    echo "$output" | jq -e '.hookSpecificOutput.permissionDecisionReason
+        | test("written only by handoff-checkpoint")' >/dev/null
+}
+
+@test "write-guard (a symlink under another name that mentions it, onto the sentinel: denied)" {
+    printf 'armed\n' > "$tmp/.claude/autodrive"
+    ln -s "$tmp/.claude/autodrive" "$tmp/autodrive-alias"
+    run_write_guard Write "$tmp" "$tmp/autodrive-alias"
+    [ "$status" -eq 0 ]
+    echo "$output" | jq -e '.hookSpecificOutput.permissionDecisionReason
+        | test("written only by handoff-checkpoint")' >/dev/null
+}
+
+@test "write-guard (another project's sentinel is a symlink: denied as cross-project)" {
+    printf 'armed\n' > "$other/.claude/real-sentinel"
+    ln -s real-sentinel "$other/.claude/autodrive"
+    for fp in "$other/.claude/autodrive" "$other/.claude/autodrive/."; do
+        run_write_guard Write "$tmp" "$fp"
+        [ "$status" -eq 0 ]
+        echo "$output" | jq -e '.hookSpecificOutput.permissionDecisionReason
+            | test("outside this project")' >/dev/null
+    done
+}
+
+@test "write-guard (an alias onto another project's sentinel: denied as cross-project)" {
+    printf 'armed\n' > "$other/.claude/autodrive"
+    ln -s "$other/.claude/autodrive" "$tmp/autodrive-alias"
+    run_write_guard Write "$tmp" "$tmp/autodrive-alias"
+    [ "$status" -eq 0 ]
+    echo "$output" | jq -e '.hookSpecificOutput.permissionDecisionReason
+        | test("outside this project")' >/dev/null
+}
+
 @test "write-guard (trailing whitespace after the name: deny)" {
     run_write_guard Write "$tmp" "$tmp/.claude/autodrive "
     [ "$status" -eq 0 ]

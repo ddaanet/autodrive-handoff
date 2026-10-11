@@ -282,16 +282,6 @@ handoff_drive_arm() {
     mv -f "$tmp" "$file"
 }
 
-# Portable path canonicalization. `realpath -m` is GNU-only; BSD
-# `realpath` rejects non-existent components. Python handles both and
-# resolves multiple paths in one subprocess to amortize cold start.
-# Prints each argument's resolution in order, NUL-terminated: a path may hold
-# a newline, and its reader decides a permission on it.
-handoff_resolve() {
-    python3 -c 'import os,sys
-for p in sys.argv[1:]: sys.stdout.write(os.path.realpath(p) + "\0")' "$@"
-}
-
 # Effective project root for the handoff files of THIS session, into the
 # caller's HANDOFF_ROOT, plus the branch that produced it in
 # HANDOFF_ROOT_BRANCH: `inside` (cwd is the project or under it), `worktree`
