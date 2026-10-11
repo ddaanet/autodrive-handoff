@@ -78,15 +78,27 @@ too: it false-negatives on a plan that landed and was tidied away.
 handoff](../changelog/2026-07-26-orphaned-ledger.md)
 
 **Letting the plan's tasks live in both files**, tracked in the ledger and
-mirrored into `handoff-todo.md` — two records of one thing drift, and the
+mirrored into `TODO.md` — two records of one thing drift, and the
 stale one gets believed. Excluding the overlap costs nothing, which is why
 the boundary is drawn there rather than around the file.
 [The ledger and the todo file are different
 scopes](../changelog/2026-08-08-ledger-and-todo-are-different-scopes.md)
 
-**Merging the `PostToolUse(Write|Edit)` scripts** into one — they share a
-preamble, now factored into `handoff_match_target()`, but not a job.
-[Consolidation pass](../changelog/2026-07-20-consolidation-pass.md)
+**A cap fitted to how often task files exceed it** — the first draft took
+1500 characters because it rejected about one version in seven. That figure
+was 14% or 43% depending on which versions were counted, and either way it
+measured the symptom: a task file is long because it carries a plan, a
+done-log and working conventions, not because tasks are long. The cap is set
+from the task in hand once the rest has left.
+[TASK.md and TODO.md move to the root](../changelog/2026-10-11-task-and-todo-move-to-the-root.md)
+
+**Reading the old paths as a fallback** when `TASK.md` is absent — a branch
+that covers one restart for a user base of one and then outlives it; two `git
+mv` lines do the same once. Also rejected: **protecting a foreign `TODO.md`**
+from a whole-content write. The file is tracked and was injected at session
+start, so the write is informed and recoverable, and the collision is the
+point: it is the same list.
+[TASK.md and TODO.md move to the root](../changelog/2026-10-11-task-and-todo-move-to-the-root.md)
 
 **A parallel pipeline per transition** — the driven clear's first draft:
 `.claude/autoclear` beside `autocompact`, its own validator, `Stop` arm,
@@ -130,9 +142,9 @@ whose contract is "read a payload on stdin" with one that reads nothing).
 [Transitions become modes](../changelog/2026-08-05-transitions-become-modes.md)
 
 **Injecting the frame on any compaction where one exists**, closing the
-auto-compaction gap for free — but `handoff-task.md` is durable and
-git-tracked and sits on disk across days of unrelated work, so this injects
-a stale frame into every threshold compaction in every session in the repo,
+auto-compaction gap for free — but `TODO.md` is durable and tracked and
+sits on disk across days of unrelated work, so this injects a stale frame
+into every threshold compaction in every session in the repo,
 unrequested and mid-session. The asymmetry is principled: compaction is the
 one boundary the harness enters on its own, so it is the one that needs a
 signal of intent. Also rejected: **prepare-only with a driven continuation**

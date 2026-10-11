@@ -53,9 +53,9 @@ writes them at — the directory is shared and holds files this plugin never
 wrote. A `SessionEnd` hook would clean up only the ends that fire one, which
 is the opposite of the set that strands a file.
 
-`handoff_match_target()` is the shared preamble of every path-scoped hook:
-one jq parse, basename fast-path, root resolution, and resolved-path
-comparison, variadic over (basename, rel) pairs — the jq spawn is on the
-Write/Edit hot path, so N files must stay one parse. It distinguishes "other
-file" from "basename matched but cross-project", which only `write-guard.sh`
-denies. That comparison is the cross-project security boundary.
+`write-guard.sh` is the one path-scoped hook: one jq parse and a substring
+test on the Write/Edit hot path, then root resolution and a comparison of
+resolved paths, done in the script itself. It tells "another file" from "the sentinel's name, in another
+project" and denies the second as well as this project's own. That comparison
+is the cross-project security boundary; what it is made on, and what it does
+not catch, is in [The write path](the-write-path.md#what-is-guarded).

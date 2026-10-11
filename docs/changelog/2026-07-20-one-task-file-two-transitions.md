@@ -1,5 +1,13 @@
 # One task file, two transitions (2026-07-20)
 
+> **Superseded 2026-10-11** (see [TASK.md and TODO.md move to the
+> root](2026-10-11-task-and-todo-move-to-the-root.md)) on two points. `precompact` no
+> longer writes a task file: `task` is forbidden at the compact boundary, the
+> checkpoint removes the file there, and what must survive verbatim goes in
+> the todo file, which did not exist when this was written. And the relaxed
+> mandate on `## Current task` is now a cap the checkpoint enforces. The one
+> `handoff_frame` helper and the `# Task` header stand.
+
 precompact used to be forbidden from writing `handoff-task.md`, on the grounds
 that the task crosses compaction in the summary and in the continuation prompt.
 The first live run showed what that costs. The prompt written for it was

@@ -14,8 +14,8 @@ Two skills sit on that seam, one per boundary:
 | **before `/clear`** | `/handoff:handoff` |
 | **before `/compact`** | `/handoff:precompact` |
 
-Each one either prepares and stops — writing the task file and leaving you
-to run the command — or carries the transition out for you: the plugin's mod
+Each one either prepares and stops — putting the open work on disk and
+leaving you to run the command — or carries the transition out for you: the plugin's mod
 runs the command and submits a one-line prompt that resumes the work on the
 far side, once your turn ends. Which one you get is decided by what you ask
 for. `/handoff:autoname` is a third skill: the rename alone, for a session
@@ -24,8 +24,9 @@ worth a title while the main thread stays live.
 and remaining todos — from the task frame injected at session start or
 after a compact, with no tool calls.
 
-Both write the same file; a `SessionStart` hook injects it back, verbatim,
-into whatever comes next.
+What they write is two plain files in your project root, `TASK.md` and
+`TODO.md`; a `SessionStart` hook injects them back, verbatim, into whatever
+comes next.
 
 ## Setup
 
@@ -38,11 +39,23 @@ Install the plugin:
 
 That's it. No per-project setup step. A `SessionStart(startup|clear)`
 hook assembles the handoff frame in memory at session start — stamping
-a header onto `./.claude/handoff-task.md` and the todo remainder beside
-it, when either exists — and injects the result into
-the fresh agent's context. No generated file is involved, and the
-transcript is never touched: the live working set is the harness's own
-git status.
+a header onto `./TASK.md` and `./TODO.md`, whichever has content — and
+injects the result into the fresh agent's context. When there is nothing to
+inject it says so (`No task frame or todo.`) rather than staying silent. No
+generated file is involved, and the transcript is never touched: the live
+working set is the harness's own git status.
+
+**Upgrading from 0.15 or earlier**: the two files used to live under
+`.claude/`. Move them once, in each project that has them:
+
+```
+git mv .claude/handoff-task.md TASK.md
+git mv .claude/handoff-todo.md TODO.md
+```
+
+Nothing reads the old paths. If your project already has a `TODO.md`, the
+plugin shares it: that is the same list, and the agent keeps the shape it
+finds.
 
 **Migrating from v0.2.x**: if your project's `CLAUDE.md` contains a
 `## Handoff` section with `@.claude/handoff.md` (added by the old
@@ -86,28 +99,31 @@ The compact boundary is the other half: not a wrap-up, but a way to keep
 going. Long sessions eventually have to compact, and compaction paraphrases
 the conversation — anything that has to survive *exactly* should be on disk
 first. Both skills capture durable learnings in auto-memory, commit them if
-your repo is gitlore-managed, and write the task file.
+your repo is gitlore-managed, and put the open work in `TODO.md`.
 
 Ask for the compaction to be prepared — "precompact", "before I compact" —
-and you run `/compact` yourself; the task file is still re-injected when it
+and you run `/compact` yourself; `TODO.md` is still re-injected when it
 finishes, because the skill marked the compaction as expected. Ask for it to
 be carried out — "compact and continue" — and the plugin's mod runs
-`/compact` once your turn ends, and once it finishes, the task file is
+`/compact` once your turn ends, and once it finishes, `TODO.md` is
 re-injected and a one-line continuation prompt is submitted. You do not run
 `/compact` yourself, and you do not have to type anything to resume.
 
-Both boundaries write the same `.claude/handoff-task.md`. That is the durable side
-of the seam — it carries whatever must survive verbatim, at whatever length
-the work demands. The continuation prompt is only a handle to it.
+The two boundaries differ in one thing. Before a `/clear`, the skill writes
+`TASK.md`: the task in hand and where it stands, as prose, at most 1000
+characters and with no list in it — a longer one is refused with a message
+saying where the rest goes. Before a `/compact` there is no task file, and an
+existing one is removed: the compaction's own summary carries the task, and a
+second account on disk would only be there to contradict it. Whatever must
+survive a compaction word for word goes in `TODO.md` or in the focus
+directive given to `/compact`.
 
-When the session is working through a task list, both skills also write the
-**remainder** — the still-open items, never the finished ones — to
-`.claude/handoff-todo.md`, which is injected alongside the task file. That
-file is the ledger; a todo panel in the UI, when there is one, is a cache of
-it. Finished items are dropped rather than ticked off: `git log` already
-records what landed, and a done item still listed reads as outstanding and
-gets redone. It is staged for commit like the task file — it is overflow from
-that file, so it belongs in the same trail.
+`TODO.md` holds the **open decisions** and the **remainder** of the task list
+— the still-open items, never the finished ones — and is injected alongside
+the task file. That file is the ledger; a todo panel in the UI, when there is
+one, is a cache of it. Finished items are dropped rather than ticked off:
+`git log` already records what landed, and a done item still listed reads as
+outstanding and gets redone.
 
 Carrying a transition out is done by a Claude Code mod that ships in this
 plugin (`hooks/handoff.ts`), so it **requires Claude Code 2.1.287 or newer**;
@@ -129,7 +145,27 @@ Use a compact-boundary skill when the work continues past a long session,
 and a clear-boundary one when the thread itself should restart. Compacting
 right before `/clear` throws away what the compaction just paid for.
 
-The agent updates auto-memory with any durable learnings, then in a single turn decides the task snapshot (if anything is outstanding), the todo remainder (if a task list is in flight), and a session title, and pipes all three to one `handoff-checkpoint` call as a JSON payload. The checkpoint writes or edits `.claude/handoff-task.md` and `.claude/handoff-todo.md`, and `.claude/autodrive` when a rename is wanted, leaving a manifest behind — an empty task or todo body removes the file rather than leaving a stale one, so content decides absence, not a wipe on activation. A `PostToolUse(Bash)` hook consumes that manifest and stages every listed path for commit (deletions included). Anything to be run waits for the turn to end — and, when the transition is held, for the `handoff-approved` call that releases it: when the turn completes, the mod takes the sentinel through `scripts/drive-take.sh` and runs each line through Claude Code's own command and prompt entry points. A guard denies any direct agent Write or Edit to `.claude/handoff-task.md` — it is written by the checkpoint only. `.claude/handoff-todo.md` stays open for the agent to edit directly all session; a `PostToolUse(Write|Edit)` hook stages those edits on the spot. After `/clear` (or in a fresh session), the `SessionStart` hook assembles and injects the handoff frame into the new agent's context automatically. Auto-memory restores independently. The agent's own shell cannot see the project root, so a `PreToolUse(Bash)` hook resolves it and injects it into each `handoff-checkpoint` call as it runs, rather than sampling it once at session start. And if the session's working directory ever leaves the repo it was launched in, the next prompt says so, once per episode.
+The agent updates auto-memory with any durable learnings, then in a single
+turn decides the task snapshot (if anything is outstanding), the todo
+remainder (if a task list is in flight), and a session title, and pipes all
+three to one `handoff-checkpoint` call as a JSON payload. The checkpoint
+writes `TASK.md` and writes or edits `TODO.md`, and writes `.claude/autodrive`
+when there is something to run at the end of the turn. It stages nothing:
+both are ordinary tracked files, and when your request called for a commit
+the agent makes it with both in it. Anything to be run waits for the turn to
+end — and, when the transition is held, for the `handoff-approved` call that
+releases it: when the turn completes, the mod takes the sentinel through
+`scripts/drive-take.sh` and runs each line through Claude Code's own command
+and prompt entry points. The agent may edit `TASK.md` and `TODO.md` directly
+at any time, like any file; a guard denies a direct write to
+`.claude/autodrive` alone. After `/clear` (or in a fresh session), the
+`SessionStart` hook assembles and injects the handoff frame into the new
+agent's context automatically. Auto-memory restores independently. The
+agent's own shell cannot see the project root, so a `PreToolUse(Bash)` hook
+resolves it and injects it into each `handoff-checkpoint` call as it runs,
+rather than sampling it once at session start. And if the session's working
+directory ever leaves the repo it was launched in, the next prompt says so,
+once per episode.
 
 In a gitlore-managed repository, handoff also offers to commit your memory:
 when the memory submodule has uncommitted changes, it drafts a commit message
@@ -144,12 +180,16 @@ take away the conversation the question belongs to.
 
 ## Staleness and cleanup
 
-The artifact carries its own timestamp in its first heading. When the
-task is finished, invoke the skill again with nothing outstanding —
-the checkpoint sees an empty task and todo body and removes both
-files instead of leaving stale ones, so the next session starts clean.
+The injected frame carries a timestamp in its first heading, and the note
+you see at session start gives its age. When the task is finished, invoke the
+skill again with nothing outstanding — the agent clears both files, so the
+next session starts clean and says `No task frame or todo.`
 
-`handoff-task.md` and `handoff-todo.md` are staged automatically — the task file via the checkpoint's manifest, the todo file whenever the agent edits it directly — and ride your next commit; together they are the durable task trail. gitlore auto-memory is the complement for durable context that outlives tasks.
+`TASK.md` and `TODO.md` are tracked like any other file and ride whichever
+commit you make next; together they are the durable task trail. Nothing
+commits or stages them for you, so a wrap-up that was not asked to commit
+leaves them modified in your working tree. gitlore auto-memory is the
+complement for durable context that outlives tasks.
 
 ## Scope
 
@@ -183,15 +223,16 @@ Enabling both reloads the collision this split was made to remove.
 
 ## Files touched on your system
 
-Per project, under `./.claude/`. `git add -f` runs on `handoff-task.md`
-and `handoff-todo.md` so they appear staged for your next commit — the task
-file via the checkpoint's manifest and a `PostToolUse(Bash)` hook, the todo
-file via its own `PostToolUse(Write|Edit)` hook when the agent edits it
-directly.
+Per project, two tracked files in the project root:
 
-- `handoff-task.md` — checkpoint-written task + open decisions; staged for git automatically (track this).
-- `handoff-todo.md` — agent-written remainder of an in-flight task list;
-  staged for git automatically, same as the task file (track this).
+- `TASK.md` — the task in hand, written by the checkpoint before a `/clear`
+  and removed by it before a `/compact`.
+- `TODO.md` — open decisions and the remainder of an in-flight task list,
+  kept by the agent all session. Shared with any `TODO.md` the project
+  already has.
+
+And under `./.claude/`, two transient files:
+
 - `autodrive` — transient file describing the transition to carry out:
   first line its state, second the kind (`rename`, `compact` or `clear`),
   then the lines to run. Written by the checkpoint and by nothing else — a
@@ -208,10 +249,7 @@ directly.
 - `autodrive.failed` — written only when a line was rejected, and consumed
   when you are told about it at your next prompt.
 
-Both `handoff-task.md` and `handoff-todo.md` are removed when the checkpoint
-sees an empty body (the "finalize" case): invoke the skill again with
-nothing outstanding and the next session starts clean. Nothing outside the
-current project is modified.
+Nothing outside the current project is modified.
 
 ## Uninstall
 

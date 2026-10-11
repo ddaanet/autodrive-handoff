@@ -6,23 +6,56 @@ Part of [handoff — Design](../design.md).
 captures the two fields `/compact`, Session Memory, and training cannot
 supply. It does not add a third summarisation layer.
 
-**The task file is checkpoint-only; the todo file is not.** They look alike
-and are not. The task file is authored fresh from the conversation at every
-boundary, so a prior copy on disk is only something to be read, extended, or
-partially edited instead of replaced — hence one writer and a hard guard.
-The todo file is a ledger the agent maintains all session; wiping it
-destroys the half of the frame a `/clear` discards outright, and after a
-compaction the context it would be re-authored from is a paraphrase. One
-protocol for both was an artifact of their sharing one activation hook.
-[One channel, one writer](../changelog/2026-07-27-one-channel-one-writer.md)
+**Both files are plain files; only the sentinel is guarded.** The task file
+needs no protection from the agent that authors it. The checkpoint replaces it
+whole at every clear boundary, so nothing a direct edit leaves behind survives
+the next one, and until then it is a note the next session reads, which is
+what the todo file is too. So neither file is guarded, gitignored or staged by
+a hook, and a guard, two stagers and a manifest are machinery the design does
+without. The sentinel is the different case and keeps its guard: its state is
+content, a wrong one is writable, and its lines are run as commands.
+The todo file stays a ledger the agent maintains all session, never
+regenerated from a paraphrase.
+[One channel, one writer](../changelog/2026-07-27-one-channel-one-writer.md),
+[TASK.md and TODO.md move to the root](../changelog/2026-10-11-task-and-todo-move-to-the-root.md)
 
-**Both files are tracked, and for the same reason.** `handoff-task.md` pairs
-with a gitlore memory commit as an in-history record; `## Current task` and
+**Both files are tracked, and for the same reason.** `## Current task` and
 `## Remaining` are two sections of one snapshot, and tracking one while
 discarding the other puts half a frame in history — the half naming work not
-yet done, which is what a reader of the trail is looking for.
+yet done, which is what a reader of the trail is looking for. They are tracked
+the ordinary way, in the project root: a pending-work list is a `TODO.md`
+like any other, and a project that already has one shares it. Nothing stages
+them, so the commit that follows a checkpoint carries them because the commit
+act names them, and a release refuses while either is dirty.
 [Overflow deserves the same
-persistence](../changelog/2026-07-23-overflow-deserves-persistence.md)
+persistence](../changelog/2026-07-23-overflow-deserves-persistence.md),
+[TASK.md and TODO.md move to the root](../changelog/2026-10-11-task-and-todo-move-to-the-root.md)
+
+**The task is bounded, and the bound is set from the residual.** The template
+asked for a task of "usually one sentence" and measured task files had a
+median body of 872 characters and a 90th percentile of 2529: advice does not
+hold under work pressure, so the checkpoint enforces a cap and refuses a list.
+The number comes from what a task file holds once everything with another
+home has gone there — the plan and open decisions to the todo, standing rules
+and conventions to memory through its approval gate, finished work down to
+one sentence. That residual has a 95th percentile of 867 characters, and 1000
+is the first round number above it. A cap fitted to how often raw files
+exceed it would have measured the symptom, and the figure moved by a factor
+of three with the choice of sample. **Reopen if** the residual moves: the
+method and its scripts are in the plan's `reports/overflow/`.
+[TASK.md and TODO.md move to the root](../changelog/2026-10-11-task-and-todo-move-to-the-root.md)
+
+**The compact boundary carries no task.** A compaction produces its own
+account of the task, the summary, and a snapshot written just before it is a
+second one: on disk beside the first, liable to disagree with it, and
+re-injected at the next session start after the work has moved on. So
+`precompact` takes no `task` and removes the file. What has to cross verbatim
+— a commit range, a checklist — goes in the todo file or in the `compact`
+focus directive, which is what the task file was standing in for when the
+todo file did not exist.
+[One task file, two
+transitions](../changelog/2026-07-20-one-task-file-two-transitions.md),
+[TASK.md and TODO.md move to the root](../changelog/2026-10-11-task-and-todo-move-to-the-root.md)
 
 **Commit/push status never appears in either file.** The routine wrap-up is
 `/handoff` then `/commit`, so any bookkeeping written at handoff time is
@@ -147,7 +180,7 @@ and fails open.
 handoff](../changelog/2026-07-26-orphaned-ledger.md)
 
 **A foreign ledger scopes the todo file; it does not replace it.** An SDD
-ledger holds the tasks of one plan and is deleted with it. `handoff-todo.md`
+ledger holds the tasks of one plan and is deleted with it. `TODO.md`
 holds work outstanding across sessions, most of it belonging to no plan and
 often to another repository. Only their overlap — the plan's own tasks,
 copied across — can drift, so only the overlap is excluded. Standing the
@@ -201,8 +234,8 @@ memory is written is gitlore's rule in every mode, so the commit answer
 does not set their tense. They still precede the checkpoint call, whose
 memory directive keys on a dirty submodule. A commit the ask implies is not
 an exception either, because it comes after the checkpoint, as the commit
-act the checkpoint prints: after it so it carries the handoff files the
-checkpoint staged, and before the arming instruction so the transition is
+act the checkpoint prints: after it so it carries the two files the
+checkpoint wrote, and before the arming instruction so the transition is
 released only once it has landed.
 [Deciding makes zero tool calls, stated
 once](../changelog/2026-08-11-decide-with-zero-tool-calls.md),

@@ -32,14 +32,14 @@ That leaves two fields only the agent can fill:
 - **Open decisions** — unmade choices still blocking progress
 
 These are the irreducible residual. **Current task** lives alone in
-`handoff-task.md` — a snapshot of a moment, agent-authored from the
-template in `SKILL.md` and written only by `handoff-checkpoint`, staged via
-its manifest. **Open decisions** lives in `handoff-todo.md`, alongside the
-**remainder** below: both are open questions the agent keeps revisiting
-over a session, so both belong in the scratch list it edits directly all
-session (FR4) rather than in the checkpoint-only snapshot — a decision
-that resolves or changes shape mid-session is corrected there on the spot,
-not carried stale to the next checkpoint. Next session, a
+`TASK.md` — a snapshot of a moment, agent-authored from the template in
+`SKILL.md` and written whole by `handoff-checkpoint`, which holds it to 1000
+characters of prose. **Open decisions** lives in `TODO.md`, alongside the
+**remainder** below: both are open questions the agent keeps revisiting over
+a session, so both belong in the scratch list it edits directly all session
+(FR4) rather than in the snapshot — a decision that resolves or changes shape
+mid-session is corrected there on the spot, not carried stale to the next
+checkpoint. Both are plain tracked files in the project root. Next session, a
 `SessionStart(startup|clear)` hook assembles the frame in memory — a
 timestamp header plus the inlined task and todo content — and injects it
 into context. No generated file, no `@`-ref or project-CLAUDE.md setup
@@ -80,9 +80,10 @@ content into the final markdown. It worked, but required:
 - A compose step that translated typed fields into markdown prose
 
 Replaced by a markdown template in `SKILL.md`. The agent writes prose
-directly in its own voice. No schema, no validator, no translation —
-the extract script just inlines the task file's contents and appends
-its sections below.
+directly in its own voice. No schema, no translation — the loader just
+inlines each file's contents under one header. The checkpoint checks two
+properties of the task's prose, its length and the absence of a list, and
+nothing of the template's structure.
 
 Trade-off: markdown is softer than JSON, but the template is fixed and
 the skill's anti-patterns section guards against drift. The agent's
@@ -101,20 +102,15 @@ scrape at handoff time (when the tail of the transcript is just the
 "save handoff" request itself).
 
 Instead the frame is assembled at *read* time. `SessionStart` reads the
-task file and prepends a timestamp header. Nothing generated, nothing
-committed but the agent-authored task file.
+two files and prepends a timestamp header. Nothing generated, nothing
+committed but the two agent-authored files.
 
-## File guards
+## What is guarded
 
-`handoff-task.md` is written only by `handoff-checkpoint` (FR3 of "One
-channel, one writer", 2026-07-27): a `PreToolUse(Write|Edit)` guard denies
-any direct agent Write/Edit to it, unconditionally. `handoff-todo.md` is a
-scratch list by design (FR4) — the agent edits it freely all session, and a
-`PostToolUse(Write|Edit)` hook stages each direct edit with `git add -f`,
-removing the file (and staging the removal) when an edit leaves it with no
-substantive content. Neither guard scrapes the transcript for an activation
-signal any more: the checkpoint is the only legitimate writer of the task
-file, full stop, so there is no "before/after activation" distinction left to
-detect. The write-guard still denies a `handoff-task.md` write whose
-`realpath` is not `$cwd/.claude/<file>`, catching multi-checkout confusion
-and absolute-path mistakes.
+Neither file is. `TASK.md` is replaced whole at every clear boundary and
+removed at every compact one, and `TODO.md` is the agent's own scratch list
+(FR4), so a direct edit of either is an ordinary edit, and nothing stages
+them: they are tracked like any file and ride the next commit. The one
+checkpoint-only file is the `.claude/autodrive` sentinel (FR3), whose lines
+are run as commands when the turn ends; a `PreToolUse(Write|Edit)` guard
+denies a direct write that resolves to it, in this project or another.

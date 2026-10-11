@@ -50,6 +50,11 @@ writes. One `handoff-checkpoint` replaces both, with the transition as a
 payload field — the schema already forces a discriminator in, so two binaries
 differing only by it were the duplication the channel makes redundant.
 
+> **Superseded 2026-10-11** (see [TASK.md and TODO.md move to the
+> root](2026-10-11-task-and-todo-move-to-the-root.md)) on the staging: there is no
+> manifest and no `PostToolUse(Bash)` stager, because neither file is
+> gitignored. The constraint stands — the checkpoint does no git work.
+
 **What the checkpoint may not do.** It runs in the agent's sandboxed Bash,
 where a `git add` can stage successfully yet fail to remove `.git/index.lock`,
 and the failure surfaces on the *next* command as `Another git process seems to
@@ -61,10 +66,20 @@ reached the way this plugin already reaches them — a file the checkpoint leave
 behind and a hook consumes. `PostToolUse(Bash)` stages the manifest's paths and
 spawns the watcher.
 
+> **Superseded 2026-10-11** (see [TASK.md and TODO.md move to the
+> root](2026-10-11-task-and-todo-move-to-the-root.md)): a content string is written as
+> given and only `clear` removes. The emptiness rule is the loader's, which
+> does not inject a file with no body.
+
 **Content, not activation, decides absence.** A file whose body is empty is
 removed and the removal staged. `file present ⟹ content pending` becomes an
 invariant two writers enforce, instead of an instruction the agent has to
 remember. That was the wipe's real job, and it survives the wipe.
+
+> **Superseded 2026-10-11** (see [TASK.md and TODO.md move to the
+> root](2026-10-11-task-and-todo-move-to-the-root.md)) on the last three sentences:
+> `write-guard.sh` guards the `autodrive` sentinel alone, and `write-stage.sh`
+> is gone.
 
 Deleting the activation hooks removes the last consumer of `handoff_activated`,
 and with it the transcript scraping and its JSONL fixtures. The predicate was

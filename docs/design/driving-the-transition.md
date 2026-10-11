@@ -95,7 +95,7 @@ tests also consume:
 - **FR-G.** A `compact` kind line alone (the prepare-only compact) has no
   before-lines. The file is left `pending`, the lists are empty, and the
   message says so; the mod toasts it and runs nothing. That `pending` state is
-  what `SessionStart(compact)` gates the frame's re-injection on, so a
+  what `SessionStart(compact)` gates the todo's re-injection on, so a
   hand-typed `/compact` re-injects nothing.
 - **Malformed** files are removed and reported with `kind` null and the
   constraint that failed, so the complaint does not repeat each turn.
@@ -132,12 +132,20 @@ harness itself writes.
 `SessionStart(clear)` fires for a mod-run `/clear`, and `SessionStart(compact)`
 for a mod-run `/compact`, exactly as for a hand-typed one.
 `load-handoff.sh` and `load-compact.sh` each remove a `pending` file of their
-own kind and inject the task frame; neither spawns anything, because the mod
+own kind and inject the frame; neither spawns anything, because the mod
 submits the continuation itself once the command resolves. Each consumes only
 its own kind in state `pending`: an `armed` file is left for the sweep, and a
 `clear` armed in this session and overtaken by a threshold auto-compaction is
-not consumed by the compact loader. A `clear` with an empty task file still
-consumes, so the consume precedes the no-frame exit.
+not consumed by the compact loader. The consume comes first and does not
+depend on the frame, so a `clear` with nothing to inject still consumes.
+
+What each says afterwards differs. `load-handoff.sh` always reports, on both
+channels: the frame's size and age, plus `No task frame` or `No todo` when one
+half has no body, or `No task frame or todo.` alone. `load-compact.sh` runs
+after a compaction whose checkpoint removed the task file, so what it
+re-injects is the todo, and it tells the user `todo re-injected` or `No todo`.
+With no `pending` compaction it is silent, which is what keeps a hand-typed
+`/compact` or a threshold auto-compaction from re-injecting a stale list.
 
 ## Reporting a failure, sweeping a stale sentinel
 

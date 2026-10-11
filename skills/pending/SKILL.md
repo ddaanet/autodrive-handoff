@@ -7,7 +7,7 @@ description: List pending tasks from the session's already-injected context — 
 
 Report the pending work already visible in context: the `## Open decisions`
 and `## Remaining` sections of the task frame injected at session start (or
-after a compact), which sit under the `## Current task` they belong to. Make
+after a compact), which follow the `## Current task` when there is one. Make
 **no tool calls** — this is a read of what is already in context, not of
 the files on disk.
 
@@ -22,10 +22,9 @@ the files on disk.
 
 ## Anti-patterns
 
-- Reading `.claude/handoff-task.md` or `.claude/handoff-todo.md` to
-  double-check. The point is a zero-cost report of what is already
-  loaded; a stale answer here is corrected by editing `handoff-todo.md`
-  directly (open decisions, remaining items) or at the next checkpoint
-  (the current task), not by a file read now.
+- Reading `TASK.md` or `TODO.md` to double-check. The point is a zero-cost
+  report of what is already loaded; a stale answer here is corrected by
+  editing `TODO.md` directly (open decisions, remaining items) or at the
+  next checkpoint (the current task), not by a file read now.
 - Treating this as a task-management action. It reports only — it never
-  edits `handoff-task.md`, `handoff-todo.md`, or memory.
+  edits `TASK.md`, `TODO.md`, or memory.

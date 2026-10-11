@@ -9,6 +9,11 @@ One skill per boundary, plus the rename:
 | compaction | `/handoff:precompact` | `compact`: `false` \| `true` \| `"<directive>"` |
 | clear | `/handoff:handoff` | `clear`: `false` \| `true` |
 
+The two differ in one content field. `handoff` carries a `task`, because a
+`/clear` leaves nothing else to say what was in hand. `precompact` takes none
+and removes the task file, because the compaction's summary says it
+([The compact boundary carries no task](decisions.md)). Both carry `todo`.
+
 There is no restart skill: Claude Code's own `/restart` relaunches with
 `--resume`, which carries the conversation over whole, so there is no
 boundary for this plugin to cross and no frame to carry.
@@ -20,7 +25,7 @@ It appears nowhere else in the design because there is nothing else to say
 about it.
 
 The judgment is per-boundary, not per-drive-mode: commit awareness, memory
-capture, the task/todo drafting rules and the file-vs-prompt seam are
+capture, the drafting rules and the file-vs-prompt seam are
 identical whether or not the plugin runs the command afterwards. So whether
 the transition is driven (the code's `typed`) is a **field of the payload**, decided the way
 `commit` already is — one fact the agent supplies, everything downstream

@@ -1,5 +1,10 @@
 # precompact resets the task file too (2026-07-21)
 
+> **Superseded 2026-10-11** (see [TASK.md and TODO.md move to the
+> root](2026-10-11-task-and-todo-move-to-the-root.md)): `precompact` neither resets nor
+> writes the task file. Its checkpoint call removes it, and the summary carries
+> the task.
+
 Sharing the task file ([One task file, two
 transitions](2026-07-20-one-task-file-two-transitions.md)) left the two
 skills on different activation protocols: handoff wiped `handoff-task.md` at

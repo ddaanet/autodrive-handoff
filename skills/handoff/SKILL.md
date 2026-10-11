@@ -10,9 +10,9 @@ and what's still undecided. When the user wants the reset carried out
 rather than prepared, this skill drives it too — the rename, the `/clear`,
 and the prompt that resumes the work on the far side.
 
-`handoff-checkpoint` handles the writes, the staging and the transition
-file, and prints what is left to do after the call — this skill's job is
-deciding what goes in them, then following what it prints.
+`handoff-checkpoint` handles the writes and the transition file, and prints
+what is left to do after the call — this skill's job is deciding what goes in
+them, then following what it prints.
 
 ## Protocol
 
@@ -61,9 +61,8 @@ Then decide the content:
 - **Session title** — a concise, specific title (≤ ~50 characters, Title
   Case, no surrounding quotes, no trailing punctuation) for the work done
   this session.
-- **Task snapshot** — whether there's an active task with specific next
-  steps or non-obvious context worth preserving; if so, draft the content
-  using the template below.
+- **Task snapshot** — whether there's an active task whose state is worth
+  preserving; if so, draft the content using the template below.
 - **Todo content** — whether there are open decisions still to make, or a
   task list with open items in play; if so, draft the todo content using
   the template below (open decisions first, then remaining items).
@@ -88,12 +87,10 @@ JSON
 `task` and `todo` are both required, each carrying content as a string or an
 object naming an action. `{"action": "clear"}` removes that file — for
 `task`, this is how a boundary with nothing to carry says so; for `todo`, it
-says every item landed. Content that is empty once headings and blank lines are
-stripped removes the file too, on either key — a `## Remaining` with no
-items stands the list down as surely as `clear` does. When the call has
-nothing to say about the list, send `{"action": "keep"}`, which leaves it
-untouched: a scratch list must survive a call that is silent about it, so
-`keep` is the default and `clear` is a deliberate stand-down.
+says every item landed. When the call has nothing to say about the list, send
+`{"action": "keep"}`, which leaves it untouched: a scratch list must survive a
+call that is silent about it, so `keep` is the default and `clear` is a
+deliberate stand-down.
 `{"action": "edit", …}` strikes a finished item without regenerating it.
 `keep` and `edit` apply to `todo` only; `edit` needs the file to exist and
 `old_string` to appear in it exactly once. `null` is an error on both, as
@@ -111,27 +108,30 @@ stderr — fix the payload and retry.
 
 Neither file takes a `#` heading — the read-time hook prepends one when it
 assembles the frame next session. Neither has a location to choose: the
-paths below are the only ones, and the checkpoint composes the task file's
-from the session root, denying a direct Write there.
+checkpoint writes both in the project root.
 
-**Task file template** (`./.claude/handoff-task.md`):
+**Task file template** (`./TASK.md`):
 
 ```markdown
 ## Current task
 
-<What was in progress — task state, what needs to resume when a fresh
-agent picks up. Usually one sentence. Where work genuinely spans several
-concurrent threads, name them; a session under pressure carries what it
-carries. Threads, not steps — a list of steps is a task list, and that
-goes in `handoff-todo.md`. Not a recap.>
+<The task in hand and where it stands — what a fresh agent needs in order
+to resume it. Prose. Where work spans several concurrent threads, name them
+in a sentence. Not a recap.>
 ```
 
 Task file rules:
 
+- **At most 1000 characters of prose, and no list.** The checkpoint rejects a
+  longer body, and any line that opens a list item.
+- **Only the task in hand stays here.** Remaining steps and open decisions go
+  to `TODO.md`. Standing rules and conventions are memory: write them in
+  Step 1, where the user's approval covers them. Finished work is one
+  sentence at most; `git log` has the rest.
 - No file paths or code beyond what's needed to say what's in progress.
   The working set is reconstructable from `git status` at load time.
 
-**Todo file template** (`./.claude/handoff-todo.md`):
+**Todo file template** (`./TODO.md`):
 
 ```markdown
 ## Open decisions
@@ -160,6 +160,9 @@ Todo file rules:
 - It is a remainder plus the open questions blocking it, not a plan of
   record — but it is versioned like the task file, so write it as
   something that reads well in history.
+- A `TODO.md` that is already there in another shape keeps its shape: add to
+  it and strike from it with `edit` rather than rewriting it into this
+  template.
 
 ## The seam: files vs. continuation prompt
 
@@ -178,9 +181,9 @@ different things:
 
 The failure mode is a prompt carrying facts. `report on the driver, then
 cut the release covering 7f3c70c..a3b9cef` is wrong: that commit range is
-content, and it belongs in the task file. `pick up the release described
-in the task file` is right. A clear does not summarise, so a fact left out
-of the files is simply gone.
+content, and it belongs in `TODO.md`. `pick up the release described in the
+todo file` is right. A clear does not summarise, so a fact left out of the
+files is simply gone.
 
 Write the prompt as an instruction to the agent on the far side, which will
 have the files and the repo — and, after a compaction, a summary — but not
@@ -193,22 +196,24 @@ It must be a **single line**: it is submitted as one prompt.
 
 ## Anti-patterns
 
-- Reading `handoff-task.md`, `handoff-todo.md`, or any other file "to
+- Reading `TASK.md`, `TODO.md`, or any other file "to
   check" before deciding what to write in Step 2. The decision
   comes from the conversation already in context — re-reading duplicates
   what `handoff-checkpoint` does internally, against state that may be
   stale by the time it writes.
 - Padding "Current task" to look thorough. Length should track how many
   threads are genuinely in flight, not effort.
-- A task list in `## Current task`. Steps go to `handoff-todo.md`; the
+- A task list in `## Current task`. Steps go to `TODO.md`; the
   task file says what is in progress, not the checklist to get there.
-- Completion state in `handoff-todo.md` — `- [x]` lines, "done:" prefixes,
+- A done-log or working conventions in `## Current task`. What landed is in
+  `git log`, and how to work is memory.
+- Completion state in `TODO.md` — `- [x]` lines, "done:" prefixes,
   a resolved decision left in place, a struck-through item. The file
   holds only what's still open — decisions and remainder alike.
 - Durable lessons in `## Open decisions`. Those go to feedback memory.
 - Extra sections in either file. Both templates are fixed.
 - Commit/push status anywhere in either file ("work is uncommitted",
-  "ready to commit", a `handoff-todo.md` item saying "commit the work" or
+  "ready to commit", a `TODO.md` item saying "commit the work" or
   "push the branch"). It's reconstructable from `git status`/`git log`
   at load time and goes stale the moment the user commits after handoff.
   If uncommitted work matters, what matters is *why* (tests red, decision

@@ -91,9 +91,7 @@ JSON
 ```
 
 `todo` is required. `{"action": "clear"}` removes the file — it says
-every item landed. Content that is empty once headings and blank lines are
-stripped removes it too — a `## Remaining` with no items stands the list
-down as surely as `clear` does. When the call has nothing to say about the
+every item landed. When the call has nothing to say about the
 list, send `{"action": "keep"}`, which leaves it untouched: a scratch list
 must survive a call that is silent about it, so `keep` is the default and
 `clear` is a deliberate stand-down. `{"action": "edit", …}` strikes a

@@ -37,7 +37,7 @@ load, the next prompt prints the line for the user to run instead.
 
 ## Anti-patterns
 
-- Writing `handoff-task.md`, updating memory, or running any other tool.
+- Writing `TASK.md`, updating memory, or running any other tool.
   autoname is rename-only; for residual task state use the handoff skill.
 - Taking a title from the user's words verbatim when the conversation
   implies a better one. Derive the title; do not transcribe the request.

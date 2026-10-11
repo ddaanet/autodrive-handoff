@@ -14,7 +14,7 @@ argument; read the node before making a claim about, or changing, what it
 argues. The routing table under Architecture, and the two indexes under
 Design decisions and Rejected alternatives, are the entry points.
 
-Last updated: 2026-10-08.
+Last updated: 2026-10-11.
 
 ## Problem
 
@@ -127,7 +127,7 @@ scripts' own comments, so they are fixed points: the numbering is never
 compacted, and a requirement that dies leaves its number retired rather than
 reused. They arrived from two plans with independent numbering, which is why
 the driven-transition pair is lettered — `FR-G` and `FR-H` would have
-collided as numbers. `FR-H` is retired.
+collided as numbers. `FR6`, `FR7` and `FR-H` are retired.
 
 **[The write path](design/the-write-path.md).**
 
@@ -136,25 +136,21 @@ collided as numbers. `FR-H` is retired.
   binary.
 - **FR2** — The payload is JSON on stdin, validated against a schema. A
   violation exits non-zero and names the offending field and what was wrong.
-- **FR3** — `handoff-task.md` is written only by the checkpoint. An agent
-  `Write`/`Edit` to that path is denied. `.claude/autodrive` is held to the
-  same rule.
-- **FR4** — `handoff-todo.md` is a scratch list by design. The agent edits it
-  freely all session; the checkpoint is only the wrap-up path.
+- **FR3** — `.claude/autodrive` is written only by the checkpoint. An agent
+  `Write`/`Edit` that resolves to a file of that name is denied.
+- **FR4** — `TASK.md` and `TODO.md` are plain tracked files in the project
+  root, and the agent may edit either. The todo file is a scratch list by
+  design, edited freely all session; the checkpoint is only the wrap-up path.
 - **FR5** — The todo payload supports incremental update:
   `{"action": "edit", "old_string": …, "new_string": …}` as well as content
   written whole. The task file is authored whole, so it has no edit action
   and the schema refuses one.
-- **FR6** — A file whose body is empty is removed, and the removal staged.
-  File present ⟹ content pending. Empty is what is left once blank lines and
-  ATX headings are taken out, a heading being markdown's own — so a shebang,
-  a `#tag`, or a `# comment` inside an indented code block are all content,
-  and a line of spaces is not.
-  [A heading is not a leading `#`](changelog/2026-09-14-a-heading-is-not-a-leading-hash.md)
-- **FR7** — Everything the checkpoint writes is staged with `git add -f`,
-  deletions included. The checkpoint cannot do it itself (NFR1), so it
-  records the paths in `.claude/checkpoint-manifest` and `PostToolUse(Bash)`
-  stages them.
+- **FR6** — *Retired.* It had the checkpoint remove a file whose body was
+  empty. A content string is written as given and only `clear` removes; the
+  emptiness rule is the loader's, which does not inject a file with no body.
+- **FR7** — *Retired.* It staged everything the checkpoint wrote, through a
+  manifest and a `PostToolUse(Bash)` hook. Neither file is gitignored, so
+  nothing needs a hook to stage it.
 - **FR8** — The checkpoint composes `.claude/autodrive` from the transition
   fields — every line the drive runs, including the `/rename` that sets the
   session title.
@@ -164,11 +160,14 @@ collided as numbers. `FR-H` is retired.
   ledger nudge (`precompact`), the commit act, then either the arming
   instruction or the closing line. The skill's last step is to follow it in
   order. See [The checkpoint directive](design/the-checkpoint-directive.md).
+- **FR13** — The task content is bounded: at most 1000 characters of body,
+  heading lines not counted, and no list item. A violation is an FR2 error
+  naming the count or the line, and where the overflow goes.
 
 **The driven transition** — argued in
 [Driving the transition](design/driving-the-transition.md).
 
-- **FR-G** — The prepare-only compact path re-injects the frame. Nothing
+- **FR-G** — The prepare-only compact path re-injects the todo. Nothing
   runs, but the transition is *expected*, and that expectation is what
   `SessionStart(compact)` gates re-injection on — otherwise a hand-typed
   `/compact` would re-inject nothing.
@@ -184,10 +183,10 @@ collided as numbers. `FR-H` is retired.
   fails the *next* command — in the routine wrap-up, the user's `/commit` —
   naming a git process that does not exist. This is a constraint, not a
   preference.
-- **NFR2** — The `PostToolUse(Bash)` and `PreToolUse(Bash)` hooks fire on
-  every Bash call in every session with the plugin installed. Their negative
-  case is one jq parse plus, respectively, one `stat` and one substring test.
-  Neither resolves the root unless it has already matched.
+- **NFR2** — The `PreToolUse(Bash)` hook fires on every Bash call in every
+  session with the plugin installed, and the `PreToolUse(Write|Edit)` guard on
+  every write. The negative case of each is one jq parse plus one substring
+  test. Neither resolves the root unless it has already matched.
 - **NFR3** — Skill bodies get shorter, not longer. The checkpoint exists to
   move mechanism out of prose.
 
@@ -199,7 +198,7 @@ gitlore's numbering has no meaning in this repo.
 
 ## Architecture
 
-Four skills, one write path, one mod, eight hooks, and two files that cross a
+Four skills, one write path, one mod, six hooks, and two files that cross a
 boundary.
 
 Where the argument lives:
@@ -229,8 +228,10 @@ The standing calls, each argued in
 [`design/decisions.md`](design/decisions.md):
 
 - **Extraction is deterministic; judgment is the agent's.**
-- **The task file is checkpoint-only; the todo file is not.**
+- **Both files are plain files; only the sentinel is guarded.**
 - **Both files are tracked, and for the same reason.**
+- **The task is bounded, and the bound is set from the residual.**
+- **The compact boundary carries no task.**
 - **Commit/push status never appears in either file.**
 - **The frame carries no transcript.**
 - **The agent supplies one fact; the code owns the branch.**
@@ -268,7 +269,8 @@ Ruled out, each argued in
 - **Injecting the remainder at the first `UserPromptSubmit`**
 - **Accepting SDD's pre-6.2.0 flat ledger path for back-compatibility**
 - **Letting the plan's tasks live in both files**
-- **Merging the `PostToolUse(Write|Edit)` scripts**
+- **A cap fitted to how often task files exceed it**
+- **Reading the old paths as a fallback**, **protecting a foreign `TODO.md`**
 - **A parallel pipeline per transition**, **omitting `/clear` from the
   sentinel body**, **naming the skills `compact` and `clear`**,
   **`autocompact`/`autoclear` as skill names**
@@ -294,9 +296,10 @@ Ruled out, each argued in
   state across sessions; `claude -c` continues a specific session.
   This plugin addresses the single `/clear` transition, not multi-day
   thread juggling.
-- **Validating markdown structure at write time.** `handoff-checkpoint`
-  validates the JSON envelope, not the markdown content inside it; the
-  templates in `SKILL.md` are trusted, not schema-checked.
+- **Validating the markdown templates.** `handoff-checkpoint` validates the
+  JSON envelope and two properties of the task's markdown, its length and the
+  absence of a list (FR13). The headings and sections of the templates in
+  `SKILL.md` are trusted, not schema-checked.
 - **Replacing `/ddaa:handoff`.** Different target (claude.ai vs
   Claude Code), different scope (full-session summary vs residual task
   frame). Non-overlapping.

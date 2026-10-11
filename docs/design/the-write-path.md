@@ -4,26 +4,40 @@ Part of [handoff — Design](../design.md).
 
 ## The seam
 
-`.claude/handoff-task.md` and `.claude/handoff-todo.md` are the durable
-side. Both are git-tracked (force-added by a hook; both are listed in
-`.gitignore` so *only* a hook can add them). Both are injected verbatim at
-`SessionStart`, task first, under one timestamp header — the *frame*,
-assembled in memory by `handoff_frame()` in `scripts/_lib.sh` and shared by
-the two loaders so the two transitions cannot drift.
+`TASK.md` and `TODO.md`, in the project root, are the durable side. Both are
+plain tracked files: nothing is gitignored, nothing is force-added, and no hook
+stages them. Both are injected verbatim at `SessionStart`, task first, under
+one timestamp header — the *frame*, assembled in memory by `handoff_frame()`
+in `scripts/_lib.sh` and shared by the two loaders so the two transitions
+cannot drift.
 
-- **`handoff-task.md`** — `## Current task` alone. Written **only** by the
-  checkpoint; a direct agent Write or Edit is denied by `write-guard.sh`. A
+- **`TASK.md`** — `## Current task` alone: the task in hand and where it
+  stands, as prose. Authored whole by the checkpoint at the clear boundary and
+  removed by it at the compact boundary, where the summary carries the task. A
   snapshot of a moment.
-- **`handoff-todo.md`** — `## Open decisions` when any remain, plus
-  `## Remaining`, open items only. A scratch list the agent edits directly
-  all session; the wrap-up only folds in the final remainder. A ledger, not
-  a snapshot — open decisions live here rather than in the task file
-  because they get revisited and resolved mid-session, same as any other
-  open item.
+- **`TODO.md`** — `## Open decisions` when any remain, plus `## Remaining`,
+  open items only. A scratch list the agent edits directly all session; the
+  wrap-up only folds in the final remainder. A ledger, not a snapshot — open
+  decisions live here rather than in the task file because they get revisited
+  and resolved mid-session, same as any other open item. A project that
+  already keeps a `TODO.md` shares it with the plugin, and a list already in
+  another shape keeps its shape.
 
 The frame carries no session id, no transcript, no file list, and no
 commit/push status. The working set comes from the harness's own
 `gitStatus` block at load time.
+
+A file is part of the frame only when it has a body: something left once
+blank lines and ATX headings are taken out, a heading being markdown's own —
+so a shebang, a `#tag`, or a `# comment` inside an indented code block are all
+content, and a line of spaces is not. The rule is `is_empty_body` in
+`_checkpoint_lib.py`, reached from `handoff_frame()` through its
+`--is-empty-body` CLI. `load-handoff.sh` says what it found on both channels —
+`No task frame`, `No todo`, or `No task frame or todo.` — because a loader
+that stays silent on an empty frame cannot be told apart from one that never
+ran.
+[A heading is not a leading `#`](../changelog/2026-09-14-a-heading-is-not-a-leading-hash.md),
+[TASK.md and TODO.md move to the root](../changelog/2026-10-11-task-and-todo-move-to-the-root.md)
 
 ## One channel, one writer
 
@@ -35,10 +49,12 @@ JSON payload on stdin — `skill`, `commit`, the boundary's transition field,
 union: the file's content directly as a string, or an object naming an
 action. `task` takes `{"action": "clear"}`; `todo` also takes
 `{"action": "keep"}` and `{"action": "edit", "old_string": …,
-"new_string": …}`. The task file is authored whole at every boundary, so it
-has no edit action, and no keep — a boundary with nothing to carry says so
-with `clear`, which is the case an agent used to reach for `null` and get
-silence. Both keys are required by key presence: `null` and an absent key
+"new_string": …}`. The task file is authored whole, so it has no edit
+action, and no keep — a clear boundary with nothing to carry says so with
+`clear`, which is the case an agent used to reach for `null` and get
+silence. At the compact boundary `task` is forbidden by key presence, like
+`rename`, and the checkpoint removes the file. Where a key is taken it is
+required by key presence: `null` and an absent key
 are each a named error, because a spelling that quietly does the wrong
 thing is the defect this shape exists to prevent — a wrong one has to fail
 loudly rather than acquire a meaning. The action object holds to the same
@@ -66,9 +82,9 @@ write instead. There is no `file_path` —
 payload-supplied one would ask the agent to derive a path from a root it
 cannot read, only to be checked against the one the write uses anyway. A
 violation exits non-zero naming the offending field. The wrap-up is applied
-whole or not at all: both halves resolve to a plan — the path, the act, the
-body and the manifest lines that record it — before either file is touched,
-so every failure the two halves raise leaves the disk as it was.
+whole or not at all: both halves resolve to a plan — the path, the act and
+the body — before either file is touched, so every failure the two halves
+raise leaves the disk as it was.
 [The payload names its actions](../changelog/2026-09-07-the-payload-names-its-actions.md),
 [Nothing is written until both halves resolve](../changelog/2026-09-13-nothing-is-written-until-both-halves-resolve.md),
 [The vocabulary is closed at both levels](../changelog/2026-09-14-the-vocabulary-is-closed-at-both-levels.md)
@@ -88,41 +104,72 @@ sample taken there could stamp the wrong repo onto a pointer read later in
 the same session. See
 [`docs/changelog/2026-08-10-checkpoint-root-via-updatedinput.md`](../changelog/2026-08-10-checkpoint-root-via-updatedinput.md).
 
-The checkpoint applies the writes, removes any file whose resulting body is
-empty, composes `.claude/autodrive` from the transition fields, leaves
-`.claude/checkpoint-manifest` behind, and prints on stdout what the agent
-does next (see [What the checkpoint
-prints](the-checkpoint-directive.md#what-the-checkpoint-prints)). It **changes no git
-state** — it queries git read-only and stops there: it runs in the agent's
-sandboxed Bash, where `git add` can leave `.git/index.lock` behind and fail
-the *next* command (which in the routine wrap-up is the user's `/commit`). `PostToolUse(Bash)` (`bash-post.sh`) consumes
-the manifest instead — `git add -f` for every listed path, deletions
-included, and a path it could not stage named on both channels rather than
-dropped from the counts — that name carries the whole report, a hook's stderr
-on `exit 0` reaching neither audience. A root that is not a git repository at
-all is separated ahead of the loop and reported once rather than once per
-path: nothing there can be staged, and nothing is wrong. A `D` line for a
-path `git ls-files` does not list is skipped rather than attempted: both
-files are gitignored, so nothing but a hook ever stages them, and a `git
-reset` since the last checkpoint — or a file the user wrote by hand — leaves
-the path untracked, so this call's removal emits a `D` for something the
-index never held. `git add -f` exits 128 there with `did not match any
-files`, and that is the one benign failure in this loop. The guard's own exit
-status is read rather than inferred from its empty output, a failing `ls-files`
-being a repository `add` could not have staged into either. Staging is all it does: a sentinel the checkpoint
-wrote is taken at the end of the turn like any other, so consuming it here
-would run a transition inside a live turn, which is the one thing the drive's
-turn-end gate exists to prevent.
+The checkpoint applies the writes, composes `.claude/autodrive` from the
+transition fields — creating `.claude/` when the project has none, the
+sentinel being the one thing left that needs it — and prints on stdout what
+the agent does next (see [What the checkpoint
+prints](the-checkpoint-directive.md#what-the-checkpoint-prints)). A content
+string is written as given, whatever is in it; a file is removed by
+`{"action": "clear"}` and, for the task file, by the compact boundary, and by
+nothing else. An empty `TODO.md` somebody keeps for another purpose is not the
+checkpoint's to delete.
 
-`file present ⟹ content pending` is an invariant two writers enforce
-(`checkpoint.py` and `write-stage.sh`, the latter through a
-`_checkpoint_lib.py --is-empty-body` subprocess spawn so the two cannot
-disagree about what counts as empty), not an instruction the agent has to
-remember. `checkpoint.py` and `_checkpoint_lib.py` are a
-2026-08-10 Python port of what was
-`checkpoint.sh` + `_checkpoint-lib.sh` (the walker that was ported with them is
-gone: [Driving the transition](driving-the-transition.md)): both did bash's worst work —
-structured data, not text streams — and both run once per boundary, never on
-a hot path, so the interpreter-startup tax lands where it is cheapest to pay.
-The six event hooks that fire on every tool call stay bash. See
+It **changes no git state** — it queries git read-only and stops there: it
+runs in the agent's sandboxed Bash, where `git add` can leave
+`.git/index.lock` behind and fail the *next* command (which in the routine
+wrap-up is the user's `/commit`). Nothing else stages on its behalf. Under
+`with-commit` the commit act the checkpoint prints names the two files; under
+`without-commit` they are left modified in the tree like any edited file.
+
+## The task is bounded
+
+A `task` content string is rejected, before anything is written, when its
+body runs over 1000 characters or when any line opens a list item (FR13). The
+body is the content without its heading lines, stripped, counted in
+characters. A list item is a line opening with `-`, `*`, `+` or a numbered
+marker, then whitespace. One error carries whichever facts hold — the line
+and its first words, the count against the limit — and then where the
+overflow goes: remaining steps and open decisions to `todo`, finished work
+cut to one sentence, standing rules and conventions to memory.
+
+The rule exists because the task file had stopped being a pointer. Measured
+over the versions written across nineteen repositories, one character in five
+described the task in hand; the rest was a plan, a done-log, or working
+conventions, each of which has a home. The list rule is the cap's complement:
+a short task file that carries its steps as bullets is a todo list in the
+wrong file, and no length catches it.
+[The argument](decisions.md), [the measurements](../changelog/2026-10-11-task-and-todo-move-to-the-root.md)
+
+## What is guarded
+
+`write-guard.sh` (`PreToolUse(Write|Edit)`) denies a direct write to the
+`autodrive` sentinel and to nothing else. The sentinel's state is content, so
+a wrong one is writable, and what it holds is run as commands when the turn
+ends. `TASK.md` and `TODO.md` are notes the next session reads, and a direct
+edit of either is an ordinary edit.
+
+The guard's negative path is one jq parse and a substring test on the path it
+was given. Past that the verdict is never on the path as given. A trailing
+slash, a `/.` and an `x/..` detour all normalise onto the sentinel under a
+last component that is not its name; a JSON string may hold a newline that a
+line-oriented read would cut the path at, which is why both fields are read
+NUL-terminated; and resolving follows symlinks, so the sentinel's own
+resolved name need not be `autodrive`. Three paths settle it: where the write
+lands, where this project's sentinel lands, and the given path normalised
+without following links. A write that lands on the sentinel is denied as
+checkpoint-only. Anywhere else, a name of `autodrive` at either end is
+another project's and is denied as a cross-project write. What the guard does
+not catch is the sentinel reached by a path that does not mention its name —
+through a symlink called something else, or a case variant on a
+case-insensitive filesystem. Judging any one of the three paths alone lets
+one of those spellings through, and each is a row in `tests/hook-test.bats`.
+
+## The Python half
+
+`checkpoint.py` and `_checkpoint_lib.py` are a 2026-08-10 Python port of what
+was `checkpoint.sh` + `_checkpoint-lib.sh` (the walker that was ported with
+them is gone: [Driving the transition](driving-the-transition.md)): both did
+bash's worst work — structured data, not text streams — and both run once per
+boundary, never on a hot path, so the interpreter-startup tax lands where it
+is cheapest to pay. The hooks that fire on every tool call stay bash. See
 [`docs/changelog/2026-08-10-python-split.md`](../changelog/2026-08-10-python-split.md).

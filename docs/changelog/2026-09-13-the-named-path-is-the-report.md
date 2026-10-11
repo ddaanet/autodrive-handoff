@@ -1,5 +1,10 @@
 # The named path is the report — 2026-09-13
 
+> **Superseded 2026-10-11** (see [TASK.md and TODO.md move to the
+> root](2026-10-11-task-and-todo-move-to-the-root.md)): `bash-post.sh` is gone with the
+> manifest it consumed, so nothing here describes a running hook. What a
+> `PostToolUse` hook's stderr does is a fact about the harness and stands.
+
 `bash-post.sh` carried a comment asserting that "git's stderr now reaches the
 user". Nothing in the tree demonstrated it. The bats row it was leaning on
 (`tests/checkpoint.bats`, the stranded-`index.lock` case) greps git's message

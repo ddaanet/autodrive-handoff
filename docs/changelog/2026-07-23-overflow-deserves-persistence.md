@@ -1,5 +1,11 @@
 # Overflow deserves the same persistence (2026-07-23)
 
+> **Superseded 2026-10-11** (see [TASK.md and TODO.md move to the
+> root](2026-10-11-task-and-todo-move-to-the-root.md)) on the mechanism: both files are
+> plain tracked files in the project root, and nothing force-adds them. The
+> argument stands, and is why they moved together: the two halves of the frame
+> share one persistence.
+
 `handoff-todo.md` is force-added by `write-stage.sh` like the task file, and
 its deletion staged by the wipe like the task file's. The one property that
 distinguished the two files is gone.

@@ -17,8 +17,9 @@ condition:
 2. the todo boundary (`handoff`) or the SDD ledger nudge (`precompact`),
    when a live ledger exists;
 3. the commit act, under `with-commit` — make the commit the request called
-   for. It names no git verb: the request may be an amend or a fresh commit,
-   and the checkpoint cannot tell which;
+   for, including any change to `TASK.md` and `TODO.md`. It names no git verb:
+   the request may be an amend or a fresh commit, and the checkpoint cannot
+   tell which. It names the two files because nothing has staged them;
 4. the arming instruction, when the sentinel is held — run
    `handoff-approved`;
 5. the closing line, when it is not — an instruction to end the reply on one
@@ -32,8 +33,9 @@ not already implied by the hold: an untyped precompact with dirty memory
 runs nothing, so it is armed rather than held, and its closing line
 follows the approval question directly. Ordering the commit before the
 arming instruction is what places a commit the ask implies after the
-checkpoint — it has to carry the handoff files the checkpoint staged — and
-before the transition is released.
+checkpoint — it has to carry `TASK.md` and `TODO.md` as the checkpoint left
+them, which is why it names them: nothing has staged either — and before the
+transition is released.
 
 The closing line has one producer per path. Not held, the checkpoint prints
 it last. Held, `bin/handoff-approved` prints it after its own status fact
@@ -76,7 +78,7 @@ is the commands running, not which transition they carry. An untyped handoff
 runs no transition but still runs `/rename`, racing the same
 answer — so it holds too. What is exempt is the sentinel that names nothing
 at all: the bare compact marker, which would otherwise lose the expectation
-`SessionStart(compact)` gates the frame's re-injection on to a gate it has
+`SessionStart(compact)` gates the todo's re-injection on to a gate it has
 no reason to wait on. Of the other parts, the ledger nudge and the todo
 boundary never hold: they are acts, not questions, and the turn's end comes after
 them either way. The commit act is the one that can fail, which is the
