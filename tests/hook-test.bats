@@ -587,6 +587,30 @@ run_write_guard() {  # <tool> <cwd> <file_path> [CLAUDE_PROJECT_DIR]
         | test("written only by handoff-checkpoint")' >/dev/null
 }
 
+# The tool normalises the path it is given, so each of these lands on the
+# sentinel although its last component is not the sentinel's name.
+@test "write-guard (trailing slash, trailing /., a .. detour: each still the sentinel, deny)" {
+    for fp in "$tmp/.claude/autodrive/" "$tmp/.claude/autodrive/." \
+              "$tmp/.claude/sub/../autodrive" "$tmp/.claude//autodrive"; do
+        run_write_guard Write "$tmp" "$fp"
+        [ "$status" -eq 0 ]
+        echo "$output" | jq -e '.hookSpecificOutput.permissionDecisionReason
+            | test("written only by handoff-checkpoint")' >/dev/null
+    done
+}
+
+@test "write-guard (trailing whitespace after the name: deny)" {
+    run_write_guard Write "$tmp" "$tmp/.claude/autodrive "
+    [ "$status" -eq 0 ]
+    echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null
+}
+
+@test "write-guard (a file under a directory named autodrive: allow)" {
+    run_write_guard Write "$tmp" "$tmp/autodrive/notes.md"
+    [ "$status" -eq 0 ]
+    [ "$output" = "" ]
+}
+
 @test "write-guard (root with a space and a trailing space in the cwd: in-project, deny)" {
     sp="$BATS_TEST_TMPDIR/spaced proj "
     mkdir -p "$sp/.claude"
