@@ -379,6 +379,7 @@ def validate_task(payload: JSONDict, skill: str) -> tuple[str, str]:
     task = payload["task"]
     ttype = _json_type(task)
     if ttype == "string":
+        validate_task_shape(cast("str", task))
         return "write", cast("str", task)
     if ttype == "object":
         if "action" not in task:
@@ -393,6 +394,45 @@ def validate_task(payload: JSONDict, skill: str) -> tuple[str, str]:
         f'must be a content string or {{"action": "clear"}}, got {ttype}',
     )
     raise AssertionError("unreachable")  # err() always raises
+
+
+def validate_task_shape(content: str) -> None:
+    """Reject a task body over the character cap or holding a list item.
+
+    The body is the content without its ATX heading lines, stripped; the cap
+    counts its characters. A list item is a line opening with a bullet or a
+    numbered marker followed by whitespace; the first is named by its 1-based
+    line number. Both facts, when both hold, go in one error.
+    """
+    lines = content.split("\n")
+    prose = [ln for ln in lines if not lib.ATX_HEADING.fullmatch(ln.rstrip())]
+    body = "\n".join(prose).strip()
+    facts: list[str] = []
+    for number, line in enumerate(lines, start=1):
+        if _LIST_ITEM.match(line):
+            facts.append(f'line {number} is a list item ("{line.strip()[:40]}")')
+            break
+    if len(body) > TASK_BODY_LIMIT:
+        facts.append(
+            f"body is {len(body)} characters, the limit is {TASK_BODY_LIMIT} "
+            "(headings not counted)"
+        )
+    if not facts:
+        return
+    err(
+        "task",
+        "; ".join(facts) + ". The task is prose within the limit: keep the task in "
+        'hand and where it stands, move remaining steps and open decisions to "todo", '
+        "cut finished work to one sentence, and write standing rules and conventions "
+        "to memory.",
+    )
+
+
+# A bullet (`-`, `*`, `+`) or a numbered marker (`1.`, `1)`), then whitespace.
+_LIST_ITEM = re.compile(r"^\s*([-*+]|\d+[.)])\s")
+
+# Characters in a task's body, headings not counted.
+TASK_BODY_LIMIT = 1000
 
 
 def validate_todo(payload: JSONDict) -> tuple[str, str, str, str]:

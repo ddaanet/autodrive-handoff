@@ -21,7 +21,7 @@ Decided in conversation on 2026-10-10/11:
   frame", "No todo", "No task frame or todo." Empty means missing or
   headings-only.
 - `precompact` always removes `TASK.md`; the summary carries the task.
-- The task content is capped at 1500 characters of body and takes no list
+- The task content is capped at 1000 characters of body and takes no list
   items, so step lists are forced into `TODO.md`. Evidence:
   `reports/task-length-survey.md` (the 282 current-contract versions: median
   716, p90 1754; the cap rejects 14.5% and the list rule catches the
@@ -47,6 +47,9 @@ Decided in conversation on 2026-10-10/11:
   > `reports/overflow-analysis.md` measures that residual; the cap is written
   > **N** below until my human partner confirms a value. What still stands:
   > a character cap on the body and the no-list rule.
+  >
+  > My human partner confirmed **1000** the same day, the first round number
+  > above the residual's 95th percentile (867); N below now reads 1000.
 - The toolkit's `.claude/` release exemption is asked to go
   (`claude-plugin-dev/inbox/brief-remove-claude-exemption.md`, already
   dropped). A dirty `TASK.md`/`TODO.md` refusing a release is accepted.
@@ -87,7 +90,7 @@ if wrong:
   - New `validate_task_shape(content)`, run from `validate_task` so it fails
     before any write (the existing plan-then-apply order already guarantees
     this): body is the content minus ATX heading lines (reuse
-    `lib._ATX_HEADING`, made public), stripped; `len(body) > N` or any line
+    `lib._ATX_HEADING`, made public), stripped; `len(body) > 1000` or any line
     matching `^\s*([-*+]|\d+[.)])\s` is an `err("task", …)`. Each message
     names the measured fact (the count; the line number and its first words)
     and where the overflow goes: remaining steps and open decisions to
@@ -178,10 +181,9 @@ the loader notes, `craft:removing-cleanly` before step 4,
 1a. **The overflow analysis** (added 2026-10-11): every task-file version
    since 2026-07-22 split into sentence units, each labelled by a Haiku
    reader as task-in-hand, plan, convention or done-log, counted by script;
-   `reports/overflow-analysis.md` proposes N from the residual. No code.
-   Step 2 waits on my human partner's value; steps 3 to 5 do not.
+   `reports/overflow-analysis.md` proposes the cap from the residual. No code.
 2. **The task shape rule** (`tests/test_checkpoint.py`, `checkpoint.py`).
-   Rows: N passes and N+1 fails naming `task` and the count; heading
+   Rows: 1000 passes and 1001 fails naming `task` and the count; heading
    lines do not count; a multi-byte body is counted in characters; each list
    marker fails naming its line; `**bold**` and a mid-line hyphen pass;
    nothing is written on either failure. Mutation-check the boundary and the

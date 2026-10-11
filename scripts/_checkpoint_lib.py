@@ -32,25 +32,26 @@ def is_empty_body(content: str) -> bool:
 
     "Blank" is the line with no trailing whitespace left, so a line of spaces
     alone is blank rather than content. "Heading" is an ATX heading and not
-    merely a leading `#` (`_ATX_HEADING`): `#!/bin/sh`, `#tag` and a run of
-    seven `#` are all content, the `#` run in each being followed by something
-    other than whitespace or the line's end. The leading-space bound is
-    markdown's own: up to three indents a heading, and a fourth opens a code
-    block, whose `# comment` line is content like any other. Testing the
-    stripped line instead would put that line back in the class this function
-    exists to keep out of it.
+    merely a leading `#` (`ATX_HEADING`): `#!/bin/sh`, `#tag` and a run of seven
+    `#` are all content, the `#` run in each being followed by something other
+    than whitespace or the line's end. The leading-space bound is markdown's
+    own: up to three indents a heading, and a fourth opens a code block, whose
+    `# comment` line is content like any other. Testing the stripped line
+    instead would put that line back in the class this function exists to keep
+    out of it.
     """
     for raw in content.split("\n"):
         line = raw.rstrip()
-        if line == "" or _ATX_HEADING.fullmatch(line):
+        if line == "" or ATX_HEADING.fullmatch(line):
             continue
         return False
     return True
 
 
 # Markdown's own ATX rule: up to three leading spaces, 1-6 `#`, then the line
-# ends or whitespace separates the text. Read only by is_empty_body, above.
-_ATX_HEADING = re.compile(r" {0,3}#{1,6}(\s.*)?")
+# ends or whitespace separates the text. Read by is_empty_body, above, and by
+# checkpoint.py's task-shape check; matched against a right-stripped line.
+ATX_HEADING = re.compile(r" {0,3}#{1,6}(\s.*)?")
 
 
 def _resolve_submodule_path(root: str) -> str:
