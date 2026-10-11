@@ -320,7 +320,7 @@ handoff_root_read() {
         HANDOFF_ROOT_BRANCH="inside"
         return 0
     fi
-    { read -r HANDOFF_ROOT; read -r HANDOFF_ROOT_BRANCH; } < <(
+    { IFS= read -r HANDOFF_ROOT; IFS= read -r HANDOFF_ROOT_BRANCH; } < <(
         python3 "$(dirname "${BASH_SOURCE[0]}")/worktree_root.py" "$1" "$project"
     )
 }

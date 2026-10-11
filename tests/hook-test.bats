@@ -103,6 +103,16 @@ $tmp" ]
     [ "$HANDOFF_ROOT_BRANCH" = "worktree" ]
 }
 
+# The resolver's answer comes back on a line of its own; read with the default
+# IFS it would lose the space this root ends on.
+@test "handoff_root_read: a root ending in a space survives the slow path" {
+    sp="$BATS_TEST_TMPDIR/spaced proj "
+    mkdir -p "$sp" "$other/.git"
+    CLAUDE_PROJECT_DIR="$sp" handoff_root_read "$other"
+    [ "$HANDOFF_ROOT" = "$sp" ]
+    [ "$HANDOFF_ROOT_BRANCH" = "foreign" ]
+}
+
 @test "handoff_root_read: cwd in another repo -> branch foreign" {
     mkdir -p "$other/.git"
     handoff_root_read "$other"
@@ -564,6 +574,26 @@ run_write_guard() {  # <tool> <cwd> <file_path> [CLAUDE_PROJECT_DIR]
     run_write_guard Write "$tmp" "$tmp/.claude/autodrive.md"
     [ "$status" -eq 0 ]
     [ "$output" = "" ]
+}
+
+# A JSON string may hold a newline, and the tool resolves `a<LF>b/..` away
+# lexically, so this path lands on the sentinel. Read line by line, the hook
+# would see `…/a` as the path and let it through.
+@test "write-guard (newline in a directory component: still the sentinel, deny)" {
+    run_write_guard Write "$tmp" "$tmp/a"$'\n'"b/../.claude/autodrive"
+    [ "$status" -eq 0 ]
+    echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null
+    echo "$output" | jq -e '.hookSpecificOutput.permissionDecisionReason
+        | test("written only by handoff-checkpoint")' >/dev/null
+}
+
+@test "write-guard (root with a space and a trailing space in the cwd: in-project, deny)" {
+    sp="$BATS_TEST_TMPDIR/spaced proj "
+    mkdir -p "$sp/.claude"
+    run_write_guard Write "$sp" "$sp/.claude/autodrive" "$sp"
+    [ "$status" -eq 0 ]
+    echo "$output" | jq -e '.hookSpecificOutput.permissionDecisionReason
+        | test("written only by handoff-checkpoint")' >/dev/null
 }
 
 @test "write-guard (no file_path in the event: allow)" {
