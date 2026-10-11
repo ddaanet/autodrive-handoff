@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Shared helpers for checkpoint.py (handoff-checkpoint).
 
-Also reached via the --is-empty-body CLI by write-stage.sh (bash, unmoved). Port
-of _checkpoint-lib.sh — see docs/changelog/2026-08-10-python-split.md. Each
+Port of _checkpoint-lib.sh — see docs/changelog/2026-08-10-python-split.md. Each
 directive function returns its directive text, or "" when silent
 (`memory_directive` wraps its text in a `MemoryPart`); the caller decides
-whether to print it.
+whether to print it. The emptiness rule is also reachable from bash through the
+--is-empty-body CLI.
 """
 
 from __future__ import annotations
@@ -27,8 +27,7 @@ def is_empty_body(content: str) -> bool:
     """Report whether content is empty once ATX headings/blanks are removed.
 
     A `## Remaining` with no items, a task file with headings and no content:
-    both are empty. Shared by checkpoint.py and write-stage.sh so the two
-    writers cannot drift on what counts as empty.
+    both are empty.
 
     "Blank" is the line with no trailing whitespace left, so a line of spaces
     alone is blank rather than content. "Heading" is an ATX heading and not
@@ -180,10 +179,12 @@ def commit_directive() -> str:
     """Return the commit act, printed under "with-commit".
 
     Names no git verb: the request may call for an amend or a fresh commit, and
-    the checkpoint does not know which.
+    the checkpoint does not know which. Names the two files because nothing has
+    staged what this call did to them.
     """
     return _printf_lines(
-        "Once everything above is done, make the commit the request called for."
+        "Once everything above is done, make the commit the request called for, "
+        "including any change to `TASK.md` and `TODO.md`."
     )
 
 
@@ -262,9 +263,8 @@ def sdd_directive(root: str) -> str:
         "A task that completed but is missing from the ledger can be "
         "re-dispatched after compaction — the most expensive SDD failure.",
         "",
-        "That ledger holds this plan's tasks. Keep them out of "
-        ".claude/handoff-todo.md, which holds only work outstanding outside "
-        "the plan.",
+        "That ledger holds this plan's tasks. Keep them out of TODO.md, which "
+        "holds only work outstanding outside the plan.",
     )
 
 
@@ -278,18 +278,16 @@ def todo_boundary(root: str) -> str:
         return ""
     return _printf_lines(
         f"A workflow-owned progress ledger at {ledger} holds this plan's tasks, "
-        "and it survives the /clear. Keep those tasks out of "
-        ".claude/handoff-todo.md, removing them if they are already there; that "
-        "file holds only work outstanding outside the plan. Bring the ledger "
-        "current if it has drifted."
+        "and it survives the /clear. Keep those tasks out of TODO.md, removing "
+        "them if they are already there; that file holds only work outstanding "
+        "outside the plan. Bring the ledger current if it has drifted."
     )
 
 
 def _cli(argv: list[str]) -> int:
     """Run `checkpoint_lib.py --is-empty-body`.
 
-    Reads content on stdin, exits 0 if empty, 1 otherwise. write-stage.sh's cold
-    branch can afford the spawn.
+    Reads content on stdin, exits 0 if empty, 1 otherwise.
     """
     if len(argv) == 2 and argv[1] == "--is-empty-body":
         content = sys.stdin.read()

@@ -3,15 +3,14 @@
 
 Reads a JSON payload on stdin, validates it against the schema (FR2 — a
 violation exits 2 naming the offending field on stderr), applies the task/todo
-tagged union — content, or an object naming an action (FR5/FR6) — writes the
-manifest (FR7), composes the sentinel (FR8), and prints the directive output
-(FR9). Only `handoff` carries a `task`; `precompact` forbids the key and removes
-any task file on disk.
+tagged union — content, or an object naming an action (FR5) — to `TASK.md` and
+`TODO.md` in the root, composes the sentinel (FR8), and prints the directive
+output (FR9). Only `handoff` carries a `task`; `precompact` forbids the key and
+removes any task file on disk.
 
-NFR1: nothing here mutates git state — this is the agent's sandboxed Bash.
-scripts/bash-post.sh (PostToolUse(Bash), bash, unmoved) does the staging, driven
-by the manifest this script leaves. At turn end the sentinel is taken by
-scripts/drive-take.sh and run by the drive mod, like any other.
+NFR1: nothing here mutates git state — this is the agent's sandboxed Bash, and
+both files are plain tracked files whichever commit comes next picks up. At turn
+end the sentinel is taken by scripts/drive-take.sh and run by the drive mod.
 
 Port of checkpoint.sh — see docs/changelog/2026-08-10-python-split.md. The
 composer reads its own sentinel back through handoff_drive_read, which stays the
@@ -41,10 +40,9 @@ JSONDict = dict[str, Any]
 
 # Mirrors _lib.sh's HANDOFF_REL_* constants. Changing either side is a
 # breaking change (see CLAUDE.md conventions); kept in sync by hand rather
-# than sourced, since _lib.sh stays bash and these three are frozen in
-# practice.
-HANDOFF_REL_TASK = ".claude/handoff-task.md"
-HANDOFF_REL_TODO = ".claude/handoff-todo.md"
+# than sourced, since _lib.sh stays bash.
+HANDOFF_REL_TASK = "TASK.md"
+HANDOFF_REL_TODO = "TODO.md"
 HANDOFF_REL_DRIVE = ".claude/autodrive"
 
 _LIB_SH = Path(__file__).resolve().parent / "_lib.sh"
@@ -75,14 +73,13 @@ def main() -> int:
         transition, memory=bool(memory.text), commit=commit_mode == "with-commit"
     )
     if held:
-        # Resolving before anything is written (task/todo/manifest/sentinel):
+        # Resolving before anything is written (task/todo/sentinel):
         # a held sentinel's first line names the session, and there is
         # nothing else this run could do with it unset.
         require_session_id(
             "transition", "cannot compose a held sentinel naming the session holding it"
         )
 
-    manifest_lines: list[str] = []
     if skill in ("handoff", "precompact"):
         task_action, task_content = validate_task(payload, skill)
         todo_action, todo_content, todo_old, todo_new = validate_todo(payload)
@@ -90,8 +87,6 @@ def main() -> int:
         todo_plan = plan_todo(root, todo_action, todo_content, todo_old, todo_new)
         apply_plan(task_plan)
         apply_plan(todo_plan)
-        manifest_lines = task_plan.manifest_lines + todo_plan.manifest_lines
-    write_manifest(root, manifest_lines)
 
     compose_sentinel(root, transition, continuation, held=held)
     ending = Ending(held=held, typed=transition.typed)
@@ -495,18 +490,13 @@ class FilePlan(NamedTuple):
     """What one half will do to its file, resolved before anything is written.
 
     A NamedTuple, like Transition beside it, so the record itself is frozen.
-    Every plan carrying a manifest line comes from _plan_file, which composes
-    the path from the same `rel` it writes into that line, so a plan cannot
-    claim a `D` it will not perform — a structural property of the resolver
-    rather than a convention its callers keep. plan_todo's `keep` builds the
-    empty plan directly, ahead of that resolver, because FR4 forbids it even a
-    stat.
+    `none` is `keep`'s plan alone: the list is left as it is, without a stat
+    (FR4).
     """
 
     act: Literal["write", "remove", "none"]
     path: Path
     body: str
-    manifest_lines: list[str]
 
 
 def edited_body(field: str, path: Path, old: str, new: str) -> str:
@@ -525,84 +515,49 @@ def edited_body(field: str, path: Path, old: str, new: str) -> str:
     return content.replace(old, new, 1)
 
 
-def _plan_file(root: Path, rel: str, body: str) -> FilePlan:
-    """Resolve one file's plan from its would-be body (FR5/FR6/FR7).
-
-    Composes the path from `rel` rather than taking both, so the file a plan
-    acts on and the file its manifest line names cannot disagree.
-
-    An empty body is a removal (FR6) — existence is sampled here, before
-    anything is written, so a `D` line records only a removal that will actually
-    happen. A non-empty body is a write, unconditionally.
-    """
-    path = root / rel
-    existed = path.is_file()
-    if lib.is_empty_body(body):
-        if not existed:
-            return FilePlan("none", path, "", [])
-        return FilePlan("remove", path, "", [f"D {rel}"])
-    return FilePlan("write", path, body, [f"W {rel}"])
-
-
 def plan_task(root: Path, action: str, content: str) -> FilePlan:
-    """Resolve the task write or clear to a plan (FR5/FR6/FR7).
+    """Resolve the task write or clear to a plan (FR5).
 
-    `clear` resolves to the empty string, so it reaches removal through
-    _plan_file's own emptiness rule rather than a branch of its own.
+    A content string is written as given; only `clear` removes.
     """
-    body = "" if action == "clear" else content
-    return _plan_file(root, HANDOFF_REL_TASK, body)
+    path = root / HANDOFF_REL_TASK
+    if action == "clear":
+        return FilePlan("remove", path, "")
+    return FilePlan("write", path, content)
 
 
 def plan_todo(root: Path, action: str, content: str, old: str, new: str) -> FilePlan:
-    """Resolve the todo write, edit, clear or keep to a plan (FR5/FR6/FR7).
+    """Resolve the todo write, edit, clear or keep to a plan (FR5).
 
-    `keep` short-circuits ahead of _plan_file, straight to the empty plan: it
-    must not reach a rule that reads an absent body as a removal, and it takes
-    no stat (FR4). `edit` keeps its own explicit file-absent err() ahead of
-    edited_body, so the stat _plan_file then takes is deliberate — a
-    precondition check and an existence sample are different questions.
+    A content string and an edit's result are written as given, whatever is left
+    in them; only `clear` removes. `edit` errors here, ahead of any write, when
+    the file is absent or `old` does not occur in it exactly once.
     """
     path = root / HANDOFF_REL_TODO
     if action == "keep":
-        return FilePlan("none", path, "", [])
+        return FilePlan("none", path, "")
     if action == "clear":
-        body = ""
-    elif action == "edit":
+        return FilePlan("remove", path, "")
+    if action == "edit":
         if not path.is_file():
             err(
                 "todo.old_string",
                 f"edit requested but {HANDOFF_REL_TODO} does not exist",
             )
-        body = edited_body("todo", path, old, new)
-    else:
-        body = content
-    return _plan_file(root, HANDOFF_REL_TODO, body)
+        return FilePlan("write", path, edited_body("todo", path, old, new))
+    return FilePlan("write", path, content)
 
 
 def apply_plan(plan: FilePlan) -> None:
     """Perform the write or the unlink a plan names.
 
-    Neither arm calls err(), and the unlink tolerates a file already gone — one
-    removed between _plan_file's stat and this call would otherwise raise
-    FileNotFoundError ahead of write_manifest, with the other half possibly
-    applied, which is the outcome resolving both plans first exists to remove.
-    The `D` line stays correct when that happens: the file is absent either way,
-    so bash-post.sh's `git add -f` stages the deletion regardless.
+    Neither arm calls err(): a removal of a file that is not there is no error,
+    so nothing can fail between the two halves.
     """
     if plan.act == "write":
         plan.path.write_text(plan.body, encoding="utf-8")
     elif plan.act == "remove":
         plan.path.unlink(missing_ok=True)
-
-
-def write_manifest(root: Path, manifest_lines: list[str]) -> None:
-    """Write the manifest, always, even with zero lines.
-
-    bash-post.sh's fast-exit gate is the manifest's mere presence.
-    """
-    content = "\n".join(manifest_lines) + "\n" if manifest_lines else ""
-    (root / ".claude" / "checkpoint-manifest").write_text(content, encoding="utf-8")
 
 
 def hold_decision(transition: Transition, *, memory: bool, commit: bool) -> bool:
@@ -633,6 +588,7 @@ def compose_sentinel(
         state = f"held {session_id}"
 
     drive_path = root / HANDOFF_REL_DRIVE
+    drive_path.parent.mkdir(exist_ok=True)
     sentinel_lines = [state, transition.kind, *transition.cmds]
     if continuation:
         sentinel_lines.append(continuation)

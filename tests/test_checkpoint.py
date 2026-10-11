@@ -1,12 +1,11 @@
 """Tests for scripts/checkpoint.py (handoff-checkpoint) — the schema validation,
-write semantics, manifest, transition/sentinel composition, and directive
-composition that live in checkpoint.py + _checkpoint_lib.py. Port of the
-checkpoint.sh-specific rows of tests/checkpoint.bats — see
-docs/changelog/2026-08-10-python-split.md.
+write semantics, transition/sentinel composition, and directive composition that
+live in checkpoint.py + _checkpoint_lib.py. Port of the checkpoint.sh-specific
+rows of tests/checkpoint.bats — see docs/changelog/2026-08-10-python-split.md.
 
-inject-checkpoint-root.sh, bash-post.sh, bin/handoff-approved and the
-bin/handoff-checkpoint shim stay bash and stay tested in tests/checkpoint.bats;
-this file covers only checkpoint.py's own behavior.
+inject-checkpoint-root.sh, bin/handoff-approved and the bin/handoff-checkpoint
+shim stay bash and stay tested in tests/checkpoint.bats; this file covers only
+checkpoint.py's own behavior.
 """
 
 import json
@@ -241,10 +240,10 @@ def test_drifted_cwd_writes_injected_root_never_cwd(tmp_path: Path) -> None:
     }
     result = run_checkpoint(elsewhere, payload, root=root)
     assert result.returncode == 0
-    assert (root / ".claude" / "handoff-task.md").is_file()
-    assert (root / ".claude" / "checkpoint-manifest").is_file()
-    assert not (elsewhere / ".claude" / "handoff-task.md").exists()
-    assert not (elsewhere / ".claude" / "checkpoint-manifest").exists()
+    assert (root / "TASK.md").is_file()
+    assert (root / ".claude" / "autodrive").is_file()
+    assert not (elsewhere / "TASK.md").exists()
+    assert not (elsewhere / ".claude" / "autodrive").exists()
 
 
 # ==========================================================================
@@ -407,13 +406,13 @@ def test_empty_or_null_rename_under_precompact_errors(
 def test_task_present_under_precompact_errors(tmp_path: Path, value: object) -> None:
     """`task` is forbidden under precompact by key presence, whatever its value.
 
-    The pre-existing frame and the absent manifest pin where the check runs: a
+    The pre-existing frame and the absent sentinel pin where the check runs: a
     payload rejected after the task half was applied would pass the message
     assertions and still replace or remove the file.
     """
     repo = make_repo(tmp_path)
     stale = "## Current task\n\nIMPORTANT UNSAVED\n"
-    (repo / ".claude" / "handoff-task.md").write_text(stale)
+    (repo / "TASK.md").write_text(stale)
     payload = {
         "skill": "precompact",
         "commit": "with-commit",
@@ -426,41 +425,31 @@ def test_task_present_under_precompact_errors(tmp_path: Path, value: object) -> 
     assert result.returncode == 2
     assert "task" in result.stderr
     assert 'forbidden when skill is "precompact"' in result.stderr
-    assert (repo / ".claude" / "handoff-task.md").read_text() == stale
-    assert not (repo / ".claude" / "checkpoint-manifest").exists()
+    assert (repo / "TASK.md").read_text() == stale
+    assert not (repo / ".claude" / "autodrive").exists()
 
 
-def test_precompact_without_task_removes_pre_existing_file_manifest_records_d(
-    tmp_path: Path,
+@pytest.mark.parametrize(
+    "existed", [True, False], ids=["pre_existing", "never_existed"]
+)
+def test_precompact_without_task_leaves_no_task_file(
+    tmp_path: Path, *, existed: bool
 ) -> None:
-    repo = make_repo(tmp_path)
-    (repo / ".claude" / "handoff-task.md").write_text("## Current task\n\nstale\n")
-    result = run_checkpoint(
-        repo,
-        precompact_payload("with-commit", todo_content("## Remaining\n\n- an item\n")),
-    )
-    assert result.returncode == 0
-    assert not (repo / ".claude" / "handoff-task.md").exists()
-    manifest = (repo / ".claude" / "checkpoint-manifest").read_text()
-    # The todo line proves the manifest is live, so the D line is a claim about
-    # the task route rather than a leftover of some other write.
-    assert "W .claude/handoff-todo.md" in manifest.splitlines()
-    assert "D .claude/handoff-task.md" in manifest.splitlines()
+    """The removal runs whether or not there is a file, and is no error without
+    one.
 
-
-def test_precompact_without_task_never_existed_writes_nothing_no_d(
-    tmp_path: Path,
-) -> None:
+    The todo half writes in the same call, so a pass is not a run that stopped
+    before the task half.
+    """
     repo = make_repo(tmp_path)
-    result = run_checkpoint(
-        repo,
-        precompact_payload("with-commit", todo_content("## Remaining\n\n- an item\n")),
-    )
+    if existed:
+        (repo / "TASK.md").write_text("## Current task\n\nstale\n")
+    todo = "## Remaining\n\n- an item\n"
+    result = run_checkpoint(repo, precompact_payload("with-commit", todo_content(todo)))
     assert result.returncode == 0
-    assert not (repo / ".claude" / "handoff-task.md").exists()
-    manifest = (repo / ".claude" / "checkpoint-manifest").read_text()
-    assert "W .claude/handoff-todo.md" in manifest.splitlines()
-    assert "handoff-task.md" not in manifest
+    assert result.stderr == ""
+    assert not (repo / "TASK.md").exists()
+    assert (repo / "TODO.md").read_text() == todo
 
 
 def test_precompact_task_removal_leaves_kept_todo_byte_identical(
@@ -468,12 +457,12 @@ def test_precompact_task_removal_leaves_kept_todo_byte_identical(
 ) -> None:
     repo = make_repo(tmp_path)
     todo = "## Remaining\n\n- keep me\n"
-    (repo / ".claude" / "handoff-task.md").write_text("## Current task\n\nstale\n")
-    (repo / ".claude" / "handoff-todo.md").write_text(todo)
+    (repo / "TASK.md").write_text("## Current task\n\nstale\n")
+    (repo / "TODO.md").write_text(todo)
     result = run_checkpoint(repo, precompact_payload("with-commit", todo_keep()))
     assert result.returncode == 0
-    assert not (repo / ".claude" / "handoff-task.md").exists()
-    assert (repo / ".claude" / "handoff-todo.md").read_text() == todo
+    assert not (repo / "TASK.md").exists()
+    assert (repo / "TODO.md").read_text() == todo
 
 
 def test_precompact_task_removal_with_todo_content_writes_the_todo(
@@ -481,12 +470,12 @@ def test_precompact_task_removal_with_todo_content_writes_the_todo(
 ) -> None:
     repo = make_repo(tmp_path)
     todo = "## Remaining\n\n- fresh item\n"
-    (repo / ".claude" / "handoff-task.md").write_text("## Current task\n\nstale\n")
-    (repo / ".claude" / "handoff-todo.md").write_text("## Remaining\n\n- old\n")
+    (repo / "TASK.md").write_text("## Current task\n\nstale\n")
+    (repo / "TODO.md").write_text("## Remaining\n\n- old\n")
     result = run_checkpoint(repo, precompact_payload("with-commit", todo_content(todo)))
     assert result.returncode == 0
-    assert not (repo / ".claude" / "handoff-task.md").exists()
-    assert (repo / ".claude" / "handoff-todo.md").read_text() == todo
+    assert not (repo / "TASK.md").exists()
+    assert (repo / "TODO.md").read_text() == todo
 
 
 @pytest.mark.parametrize("value", [{"title": "Fix parser"}, 42, ["A Title"], True])
@@ -686,13 +675,13 @@ def test_top_level_unknown_key_errors_under_handoff(tmp_path: Path) -> None:
 
     The payload's task half is `clear` over a pre-existing frame, so the row
     also pins where the check runs: rejected before anything is applied, the
-    frame survives byte-identical and no manifest is written. Moved below the
+    frame survives byte-identical and no sentinel is composed. Moved below the
     two halves, the same payload would remove the file and report an error
     naming only the key.
     """
     repo = make_repo(tmp_path)
     stale = "## Current task\n\nIMPORTANT UNSAVED\n"
-    (repo / ".claude" / "handoff-task.md").write_text(stale)
+    (repo / "TASK.md").write_text(stale)
     payload = {
         "skill": "handoff",
         "commit": "with-commit",
@@ -706,9 +695,9 @@ def test_top_level_unknown_key_errors_under_handoff(tmp_path: Path) -> None:
     result = run_checkpoint(repo, payload)
     assert result.returncode == 2
     assert "bogus" in result.stderr
-    assert (repo / ".claude" / "handoff-task.md").is_file()
-    assert (repo / ".claude" / "handoff-task.md").read_text() == stale
-    assert not (repo / ".claude" / "checkpoint-manifest").exists()
+    assert (repo / "TASK.md").is_file()
+    assert (repo / "TASK.md").read_text() == stale
+    assert not (repo / ".claude" / "autodrive").exists()
 
 
 def test_top_level_unknown_key_errors_under_precompact(tmp_path: Path) -> None:
@@ -785,597 +774,16 @@ def test_task_or_todo_null_or_absent_errors_naming_field(
     assert result.returncode == 2
     assert field in result.stderr
     assert reason in result.stderr
-    target = "handoff-task.md" if field == "task" else "handoff-todo.md"
-    assert not (repo / ".claude" / target).exists()
+    target = "TASK.md" if field == "task" else "TODO.md"
+    assert not (repo / target).exists()
 
 
 # ==========================================================================
-# Write semantics (FR5) and empty-body removal (FR6)
+# Write semantics (FR5)
 # ==========================================================================
 
 
-def test_task_write_creates_file_manifest_records_w(tmp_path: Path) -> None:
-    """Handoff only: precompact forbids `task`, so it never writes one."""
-    repo = make_repo(tmp_path)
-    content = "## Current task\n\nreal content\n"
-    payload: dict[str, object] = {
-        "skill": "handoff",
-        "commit": "with-commit",
-        "rename": "T",
-        "clear": False,
-        "continue": None,
-        "task": task_content(content),
-        "todo": todo_keep(),
-    }
-    result = run_checkpoint(repo, payload)
-    assert result.returncode == 0
-    assert (repo / ".claude" / "handoff-task.md").is_file()
-    assert (repo / ".claude" / "handoff-task.md").read_text() == content
-    assert (
-        "W .claude/handoff-task.md"
-        in (repo / ".claude" / "checkpoint-manifest").read_text().splitlines()
-    )
-
-
-def test_task_clear_removes_pre_existing_file_manifest_records_d(
-    tmp_path: Path,
-) -> None:
-    repo = make_repo(tmp_path)
-    (repo / ".claude" / "handoff-task.md").write_text("## Current task\n\nstale\n")
-    payload = {
-        "skill": "handoff",
-        "commit": "with-commit",
-        "rename": "T",
-        "clear": False,
-        "continue": None,
-        "task": task_clear(),
-        "todo": todo_content("## Remaining\n\n- an item\n"),
-    }
-    result = run_checkpoint(repo, payload)
-    assert result.returncode == 0
-    assert not (repo / ".claude" / "handoff-task.md").exists()
-    manifest = (repo / ".claude" / "checkpoint-manifest").read_text()
-    # Carries the same live-manifest todo line as its never-existed partner, so
-    # the pair differs only in whether the task file exists first.
-    assert "W .claude/handoff-todo.md" in manifest.splitlines()
-    assert "D .claude/handoff-task.md" in manifest.splitlines()
-
-
-def test_task_clear_never_existed_writes_nothing_no_d(tmp_path: Path) -> None:
-    repo = make_repo(tmp_path)
-    payload = {
-        "skill": "handoff",
-        "commit": "with-commit",
-        "rename": "T",
-        "clear": False,
-        "continue": None,
-        "task": task_clear(),
-        "todo": todo_content("## Remaining\n\n- an item\n"),
-    }
-    result = run_checkpoint(repo, payload)
-    assert result.returncode == 0
-    assert not (repo / ".claude" / "handoff-task.md").exists()
-    assert (repo / ".claude" / "checkpoint-manifest").is_file()
-    manifest = (repo / ".claude" / "checkpoint-manifest").read_text()
-    # The todo line proves the manifest is live, so the absence below is a claim
-    # about the task route rather than about an empty manifest.
-    assert "W .claude/handoff-todo.md" in manifest.splitlines()
-    assert "handoff-task.md" not in manifest
-
-
-def test_todo_clear_removes_pre_existing_file_manifest_records_d(
-    tmp_path: Path,
-) -> None:
-    """Mirror of the task row, and the only cover of `todo`'s destructive arm.
-
-    Written after a review found the whole branch dead to the suite: replacing
-    it with `return []` left every test passing, while three sibling mutations
-    on the same two functions redded 4, 1 and 2 rows.
-    """
-    repo = make_repo(tmp_path)
-    (repo / ".claude" / "handoff-todo.md").write_text("## Remaining\n\n- stale\n")
-    payload = {
-        "skill": "handoff",
-        "commit": "with-commit",
-        "rename": "T",
-        "clear": False,
-        "continue": None,
-        "task": task_content("## Current task\n\nlive\n"),
-        "todo": todo_clear(),
-    }
-    result = run_checkpoint(repo, payload)
-    assert result.returncode == 0
-    assert not (repo / ".claude" / "handoff-todo.md").exists()
-    manifest = (repo / ".claude" / "checkpoint-manifest").read_text()
-    # The task line carries the live-manifest role the todo line plays in the
-    # task pair, so the pair differs only in whether the todo file exists first.
-    assert "W .claude/handoff-task.md" in manifest.splitlines()
-    assert "D .claude/handoff-todo.md" in manifest.splitlines()
-
-
-def test_todo_clear_never_existed_writes_nothing_no_d(tmp_path: Path) -> None:
-    repo = make_repo(tmp_path)
-    payload = {
-        "skill": "handoff",
-        "commit": "with-commit",
-        "rename": "T",
-        "clear": False,
-        "continue": None,
-        "task": task_content("## Current task\n\nlive\n"),
-        "todo": todo_clear(),
-    }
-    result = run_checkpoint(repo, payload)
-    assert result.returncode == 0
-    assert not (repo / ".claude" / "handoff-todo.md").exists()
-    assert (repo / ".claude" / "checkpoint-manifest").is_file()
-    manifest = (repo / ".claude" / "checkpoint-manifest").read_text()
-    assert "W .claude/handoff-task.md" in manifest.splitlines()
-    assert "handoff-todo.md" not in manifest
-
-
-def test_task_write_only_headings_pre_existing_removed_manifest_records_d(
-    tmp_path: Path,
-) -> None:
-    repo = make_repo(tmp_path)
-    (repo / ".claude" / "handoff-task.md").write_text("## Current task\n\nstale\n")
-    payload = {
-        "skill": "handoff",
-        "commit": "with-commit",
-        "rename": "T",
-        "clear": False,
-        "continue": None,
-        "task": task_content("## Current task\n\n## Open decisions\n"),
-        "todo": todo_content("## Remaining\n\n- an item\n"),
-    }
-    result = run_checkpoint(repo, payload)
-    assert result.returncode == 0
-    assert not (repo / ".claude" / "handoff-task.md").exists()
-    manifest = (repo / ".claude" / "checkpoint-manifest").read_text().splitlines()
-    assert "D .claude/handoff-task.md" in manifest
-    assert "W .claude/handoff-todo.md" in manifest
-
-
-def test_task_write_only_headings_never_existed_no_d(tmp_path: Path) -> None:
-    repo = make_repo(tmp_path)
-    payload = {
-        "skill": "handoff",
-        "commit": "with-commit",
-        "rename": "T",
-        "clear": False,
-        "continue": None,
-        "task": task_content("## Current task\n\n## Open decisions\n"),
-        "todo": todo_content("## Remaining\n\n- an item\n"),
-    }
-    result = run_checkpoint(repo, payload)
-    assert result.returncode == 0
-    assert not (repo / ".claude" / "handoff-task.md").exists()
-    assert (repo / ".claude" / "checkpoint-manifest").is_file()
-    manifest = (repo / ".claude" / "checkpoint-manifest").read_text()
-    # The todo line proves the manifest is live, so the absence below is a claim
-    # about the task route rather than about an empty manifest.
-    assert "W .claude/handoff-todo.md" in manifest.splitlines()
-    assert "handoff-task.md" not in manifest
-
-
-def test_task_write_whitespace_only_pre_existing_removed_manifest_records_d(
-    tmp_path: Path,
-) -> None:
-    """M4 route A: a body of spaces alone is blank, not content — the old `line
-    == ""` test missed it (it exited 0 with a `W` and a 3-byte file); testing
-    the line with its trailing whitespace removed catches it and removes the
-    file, same as any other empty body."""
-    repo = make_repo(tmp_path)
-    (repo / ".claude" / "handoff-task.md").write_text("## Current task\n\nstale\n")
-    payload = {
-        "skill": "handoff",
-        "commit": "with-commit",
-        "rename": "T",
-        "clear": False,
-        "continue": None,
-        "task": task_content("   "),
-        "todo": todo_content("## Remaining\n\n- an item\n"),
-    }
-    result = run_checkpoint(repo, payload)
-    assert result.returncode == 0
-    assert not (repo / ".claude" / "handoff-task.md").exists()
-    manifest = (repo / ".claude" / "checkpoint-manifest").read_text().splitlines()
-    assert "D .claude/handoff-task.md" in manifest
-    assert "W .claude/handoff-todo.md" in manifest
-
-
-def test_todo_write_whitespace_only_pre_existing_removed_manifest_records_d(
-    tmp_path: Path,
-) -> None:
-    """Mirror of the task row on the todo half.
-
-    The deliverable-review audit found the todo side of a sibling removal
-    branch dead to the suite once before (see
-    test_todo_clear_removes_pre_existing_file_manifest_records_d); this route
-    gets its own todo-half row rather than leaving it to the task row above.
-    """
-    repo = make_repo(tmp_path)
-    (repo / ".claude" / "handoff-todo.md").write_text("## Remaining\n\n- stale\n")
-    payload = {
-        "skill": "handoff",
-        "commit": "with-commit",
-        "rename": "T",
-        "clear": False,
-        "continue": None,
-        "task": task_content("## Current task\n\nreal content\n"),
-        "todo": todo_content("   "),
-    }
-    result = run_checkpoint(repo, payload)
-    assert result.returncode == 0
-    assert not (repo / ".claude" / "handoff-todo.md").exists()
-    manifest = (repo / ".claude" / "checkpoint-manifest").read_text().splitlines()
-    assert "D .claude/handoff-todo.md" in manifest
-    assert "W .claude/handoff-task.md" in manifest
-
-
-def test_task_write_shebang_like_body_preserved_manifest_records_w(
-    tmp_path: Path,
-) -> None:
-    """M4 route B: `#!/bin/sh` starts with `#` but is not an ATX heading — the
-    old `startswith("#")` test misjudged it empty and removed the file.
-
-    An ATX heading is 1-6 `#` then end-of-line or whitespace; `#!/bin/sh` and
-    `#tag` are neither, and both must be preserved as content.
-    """
-    repo = make_repo(tmp_path)
-    content = "#!/bin/sh\n"
-    payload = {
-        "skill": "handoff",
-        "commit": "with-commit",
-        "rename": "T",
-        "clear": False,
-        "continue": None,
-        "task": task_content(content),
-        "todo": todo_keep(),
-    }
-    result = run_checkpoint(repo, payload)
-    assert result.returncode == 0
-    assert (repo / ".claude" / "handoff-task.md").is_file()
-    assert (repo / ".claude" / "handoff-task.md").read_text() == content
-    assert (
-        "W .claude/handoff-task.md"
-        in (repo / ".claude" / "checkpoint-manifest").read_text().splitlines()
-    )
-
-
-@pytest.mark.parametrize(
-    ("body", "act"),
-    [
-        ("   ## Current task\n", "D"),
-        ("    # run the migration first\n", "W"),
-    ],
-    ids=["three_spaces_indents_a_heading", "four_spaces_opens_a_code_block"],
-)
-def test_heading_indent_bound_is_markdowns_own(
-    tmp_path: Path, body: str, act: str
-) -> None:
-    """Route B at its margin: the leading-space bound is what keeps a code block
-    out of the heading class.
-
-    Markdown indents a heading by up to three spaces and opens a code block at
-    the fourth, so a `# comment` inside one is content exactly as `#!/bin/sh`
-    is. Testing each line stripped of *leading* whitespace too would read that
-    comment as a heading and remove a file whose only content it is — route B
-    again, one indent along.
-    """
-    repo = make_repo(tmp_path)
-    (repo / ".claude" / "handoff-task.md").write_text("## Current task\n\nstale\n")
-    payload = {
-        "skill": "handoff",
-        "commit": "with-commit",
-        "rename": "T",
-        "clear": False,
-        "continue": None,
-        "task": task_content(body),
-        "todo": todo_keep(),
-    }
-    result = run_checkpoint(repo, payload)
-    assert result.returncode == 0
-    task = repo / ".claude" / "handoff-task.md"
-    manifest = (repo / ".claude" / "checkpoint-manifest").read_text().splitlines()
-    assert f"{act} .claude/handoff-task.md" in manifest
-    if act == "D":
-        assert not task.exists()
-    else:
-        assert task.is_file()
-        assert task.read_text() == body
-
-
-@pytest.mark.parametrize("skill", ["handoff", "precompact"])
-def test_todo_write_creates_file_manifest_records_w(tmp_path: Path, skill: str) -> None:
-    """Run at both boundaries: the `precompact` half proves `main` applies the
-    payload it validates, not merely validates it.
-
-    A gate narrowed to `handoff` alone would still validate a precompact payload
-    correctly and then skip the write.
-    """
-    repo = make_repo(tmp_path)
-    content = "## Remaining\n\n- an item\n"
-    payload: dict[str, object] = {
-        "skill": skill,
-        "commit": "with-commit",
-        "continue": None,
-        "todo": todo_content(content),
-    }
-    if skill == "handoff":
-        payload["rename"] = "T"
-        payload["clear"] = False
-        payload["task"] = task_clear()
-    else:
-        payload["compact"] = False
-    result = run_checkpoint(repo, payload)
-    assert result.returncode == 0
-    assert (repo / ".claude" / "handoff-todo.md").is_file()
-    assert (repo / ".claude" / "handoff-todo.md").read_text() == content
-    assert (
-        "W .claude/handoff-todo.md"
-        in (repo / ".claude" / "checkpoint-manifest").read_text().splitlines()
-    )
-
-
-def test_todo_write_no_items_pre_existing_removed_manifest_records_d(
-    tmp_path: Path,
-) -> None:
-    repo = make_repo(tmp_path)
-    (repo / ".claude" / "handoff-todo.md").write_text("## Remaining\n\n- stale\n")
-    payload = {
-        "skill": "handoff",
-        "commit": "with-commit",
-        "rename": "T",
-        "clear": False,
-        "continue": None,
-        "task": task_content("## Current task\n\nreal content\n"),
-        "todo": todo_content("## Remaining\n"),
-    }
-    result = run_checkpoint(repo, payload)
-    assert result.returncode == 0
-    assert not (repo / ".claude" / "handoff-todo.md").exists()
-    manifest = (repo / ".claude" / "checkpoint-manifest").read_text().splitlines()
-    assert "D .claude/handoff-todo.md" in manifest
-    assert "W .claude/handoff-task.md" in manifest
-
-
-def test_todo_write_no_items_never_existed_no_d(tmp_path: Path) -> None:
-    repo = make_repo(tmp_path)
-    payload = {
-        "skill": "handoff",
-        "commit": "with-commit",
-        "rename": "T",
-        "clear": False,
-        "continue": None,
-        "task": task_content("## Current task\n\nreal content\n"),
-        "todo": todo_content("## Remaining\n"),
-    }
-    result = run_checkpoint(repo, payload)
-    assert result.returncode == 0
-    assert not (repo / ".claude" / "handoff-todo.md").exists()
-    assert (repo / ".claude" / "checkpoint-manifest").is_file()
-    manifest = (repo / ".claude" / "checkpoint-manifest").read_text()
-    # The task line proves the manifest is live, so the absence below is a claim
-    # about the todo route rather than about an empty manifest.
-    assert "W .claude/handoff-task.md" in manifest.splitlines()
-    assert "handoff-todo.md" not in manifest
-
-
-def test_todo_edit_and_task_clear_both_apply_manifest_records_d_and_w(
-    tmp_path: Path,
-) -> None:
-    """Positive twin of the three surviving-task-file negatives below, over the
-    same pre-existing-task-file fixture: only the todo `old_string`'s match
-    count moves. Both halves apply, so the manifest carries the task's `D`
-    ahead of the todo's `W` — the order `main` resolves them in."""
-    repo = make_repo(tmp_path)
-    task_path = repo / ".claude" / "handoff-task.md"
-    task_before = "## Current task\n\nrecognisable\n"
-    task_path.write_text(task_before)
-    (repo / ".claude" / "handoff-todo.md").write_text(
-        "## Remaining\n\n- finish A\n- finish B\n"
-    )
-    payload = {
-        "skill": "handoff",
-        "commit": "with-commit",
-        "rename": "T",
-        "clear": False,
-        "continue": None,
-        "task": task_clear(),
-        "todo": todo_edit("- finish A\n", ""),
-    }
-    result = run_checkpoint(repo, payload)
-    assert result.returncode == 0
-    assert not task_path.exists()
-    content = (repo / ".claude" / "handoff-todo.md").read_text()
-    assert "finish A" not in content
-    assert "finish B" in content
-    manifest = (repo / ".claude" / "checkpoint-manifest").read_text()
-    assert manifest.splitlines() == [
-        "D .claude/handoff-task.md",
-        "W .claude/handoff-todo.md",
-    ]
-
-
-def test_todo_edit_emptying_the_list_removes_it_manifest_records_d(
-    tmp_path: Path,
-) -> None:
-    """The edit-to-empty route: an `edit` whose replacement leaves the body
-    empty removes the file and records its `D` (FR6).
-
-    The only route to removal that reaches the emptiness rule through a computed
-    body rather than one the payload states outright, and the one the `write`
-    rows beside it do not cover.
-
-    Carries the same pre-existing-task-file fixture as its four siblings, so the
-    manifest holds the task's `D` beside this row's own — asserted by membership
-    rather than the positive's exact two lines.
-    """
-    repo = make_repo(tmp_path)
-    task_path = repo / ".claude" / "handoff-task.md"
-    task_before = "## Current task\n\nrecognisable\n"
-    task_path.write_text(task_before)
-    (repo / ".claude" / "handoff-todo.md").write_text("## Remaining\n\n- only item\n")
-    payload = {
-        "skill": "handoff",
-        "commit": "with-commit",
-        "rename": "T",
-        "clear": False,
-        "continue": None,
-        "task": task_clear(),
-        "todo": todo_edit("- only item\n", ""),
-    }
-    result = run_checkpoint(repo, payload)
-    assert result.returncode == 0
-    assert not (repo / ".claude" / "handoff-todo.md").exists()
-    manifest = (repo / ".claude" / "checkpoint-manifest").read_text()
-    assert "D .claude/handoff-todo.md" in manifest.splitlines()
-
-
-def test_todo_edit_old_string_absent_errors_task_file_survives(
-    tmp_path: Path,
-) -> None:
-    repo = make_repo(tmp_path)
-    task_path = repo / ".claude" / "handoff-task.md"
-    task_before = "## Current task\n\nrecognisable\n"
-    task_path.write_text(task_before)
-    todo_before = "## Remaining\n\n- keep this\n"
-    (repo / ".claude" / "handoff-todo.md").write_text(todo_before)
-    payload = {
-        "skill": "handoff",
-        "commit": "with-commit",
-        "rename": "T",
-        "clear": False,
-        "continue": None,
-        "task": task_clear(),
-        "todo": todo_edit("- not present", "- x"),
-    }
-    result = run_checkpoint(repo, payload)
-    assert result.returncode == 2
-    assert "todo.old_string" in result.stderr
-    assert "not found" in result.stderr
-    assert (repo / ".claude" / "handoff-todo.md").read_text() == todo_before
-    assert task_path.is_file()
-    assert task_path.read_text() == task_before
-    assert not (repo / ".claude" / "checkpoint-manifest").exists()
-
-
-def test_todo_edit_old_string_ambiguous_errors_task_file_survives(
-    tmp_path: Path,
-) -> None:
-    repo = make_repo(tmp_path)
-    task_path = repo / ".claude" / "handoff-task.md"
-    task_before = "## Current task\n\nrecognisable\n"
-    task_path.write_text(task_before)
-    todo_before = "## Remaining\n\n- dup\n- dup\n"
-    (repo / ".claude" / "handoff-todo.md").write_text(todo_before)
-    payload = {
-        "skill": "handoff",
-        "commit": "with-commit",
-        "rename": "T",
-        "clear": False,
-        "continue": None,
-        "task": task_clear(),
-        "todo": todo_edit("- dup", "- single"),
-    }
-    result = run_checkpoint(repo, payload)
-    assert result.returncode == 2
-    assert "todo.old_string" in result.stderr
-    assert "ambiguous" in result.stderr
-    assert (repo / ".claude" / "handoff-todo.md").read_text() == todo_before
-    assert task_path.is_file()
-    assert task_path.read_text() == task_before
-    assert not (repo / ".claude" / "checkpoint-manifest").exists()
-
-
-def test_todo_edit_requested_file_missing_errors_task_file_survives(
-    tmp_path: Path,
-) -> None:
-    repo = make_repo(tmp_path)
-    task_path = repo / ".claude" / "handoff-task.md"
-    task_before = "## Current task\n\nrecognisable\n"
-    task_path.write_text(task_before)
-    payload = {
-        "skill": "handoff",
-        "commit": "with-commit",
-        "rename": "T",
-        "clear": False,
-        "continue": None,
-        "task": task_clear(),
-        "todo": todo_edit("a", "b"),
-    }
-    result = run_checkpoint(repo, payload)
-    assert result.returncode == 2
-    assert "todo.old_string" in result.stderr
-    assert "does not exist" in result.stderr
-    assert task_path.is_file()
-    assert task_path.read_text() == task_before
-    assert not (repo / ".claude" / "checkpoint-manifest").exists()
-
-
-def test_todo_edit_old_string_absent_errors_task_file_not_created(
-    tmp_path: Path,
-) -> None:
-    """The mirror of the three rows above: a task half that would write.
-
-    Each of those carries task_clear(), so together they pin that a failing todo
-    half does not delete the task file. None of them reaches the opposite sign —
-    a task half with content, which before the plan-then-apply split wrote a
-    frame to disk with no manifest behind it, leaving nothing to stage it.
-    """
-    repo = make_repo(tmp_path)
-    task_path = repo / ".claude" / "handoff-task.md"
-    todo_before = "## Remaining\n\n- keep this\n"
-    (repo / ".claude" / "handoff-todo.md").write_text(todo_before)
-    payload = {
-        "skill": "handoff",
-        "commit": "with-commit",
-        "rename": "T",
-        "clear": False,
-        "continue": None,
-        "task": task_content("## Current task\n\nwould have been written\n"),
-        "todo": todo_edit("- not present", "- x"),
-    }
-    result = run_checkpoint(repo, payload)
-    assert result.returncode == 2
-    assert "todo.old_string" in result.stderr
-    assert "not found" in result.stderr
-    assert not task_path.exists()
-    assert (repo / ".claude" / "handoff-todo.md").read_text() == todo_before
-    assert not (repo / ".claude" / "checkpoint-manifest").exists()
-
-
-def test_todo_keep_leaves_pre_existing_list_alone(tmp_path: Path) -> None:
-    repo = make_repo(tmp_path)
-    before = "## Remaining\n\n- untouched\n"
-    (repo / ".claude" / "handoff-todo.md").write_text(before)
-    payload = {
-        "skill": "handoff",
-        "commit": "with-commit",
-        "rename": "T",
-        "clear": False,
-        "continue": None,
-        "task": task_content("## Current task\n\nreal content\n"),
-        "todo": todo_keep(),
-    }
-    result = run_checkpoint(repo, payload)
-    assert result.returncode == 0
-    assert (repo / ".claude" / "handoff-todo.md").read_text() == before
-    manifest = (repo / ".claude" / "checkpoint-manifest").read_text()
-    # The task line proves the manifest is live, so the absence below is a claim
-    # about the todo route rather than about an empty manifest.
-    assert "W .claude/handoff-task.md" in manifest.splitlines()
-    assert "handoff-todo.md" not in manifest
-
-
-# ==========================================================================
-# Task shape -- the body cap and the no-list rule on a `task` content string
-# ==========================================================================
-
-TASK_BODY_LIMIT = 1000
-
-
-def shaped_payload(task: object, todo: object = None) -> dict[str, object]:
+def frame_payload(task: object, todo: object = None) -> dict[str, object]:
     """A `handoff` payload carrying `task` as given and `todo` kept by
     default."""
     return {
@@ -1387,6 +795,335 @@ def shaped_payload(task: object, todo: object = None) -> dict[str, object]:
         "task": task,
         "todo": todo_keep() if todo is None else todo,
     }
+
+
+def test_task_write_creates_file(tmp_path: Path) -> None:
+    """Handoff only: precompact forbids `task`, so it never writes one."""
+    repo = make_repo(tmp_path)
+    content = "## Current task\n\nreal content\n"
+    result = run_checkpoint(repo, frame_payload(task_content(content)))
+    assert result.returncode == 0
+    assert (repo / "TASK.md").read_text() == content
+
+
+def test_task_write_replaces_a_pre_existing_file_whole(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    (repo / "TASK.md").write_text("## Current task\n\nstale, and longer\n")
+    content = "## Current task\n\nfresh\n"
+    result = run_checkpoint(repo, frame_payload(task_content(content)))
+    assert result.returncode == 0
+    assert (repo / "TASK.md").read_text() == content
+
+
+@pytest.mark.parametrize(
+    "existed", [True, False], ids=["pre_existing", "never_existed"]
+)
+def test_task_clear_leaves_no_file(tmp_path: Path, *, existed: bool) -> None:
+    """`clear` removes the file, and is no error when there is none.
+
+    The todo half writes in the same call, so a pass is not a run that stopped
+    before the task half.
+    """
+    repo = make_repo(tmp_path)
+    if existed:
+        (repo / "TASK.md").write_text("## Current task\n\nstale\n")
+    todo = "## Remaining\n\n- an item\n"
+    result = run_checkpoint(repo, frame_payload(task_clear(), todo_content(todo)))
+    assert result.returncode == 0
+    assert result.stderr == ""
+    assert not (repo / "TASK.md").exists()
+    assert (repo / "TODO.md").read_text() == todo
+
+
+@pytest.mark.parametrize(
+    "existed", [True, False], ids=["pre_existing", "never_existed"]
+)
+def test_todo_clear_leaves_no_file(tmp_path: Path, *, existed: bool) -> None:
+    """Mirror of the task row, and the only cover of `todo`'s destructive arm.
+
+    The task half writes in the same call, so a pass is not a run that stopped
+    before the todo half.
+    """
+    repo = make_repo(tmp_path)
+    if existed:
+        (repo / "TODO.md").write_text("## Remaining\n\n- stale\n")
+    task = "## Current task\n\nlive\n"
+    result = run_checkpoint(repo, frame_payload(task_content(task), todo_clear()))
+    assert result.returncode == 0
+    assert result.stderr == ""
+    assert not (repo / "TODO.md").exists()
+    assert (repo / "TASK.md").read_text() == task
+
+
+@pytest.mark.parametrize("field", ["task", "todo"])
+@pytest.mark.parametrize(
+    "body",
+    ["## Current task\n\n## Open decisions\n", "   ", ""],
+    ids=["headings_only", "whitespace_only", "empty_string"],
+)
+def test_content_with_no_body_is_written_as_given(
+    tmp_path: Path, field: str, body: str
+) -> None:
+    """A content string is a write whatever it holds: only `clear` removes.
+
+    Each body is one the emptiness rule reads as empty (test_is_empty_body),
+    written over a pre-existing file so that a removal and a skipped write would
+    both show.
+    """
+    repo = make_repo(tmp_path)
+    target = repo / ("TASK.md" if field == "task" else "TODO.md")
+    target.write_text("## Remaining\n\nstale body\n")
+    if field == "task":
+        payload = frame_payload(task_content(body))
+    else:
+        payload = frame_payload(task_clear(), todo_content(body))
+    result = run_checkpoint(repo, payload)
+    assert result.returncode == 0
+    assert target.read_text() == body
+
+
+@pytest.mark.parametrize("skill", ["handoff", "precompact"])
+def test_todo_write_creates_file(tmp_path: Path, skill: str) -> None:
+    """Run at both boundaries: the `precompact` half proves `main` applies the
+    payload it validates, not merely validates it.
+
+    A gate narrowed to `handoff` alone would still validate a precompact payload
+    correctly and then skip the write.
+    """
+    repo = make_repo(tmp_path)
+    content = "## Remaining\n\n- an item\n"
+    if skill == "handoff":
+        payload = frame_payload(task_clear(), todo_content(content))
+    else:
+        payload = precompact_payload("with-commit", todo_content(content))
+    result = run_checkpoint(repo, payload)
+    assert result.returncode == 0
+    assert (repo / "TODO.md").read_text() == content
+
+
+def test_task_and_todo_both_written(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    task = "## Current task\n\nbody\n"
+    todo = "## Remaining\n\n- x\n"
+    result = run_checkpoint(repo, frame_payload(task_content(task), todo_content(todo)))
+    assert result.returncode == 0
+    assert (repo / "TASK.md").read_text() == task
+    assert (repo / "TODO.md").read_text() == todo
+
+
+def test_todo_edit_and_task_clear_both_apply(tmp_path: Path) -> None:
+    """Positive twin of the three surviving-task-file negatives below, over the
+    same pre-existing-task-file fixture: only the todo `old_string`'s match
+    count moves, and both halves apply."""
+    repo = make_repo(tmp_path)
+    task_path = repo / "TASK.md"
+    task_path.write_text("## Current task\n\nrecognisable\n")
+    (repo / "TODO.md").write_text("## Remaining\n\n- finish A\n- finish B\n")
+    result = run_checkpoint(
+        repo, frame_payload(task_clear(), todo_edit("- finish A\n", ""))
+    )
+    assert result.returncode == 0
+    assert not task_path.exists()
+    assert (repo / "TODO.md").read_text() == "## Remaining\n\n- finish B\n"
+
+
+def test_todo_edit_striking_the_last_item_leaves_the_headings(
+    tmp_path: Path,
+) -> None:
+    """An `edit` writes what the replacement leaves, a list with no item
+    included: the file stays, and standing it down is `clear`'s to say."""
+    repo = make_repo(tmp_path)
+    (repo / "TODO.md").write_text("## Remaining\n\n- only item\n")
+    result = run_checkpoint(
+        repo, frame_payload(task_clear(), todo_edit("- only item\n", ""))
+    )
+    assert result.returncode == 0
+    assert (repo / "TODO.md").read_text() == "## Remaining\n\n"
+
+
+def test_todo_edit_old_string_absent_errors_task_file_survives(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    task_path = repo / "TASK.md"
+    task_before = "## Current task\n\nrecognisable\n"
+    task_path.write_text(task_before)
+    todo_before = "## Remaining\n\n- keep this\n"
+    (repo / "TODO.md").write_text(todo_before)
+    result = run_checkpoint(
+        repo, frame_payload(task_clear(), todo_edit("- not present", "- x"))
+    )
+    assert result.returncode == 2
+    assert "todo.old_string" in result.stderr
+    assert "not found" in result.stderr
+    assert (repo / "TODO.md").read_text() == todo_before
+    assert task_path.read_text() == task_before
+    assert not (repo / ".claude" / "autodrive").exists()
+
+
+def test_todo_edit_old_string_ambiguous_errors_task_file_survives(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    task_path = repo / "TASK.md"
+    task_before = "## Current task\n\nrecognisable\n"
+    task_path.write_text(task_before)
+    todo_before = "## Remaining\n\n- dup\n- dup\n"
+    (repo / "TODO.md").write_text(todo_before)
+    result = run_checkpoint(
+        repo, frame_payload(task_clear(), todo_edit("- dup", "- single"))
+    )
+    assert result.returncode == 2
+    assert "todo.old_string" in result.stderr
+    assert "ambiguous" in result.stderr
+    assert (repo / "TODO.md").read_text() == todo_before
+    assert task_path.read_text() == task_before
+    assert not (repo / ".claude" / "autodrive").exists()
+
+
+def test_todo_edit_requested_file_missing_errors_task_file_survives(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    task_path = repo / "TASK.md"
+    task_before = "## Current task\n\nrecognisable\n"
+    task_path.write_text(task_before)
+    result = run_checkpoint(repo, frame_payload(task_clear(), todo_edit("a", "b")))
+    assert result.returncode == 2
+    assert "todo.old_string" in result.stderr
+    assert "TODO.md does not exist" in result.stderr
+    assert task_path.read_text() == task_before
+    assert not (repo / "TODO.md").exists()
+    assert not (repo / ".claude" / "autodrive").exists()
+
+
+def test_todo_edit_old_string_absent_errors_task_file_not_created(
+    tmp_path: Path,
+) -> None:
+    """The mirror of the three rows above: a task half that would write.
+
+    Each of those carries task_clear(), so together they pin that a failing todo
+    half does not delete the task file. None of them reaches the opposite sign:
+    a task half with content, which must not reach disk either.
+    """
+    repo = make_repo(tmp_path)
+    task_path = repo / "TASK.md"
+    todo_before = "## Remaining\n\n- keep this\n"
+    (repo / "TODO.md").write_text(todo_before)
+    payload = frame_payload(
+        task_content("## Current task\n\nwould have been written\n"),
+        todo_edit("- not present", "- x"),
+    )
+    result = run_checkpoint(repo, payload)
+    assert result.returncode == 2
+    assert "todo.old_string" in result.stderr
+    assert "not found" in result.stderr
+    assert not task_path.exists()
+    assert (repo / "TODO.md").read_text() == todo_before
+    assert not (repo / ".claude" / "autodrive").exists()
+
+
+@pytest.mark.parametrize(
+    "before",
+    ["## Remaining\n\n- untouched\n", "## Remaining\n", None],
+    ids=["a_list", "headings_only", "no_file"],
+)
+def test_todo_keep_leaves_the_list_as_it_is(tmp_path: Path, before: str | None) -> None:
+    """`keep` neither rewrites, removes nor creates, whatever is there.
+
+    The task half writes in the same call, so a pass is not a run that stopped
+    before the todo half.
+    """
+    repo = make_repo(tmp_path)
+    todo = repo / "TODO.md"
+    if before is not None:
+        todo.write_text(before)
+    task = "## Current task\n\nreal content\n"
+    result = run_checkpoint(repo, frame_payload(task_content(task), todo_keep()))
+    assert result.returncode == 0
+    assert (repo / "TASK.md").read_text() == task
+    if before is None:
+        assert not todo.exists()
+    else:
+        assert todo.read_text() == before
+
+
+# ==========================================================================
+# The emptiness rule (`is_empty_body`, and its CLI for the bash side)
+# ==========================================================================
+
+
+@pytest.mark.parametrize(
+    ("content", "empty"),
+    [
+        ("", True),
+        ("\n\n", True),
+        ("   ", True),
+        ("  \n\t\n", True),
+        ("## Current task\n\n## Open decisions\n", True),
+        ("## Remaining\n", True),
+        ("#\n", True),
+        ("   ## Current task\n", True),
+        ("## Remaining\n\n- an item\n", False),
+        ("#!/bin/sh\n", False),
+        ("#tag\n", False),
+        ("####### seven\n", False),
+        ("    # run the migration first\n", False),
+    ],
+    ids=[
+        "empty_string",
+        "blank_lines",
+        "spaces_alone",
+        "whitespace_lines",
+        "headings_only",
+        "one_heading",
+        "bare_hash",
+        "three_spaces_indent_a_heading",
+        "a_list",
+        "shebang",
+        "hash_without_space",
+        "seven_hashes",
+        "four_spaces_open_a_code_block",
+    ],
+)
+def test_is_empty_body(content: str, *, empty: bool) -> None:
+    """Empty is no line left once blank lines and ATX headings are set aside.
+
+    Blank is judged on the line without its trailing whitespace, so spaces alone
+    are blank. A heading is markdown's own: 1-6 `#` then whitespace or the
+    line's end, indented by at most three spaces. `#!/bin/sh`, `#tag` and seven
+    `#` are content, and so is a `# comment` at four spaces, which is a code
+    block's line.
+    """
+    assert lib.is_empty_body(content) is empty
+
+
+@pytest.mark.parametrize(
+    ("argv", "stdin", "code"),
+    [
+        (["--is-empty-body"], "## Remaining\n", 0),
+        (["--is-empty-body"], "## Remaining\n\n- an item\n", 1),
+        (["--bogus"], "", 2),
+        ([], "", 2),
+    ],
+    ids=["empty", "has_a_body", "unknown_flag", "no_flag"],
+)
+def test_is_empty_body_cli_exit_code(argv: list[str], stdin: str, code: int) -> None:
+    result = subprocess.run(
+        [sys.executable, str(REPO_ROOT / "scripts" / "_checkpoint_lib.py"), *argv],
+        input=stdin,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == code
+
+
+# ==========================================================================
+# Task shape -- the body cap and the no-list rule on a `task` content string
+# ==========================================================================
+
+TASK_BODY_LIMIT = 1000
 
 
 def prose(n: int, char: str = "a") -> str:
@@ -1419,8 +1156,8 @@ def assert_task_shape_error(
 def test_task_body_cap_boundary(tmp_path: Path, count: int, *, accepted: bool) -> None:
     repo = make_repo(tmp_path)
     content = f"## Current task\n\n{prose(count)}\n"
-    result = run_checkpoint(repo, shaped_payload(task_content(content)))
-    task = repo / ".claude" / "handoff-task.md"
+    result = run_checkpoint(repo, frame_payload(task_content(content)))
+    task = repo / "TASK.md"
     if accepted:
         assert result.returncode == 0
         assert task.read_text() == content
@@ -1446,9 +1183,9 @@ def test_task_body_cap_does_not_count_headings(tmp_path: Path, content: str) -> 
     """Both fixtures exceed 1000 characters once heading lines are counted."""
     assert len(content) > TASK_BODY_LIMIT + 10
     repo = make_repo(tmp_path)
-    result = run_checkpoint(repo, shaped_payload(task_content(content)))
+    result = run_checkpoint(repo, frame_payload(task_content(content)))
     assert result.returncode == 0
-    assert (repo / ".claude" / "handoff-task.md").read_text() == content
+    assert (repo / "TASK.md").read_text() == content
 
 
 def test_task_body_cap_ignores_blank_lines_and_whitespace_around_the_body(
@@ -1456,9 +1193,9 @@ def test_task_body_cap_ignores_blank_lines_and_whitespace_around_the_body(
 ) -> None:
     content = f"\n\n   \n{prose(TASK_BODY_LIMIT)}\n  \n\n"
     repo = make_repo(tmp_path)
-    result = run_checkpoint(repo, shaped_payload(task_content(content)))
+    result = run_checkpoint(repo, frame_payload(task_content(content)))
     assert result.returncode == 0
-    assert (repo / ".claude" / "handoff-task.md").read_text() == content
+    assert (repo / "TASK.md").read_text() == content
 
 
 @pytest.mark.parametrize(
@@ -1472,10 +1209,10 @@ def test_task_body_cap_counts_characters_not_bytes(
     content = f"## Current task\n\n{prose(count, 'é')}\n"
     assert len(prose(count, "é").encode()) == 2 * count
     repo = make_repo(tmp_path)
-    result = run_checkpoint(repo, shaped_payload(task_content(content)))
+    result = run_checkpoint(repo, frame_payload(task_content(content)))
     if accepted:
         assert result.returncode == 0
-        assert (repo / ".claude" / "handoff-task.md").read_text() == content
+        assert (repo / "TASK.md").read_text() == content
     else:
         assert_task_shape_error(result, "task", str(count), "the limit is 1000")
 
@@ -1485,11 +1222,11 @@ def test_task_hash_without_space_is_body_not_a_heading(tmp_path: Path) -> None:
     1000."""
     content = f"## Current task\n\n{prose(TASK_BODY_LIMIT)}\n#tag\n"
     repo = make_repo(tmp_path)
-    result = run_checkpoint(repo, shaped_payload(task_content(content)))
+    result = run_checkpoint(repo, frame_payload(task_content(content)))
     assert_task_shape_error(
         result, "task", "body is 1005 characters, the limit is 1000"
     )
-    assert not (repo / ".claude" / "handoff-task.md").exists()
+    assert not (repo / "TASK.md").exists()
 
 
 @pytest.mark.parametrize(
@@ -1524,10 +1261,10 @@ def test_task_list_item_rejected_naming_its_line(
 ) -> None:
     assert len(quote) <= 40
     repo = make_repo(tmp_path)
-    result = run_checkpoint(repo, shaped_payload(task_content(content)))
+    result = run_checkpoint(repo, frame_payload(task_content(content)))
     assert_task_shape_error(result, "task", f'line {number} is a list item ("{quote}")')
     assert result.stderr.count("is a list item") == 1
-    assert not (repo / ".claude" / "handoff-task.md").exists()
+    assert not (repo / "TASK.md").exists()
 
 
 @pytest.mark.parametrize(
@@ -1544,9 +1281,9 @@ def test_task_list_item_rejected_naming_its_line(
 def test_task_lines_that_are_not_list_items_accepted(tmp_path: Path, line: str) -> None:
     content = f"## Current task\n\nintro\n{line}\n"
     repo = make_repo(tmp_path)
-    result = run_checkpoint(repo, shaped_payload(task_content(content)))
+    result = run_checkpoint(repo, frame_payload(task_content(content)))
     assert result.returncode == 0
-    assert (repo / ".claude" / "handoff-task.md").read_text() == content
+    assert (repo / "TASK.md").read_text() == content
 
 
 def test_task_over_the_cap_with_a_list_item_is_one_error_with_both_facts(
@@ -1556,7 +1293,7 @@ def test_task_over_the_cap_with_a_list_item_is_one_error_with_both_facts(
     count = len(content.strip())
     assert count > TASK_BODY_LIMIT
     repo = make_repo(tmp_path)
-    result = run_checkpoint(repo, shaped_payload(task_content(content)))
+    result = run_checkpoint(repo, frame_payload(task_content(content)))
     assert_task_shape_error(
         result,
         'line 2 is a list item ("- item")',
@@ -1571,39 +1308,37 @@ def test_task_over_the_cap_with_a_list_item_is_one_error_with_both_facts(
 )
 def test_task_shape_failure_writes_nothing(tmp_path: Path, content: str) -> None:
     repo = make_repo(tmp_path)
-    task_path = repo / ".claude" / "handoff-task.md"
+    task_path = repo / "TASK.md"
     task_before = "## Current task\n\nstale\n"
     task_path.write_text(task_before)
-    payload = shaped_payload(
+    payload = frame_payload(
         task_content(content), todo_content("## Remaining\n\nnext step\n")
     )
     result = run_checkpoint(repo, payload)
     assert result.returncode == 2
     assert "task" in result.stderr
     assert task_path.read_text() == task_before
-    assert not (repo / ".claude" / "handoff-todo.md").exists()
-    assert not (repo / ".claude" / "checkpoint-manifest").exists()
+    assert not (repo / "TODO.md").exists()
+    assert not (repo / ".claude" / "autodrive").exists()
 
 
 def test_task_clear_is_not_subject_to_the_shape_rules(tmp_path: Path) -> None:
     """Green before the change and after it: `clear` carries no content
     string."""
     repo = make_repo(tmp_path)
-    (repo / ".claude" / "handoff-task.md").write_text(
-        f"- long and listy\n{prose(TASK_BODY_LIMIT + 1)}\n"
-    )
-    result = run_checkpoint(repo, shaped_payload(task_clear()))
+    (repo / "TASK.md").write_text(f"- long and listy\n{prose(TASK_BODY_LIMIT + 1)}\n")
+    result = run_checkpoint(repo, frame_payload(task_clear()))
     assert result.returncode == 0
     assert result.stderr == ""
-    assert not (repo / ".claude" / "handoff-task.md").exists()
+    assert not (repo / "TASK.md").exists()
 
 
 # ==========================================================================
-# Manifest -- FR7 -- and rename -- FR8
+# Rename -- FR8
 # ==========================================================================
 
 
-def test_rename_only_manifest_present_empty_sentinel_written(tmp_path: Path) -> None:
+def test_rename_only_sentinel_written_neither_file_created(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
     payload = {
         "skill": "handoff",
@@ -1616,13 +1351,12 @@ def test_rename_only_manifest_present_empty_sentinel_written(tmp_path: Path) -> 
     }
     result = run_checkpoint(repo, payload)
     assert result.returncode == 0
-    manifest = repo / ".claude" / "checkpoint-manifest"
-    assert manifest.is_file()
-    assert manifest.stat().st_size == 0
     assert (
         repo / ".claude" / "autodrive"
     ).read_text() == "armed\nrename\n/rename Two Words Title\n"
     assert read_back_drive(repo / ".claude" / "autodrive")
+    assert not (repo / "TASK.md").exists()
+    assert not (repo / "TODO.md").exists()
 
 
 def test_multiline_title_flattened_to_one_line(tmp_path: Path) -> None:
@@ -1659,39 +1393,20 @@ def test_whitespace_only_title_errors(tmp_path: Path) -> None:
     assert "rename" in result.stderr
 
 
-def test_precompact_nothing_touched_manifest_still_written_empty(
+def test_root_without_a_claude_directory_gets_one_for_the_sentinel(
     tmp_path: Path,
 ) -> None:
+    """The frame lives in the root, so the sentinel is the one thing that needs
+    `.claude/`: a root that has none still takes both files and the sentinel."""
     repo = make_repo(tmp_path)
-    payload = {
-        "skill": "precompact",
-        "commit": "without-commit",
-        "compact": False,
-        "continue": None,
-        "todo": todo_keep(),
-    }
-    result = run_checkpoint(repo, payload)
+    (repo / ".claude").rmdir()
+    task = "## Current task\n\nbody\n"
+    todo = "## Remaining\n\n- x\n"
+    result = run_checkpoint(repo, frame_payload(task_content(task), todo_content(todo)))
     assert result.returncode == 0
-    manifest = repo / ".claude" / "checkpoint-manifest"
-    assert manifest.is_file()
-    assert manifest.stat().st_size == 0
-
-
-def test_task_and_todo_both_written_manifest_lists_both(tmp_path: Path) -> None:
-    repo = make_repo(tmp_path)
-    payload = {
-        "skill": "handoff",
-        "commit": "with-commit",
-        "rename": "T",
-        "clear": False,
-        "continue": None,
-        "task": task_content("## Current task\n\nbody\n"),
-        "todo": todo_content("## Remaining\n\n- x\n"),
-    }
-    result = run_checkpoint(repo, payload)
-    assert result.returncode == 0
-    manifest = (repo / ".claude" / "checkpoint-manifest").read_text().splitlines()
-    assert manifest == ["W .claude/handoff-task.md", "W .claude/handoff-todo.md"]
+    assert (repo / "TASK.md").read_text() == task
+    assert (repo / "TODO.md").read_text() == todo
+    assert read_back_drive(repo / ".claude" / "autodrive")
 
 
 # ==========================================================================
@@ -2152,16 +1867,17 @@ def test_autoname_rename_sentinel_armed_nothing_else(tmp_path: Path) -> None:
     assert state == "armed"
 
 
-def test_autoname_manifest_present_empty_neither_file_touched(tmp_path: Path) -> None:
+def test_autoname_leaves_both_frame_files_byte_identical(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
+    task = "## Current task\n\nlive\n"
+    todo = "## Remaining\n\n- an item\n"
+    (repo / "TASK.md").write_text(task)
+    (repo / "TODO.md").write_text(todo)
     payload = {"skill": "autoname", "rename": "A Side Conversation"}
     result = run_checkpoint(repo, payload)
     assert result.returncode == 0
-    manifest = repo / ".claude" / "checkpoint-manifest"
-    assert manifest.is_file()
-    assert manifest.stat().st_size == 0
-    assert not (repo / ".claude" / "handoff-task.md").exists()
-    assert not (repo / ".claude" / "handoff-todo.md").exists()
+    assert (repo / "TASK.md").read_text() == task
+    assert (repo / "TODO.md").read_text() == todo
 
 
 def test_rename_missing_under_autoname_errors(tmp_path: Path) -> None:
@@ -2298,9 +2014,9 @@ def test_clause_file_unset_names_key_and_restart(tmp_path: Path) -> None:
     assert result.returncode == 0
     assert "gitlore.memoryapprovalclausefile" in result.stdout.lower()
     assert "/restart" in result.stdout
-    # The checkpoint has already written the task file, the todo file, the
-    # manifest and the sentinel by the time this prints, so it claims no such
-    # thing — only that the memory changes are still pending.
+    # The checkpoint has already written the task file, the todo file and the
+    # sentinel by the time this prints, so it claims no such thing — only that
+    # the memory changes are still pending.
     assert "Nothing has been written" not in result.stdout
     assert "The memory changes are still pending." in result.stdout
     assert str(repo / ".claude" / "gitlore-memory-message") not in result.stdout
@@ -2434,7 +2150,8 @@ def test_commit_act_is_the_exact_no_git_verb_sentence() -> None:
     (docs/changelog/2026-09-18-the-directive-owns-the-procedure.md).
     """
     assert lib.commit_directive() == (
-        "Once everything above is done, make the commit the request called for.\n"
+        "Once everything above is done, make the commit the request called for, "
+        "including any change to `TASK.md` and `TODO.md`.\n"
     )
 
 
@@ -2644,9 +2361,8 @@ def test_handoff_commit_precedes_closing_line_when_armed(tmp_path: Path) -> None
 
 
 def _assert_nothing_written(repo: Path) -> None:
-    assert not (repo / ".claude" / "handoff-task.md").exists()
-    assert not (repo / ".claude" / "handoff-todo.md").exists()
-    assert not (repo / ".claude" / "checkpoint-manifest").exists()
+    assert not (repo / "TASK.md").exists()
+    assert not (repo / "TODO.md").exists()
     assert not (repo / ".claude" / "autodrive").exists()
 
 
@@ -2744,7 +2460,7 @@ def test_handoff_composition_carries_todo_boundary_not_sdd_nudge(
     result = run_checkpoint(repo, handoff_payload("without-commit"))
     assert result.returncode == 0
     assert ".superpowers/sdd/feature-plan/progress.md" in result.stdout
-    assert "handoff-todo.md" in result.stdout
+    assert "TODO.md" in result.stdout
     assert "Minor findings" not in result.stdout
     assert "re-dispatched" not in result.stdout
 
@@ -2825,7 +2541,7 @@ def test_live_ledger_scopes_todo_file_rather_than_standing_it_down(
     )
     result = run_checkpoint(repo, payload)
     assert result.returncode == 0
-    assert ".claude/handoff-todo.md" in result.stdout
+    assert "TODO.md" in result.stdout
     assert "outside the plan" in result.stdout
     assert "must not exist" not in result.stdout
 
@@ -2845,7 +2561,7 @@ def test_flat_path_stray_does_not_suppress_todo_file(tmp_path: Path) -> None:
     add_flat_sdd_ledger(repo)
     result = run_checkpoint(repo, handoff_payload("without-commit"))
     assert result.returncode == 0
-    assert "handoff-todo.md" not in result.stdout
+    assert "TODO.md" not in result.stdout
 
 
 def test_unidentified_workspace_does_not_suppress_todo_file(tmp_path: Path) -> None:
@@ -2854,7 +2570,7 @@ def test_unidentified_workspace_does_not_suppress_todo_file(tmp_path: Path) -> N
     add_unidentified_sdd_ledger(repo)
     result = run_checkpoint(repo, handoff_payload("without-commit"))
     assert result.returncode == 0
-    assert "handoff-todo.md" not in result.stdout
+    assert "TODO.md" not in result.stdout
 
 
 def test_flat_path_ledger_alone_precompact_closing_only(tmp_path: Path) -> None:

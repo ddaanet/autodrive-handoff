@@ -15,7 +15,7 @@ setup() {
     mkdir -p "$tmp/.claude" "$other/.claude"
     export CLAUDE_PROJECT_DIR="$tmp"
 
-    cat > "$tmp/.claude/handoff-task.md" <<'TASK'
+    cat > "$tmp/TASK.md" <<'TASK'
 ## Current task
 
 hook smoke test
@@ -482,135 +482,42 @@ compact" ]
     [ "$(find "$BATS_TEST_TMPDIR" -maxdepth 1 -name 'sentinel*' | wc -l)" -eq 1 ]
 }
 
-# --- write-stage ---
-# Stages handoff-task.md with `git add -f` and does NOT create handoff.md.
-
-# handoff-task.md no longer comes through write-stage.sh at all (it is
-# checkpoint-only, FR3) — a direct Write to it is caught by write-guard.sh
-# before write-stage.sh would ever see it, so there is nothing to test here.
-
-@test "write-stage (git staging): stages handoff-todo.md, reports version-tracked" {
-    git_tmp="$BATS_TEST_TMPDIR/git"
-    mkdir -p "$git_tmp/.claude"
-    git -C "$git_tmp" init -q
-    printf '## Remaining\n\n- an item\n' > "$git_tmp/.claude/handoff-todo.md"
-    run bash -c '
-        jq -nc --arg fp "$1/.claude/handoff-todo.md" \
-            "{tool_name:\"Write\", tool_input:{file_path:\$fp}}" \
-        | CLAUDE_PROJECT_DIR="$1" bash scripts/write-stage.sh
-    ' _ "$git_tmp"
-    [ "$status" -eq 0 ]
-    echo "$output" | jq -e '.systemMessage == "handoff — staged for commit"' >/dev/null
-    echo "$output" | jq -e '.hookSpecificOutput.hookEventName == "PostToolUse"' >/dev/null
-    echo "$output" | jq -e '.hookSpecificOutput.additionalContext | test("version-tracked") and test("gitlore")' >/dev/null
-    git -C "$git_tmp" status --porcelain | grep -q 'handoff-todo.md'
-}
-
-# FR6: an edit that leaves handoff-todo.md with no remaining items removes it
-# and stages the removal, rather than leaving behind a file that reads as
-# "nothing pending" while still present. Shares is_empty_body with
-# checkpoint.py (tests/test_checkpoint.py) via _checkpoint_lib.py's
-# --is-empty-body CLI, so the two writers cannot drift.
-@test "write-stage (handoff-todo.md emptied): removed and the removal staged" {
-    git_tmp="$BATS_TEST_TMPDIR/git-empty"
-    mkdir -p "$git_tmp/.claude"
-    git -C "$git_tmp" init -q
-    printf '## Remaining\n\n- item\n' > "$git_tmp/.claude/handoff-todo.md"
-    git -C "$git_tmp" add -f .claude/handoff-todo.md
-    git -C "$git_tmp" -c user.email=t@t -c user.name=t commit -qm seed
-    printf '## Remaining\n' > "$git_tmp/.claude/handoff-todo.md"
-    run bash -c '
-        jq -nc --arg fp "$1/.claude/handoff-todo.md" \
-            "{tool_name:\"Write\", tool_input:{file_path:\$fp}}" \
-        | CLAUDE_PROJECT_DIR="$1" bash scripts/write-stage.sh
-    ' _ "$git_tmp"
-    [ "$status" -eq 0 ]
-    [ ! -e "$git_tmp/.claude/handoff-todo.md" ]
-    echo "$output" | jq -e '.systemMessage == "handoff-todo.md emptied — removed and staged."' >/dev/null
-    git -C "$git_tmp" status --porcelain .claude/handoff-todo.md | grep -q '^D'
-}
-
-# m4 route A (shared with test_checkpoint.py's whitespace-only rows via
-# is_empty_body): a direct agent edit that leaves the todo file holding only
-# spaces is blank, not content, and is removed the same as any other empty
-# body.
-@test "write-stage (handoff-todo.md whitespace-only): removed and the removal staged" {
-    git_tmp="$BATS_TEST_TMPDIR/git-whitespace"
-    mkdir -p "$git_tmp/.claude"
-    git -C "$git_tmp" init -q
-    printf '## Remaining\n\n- item\n' > "$git_tmp/.claude/handoff-todo.md"
-    git -C "$git_tmp" add -f .claude/handoff-todo.md
-    git -C "$git_tmp" -c user.email=t@t -c user.name=t commit -qm seed
-    printf '   \n' > "$git_tmp/.claude/handoff-todo.md"
-    run bash -c '
-        jq -nc --arg fp "$1/.claude/handoff-todo.md" \
-            "{tool_name:\"Write\", tool_input:{file_path:\$fp}}" \
-        | CLAUDE_PROJECT_DIR="$1" bash scripts/write-stage.sh
-    ' _ "$git_tmp"
-    [ "$status" -eq 0 ]
-    [ ! -e "$git_tmp/.claude/handoff-todo.md" ]
-    echo "$output" | jq -e '.systemMessage == "handoff-todo.md emptied — removed and staged."' >/dev/null
-    git -C "$git_tmp" status --porcelain .claude/handoff-todo.md | grep -q '^D'
-}
-
-@test "write-stage (unrelated path: no-op)" {
-    run bash -c '
-        jq -nc --arg fp "$1/README.md" \
-            "{tool_name:\"Write\", tool_input:{file_path:\$fp}}" \
-        | bash scripts/write-stage.sh
-    ' _ "$tmp"
-    [ "$status" -eq 0 ]
-}
-
-# The remainder is overflow from the task file, so it is force-added on the
-# same terms — a frame split across a tracked and an untracked half would enter
-# history with its decomposition missing.
-@test "write-stage (handoff-todo.md: staged)" {
-    git_tmp="$BATS_TEST_TMPDIR/git-todo"
-    mkdir -p "$git_tmp/.claude"
-    git -C "$git_tmp" init -q
-    printf '## Remaining\n\n- item\n' > "$git_tmp/.claude/handoff-todo.md"
-    run bash -c '
-        jq -nc --arg fp "$1/.claude/handoff-todo.md" \
-            "{tool_name:\"Write\", tool_input:{file_path:\$fp}}" \
-        | CLAUDE_PROJECT_DIR="$1" bash scripts/write-stage.sh
-    ' _ "$git_tmp"
-    [ "$status" -eq 0 ]
-    echo "$output" | jq -e '.systemMessage == "handoff — staged for commit"' >/dev/null
-    echo "$output" | jq -e '.hookSpecificOutput.additionalContext
-        | test("handoff-todo.md")' >/dev/null
-    staged="$(git -C "$git_tmp" diff --cached --name-only)"
-    [[ "$staged" == *handoff-todo.md* ]]
-}
-
 # --- write-guard ---
-# handoff-task.md is checkpoint-only (FR3): any direct agent Write/Edit is
-# denied unconditionally, no activation predicate left to check. read-guard.sh
-# is gone entirely — nothing gates a Read any more.
+# The autodrive sentinel is checkpoint-only: a direct agent Write/Edit to a file
+# of that name is denied, in this project or outside it. Nothing else is
+# guarded — TASK.md and TODO.md are plain files the agent may edit.
 
-@test "write-guard (handoff-task.md: deny, checkpoint-only)" {
+run_write_guard() {  # <tool> <cwd> <file_path> [CLAUDE_PROJECT_DIR]
     run bash -c '
-        jq -nc --arg cwd "$1" --arg fp "$1/.claude/handoff-task.md" \
-            "{cwd:\$cwd, tool_name:\"Write\", tool_input:{file_path:\$fp}}" \
-        | bash scripts/write-guard.sh
-    ' _ "$tmp"
-    [ "$status" -eq 0 ]
-    echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null
-    echo "$output" | jq -e '.hookSpecificOutput.permissionDecisionReason
-        | test("checkpoint")' >/dev/null
+        jq -nc --arg t "$1" --arg cwd "$2" --arg fp "$3" \
+            "{cwd:\$cwd, tool_name:\$t, tool_input:{file_path:\$fp}}" \
+        | CLAUDE_PROJECT_DIR="$4" bash scripts/write-guard.sh
+    ' _ "$1" "$2" "$3" "${4:-$CLAUDE_PROJECT_DIR}"
 }
 
-@test "write-guard (cross-project: deny)" {
-    run bash -c '
-        jq -nc --arg cwd "$1" --arg fp "$2/.claude/handoff-task.md" \
-            "{cwd:\$cwd, tool_name:\"Write\", tool_input:{file_path:\$fp}}" \
-        | bash scripts/write-guard.sh
-    ' _ "$tmp" "$other"
+@test "write-guard (autodrive: deny a Write, checkpoint-only)" {
+    run_write_guard Write "$tmp" "$tmp/.claude/autodrive"
     [ "$status" -eq 0 ]
     echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null
-    echo "$output" | jq -e '.hookSpecificOutput.permissionDecisionReason' >/dev/null
     echo "$output" | jq -e '.hookSpecificOutput.hookEventName == "PreToolUse"' >/dev/null
-    echo "$output" | jq -e '.systemMessage' >/dev/null
+    echo "$output" | jq -e '.hookSpecificOutput.permissionDecisionReason
+        | test("autodrive") and test("checkpoint")' >/dev/null
+    echo "$output" | jq -e '.systemMessage | test("checkpoint-only")' >/dev/null
+}
+
+@test "write-guard (autodrive: deny an Edit too)" {
+    run_write_guard Edit "$tmp" "$tmp/.claude/autodrive"
+    [ "$status" -eq 0 ]
+    echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null
+}
+
+@test "write-guard (cross-project autodrive: deny, naming both paths)" {
+    run_write_guard Write "$tmp" "$other/.claude/autodrive"
+    [ "$status" -eq 0 ]
+    echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null
+    echo "$output" | jq -e --arg o "$other" --arg t "$tmp" \
+        '.hookSpecificOutput.permissionDecisionReason
+         | test("outside this project") and contains($o) and contains($t)' >/dev/null
 }
 
 @test "write-guard (CLAUDE_PROJECT_DIR overrides cwd drift: denies as checkpoint-only, not cross-project)" {
@@ -618,88 +525,50 @@ compact" ]
     # while the project root stays $tmp. Despite the drifted cwd, the write
     # resolves as in-project and is denied on the checkpoint-only ground, not
     # misclassified as cross-project.
-    run bash -c '
-        jq -nc --arg cwd "$1" --arg fp "$2/.claude/handoff-task.md" \
-            "{cwd:\$cwd, tool_name:\"Write\", tool_input:{file_path:\$fp}}" \
-        | CLAUDE_PROJECT_DIR="$2" bash scripts/write-guard.sh
-    ' _ "$other" "$tmp"
+    run_write_guard Write "$other" "$tmp/.claude/autodrive" "$tmp"
     [ "$status" -eq 0 ]
-    echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null
     echo "$output" | jq -e '.hookSpecificOutput.permissionDecisionReason
-        | test("checkpoint")' >/dev/null
+        | test("written only by handoff-checkpoint")' >/dev/null
 }
 
-@test "write-guard (unrelated filename: allow)" {
-    run bash -c '
-        jq -nc --arg cwd "$1" --arg fp "$2/.claude/some-other-file.md" \
-            "{cwd:\$cwd, tool_name:\"Write\", tool_input:{file_path:\$fp}}" \
-        | bash scripts/write-guard.sh
-    ' _ "$tmp" "$other"
-    [ "$status" -eq 0 ]
-}
-
-@test "write-guard (worktree cwd: denies the worktree's own handoff-task.md, not main)" {
+@test "write-guard (worktree cwd: the worktree's own autodrive is in-project, not main's)" {
     wt="$(make_worktree wtG)"
-    run bash -c '
-        jq -nc --arg cwd "$1" --arg fp "$1/.claude/handoff-task.md" \
-            "{cwd:\$cwd, tool_name:\"Write\", tool_input:{file_path:\$fp}}" \
-        | bash scripts/write-guard.sh
-    ' _ "$wt"
+    run_write_guard Write "$wt" "$wt/.claude/autodrive"
     [ "$status" -eq 0 ]
-    echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null
     echo "$output" | jq -e '.hookSpecificOutput.permissionDecisionReason
-        | test("checkpoint")' >/dev/null
-}
-
-# autodrive is the guard's second (basename, rel) pair. It is composed by
-# handoff-checkpoint, which reads its own output back through the parser, so a
-# direct agent write is denied on the same ground as handoff-task.md — and the
-# arm-only rule dies with the channel it lived in.
-@test "write-guard (autodrive: deny a Write, checkpoint-only)" {
-    run bash -c '
-        jq -nc --arg cwd "$1" --arg fp "$1/.claude/autodrive" \
-            "{cwd:\$cwd, tool_name:\"Write\", tool_input:{file_path:\$fp}}" \
-        | bash scripts/write-guard.sh
-    ' _ "$tmp"
-    [ "$status" -eq 0 ]
-    echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null
+        | test("written only by handoff-checkpoint")' >/dev/null
+    run_write_guard Write "$wt" "$tmp/.claude/autodrive"
     echo "$output" | jq -e '.hookSpecificOutput.permissionDecisionReason
-        | test("autodrive") and test("checkpoint")' >/dev/null
+        | test("outside this project")' >/dev/null
 }
 
-@test "write-guard (autodrive: deny an Edit too)" {
-    run bash -c '
-        jq -nc --arg cwd "$1" --arg fp "$1/.claude/autodrive" \
-            "{cwd:\$cwd, tool_name:\"Edit\", tool_input:{file_path:\$fp}}" \
-        | bash scripts/write-guard.sh
-    ' _ "$tmp"
+@test "write-guard (TASK.md: allow a Write and an Edit)" {
+    run_write_guard Write "$tmp" "$tmp/TASK.md"
     [ "$status" -eq 0 ]
-    echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null
-}
-
-# MATCHED_NAME is what lets one deny name the file that matched; with two pairs,
-# a cross-project autodrive that reported handoff-task.md would send the agent
-# to the wrong file.
-@test "write-guard (cross-project autodrive: deny naming autodrive)" {
-    run bash -c '
-        jq -nc --arg cwd "$1" --arg fp "$2/.claude/autodrive" \
-            "{cwd:\$cwd, tool_name:\"Write\", tool_input:{file_path:\$fp}}" \
-        | bash scripts/write-guard.sh
-    ' _ "$tmp" "$other"
+    [ "$output" = "" ]
+    run_write_guard Edit "$tmp" "$tmp/TASK.md"
     [ "$status" -eq 0 ]
-    echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null
-    echo "$output" | jq -e '.hookSpecificOutput.permissionDecisionReason
-        | test("autodrive")' >/dev/null
+    [ "$output" = "" ]
 }
 
-# handoff-todo.md is a scratch list the agent edits freely all session (FR4)
-# — no PreToolUse guard covers it any more.
-@test "write-guard (handoff-todo.md: allow, no longer guarded)" {
-    run bash -c '
-        jq -nc --arg cwd "$1" --arg fp "$1/.claude/handoff-todo.md" \
-            "{cwd:\$cwd, tool_name:\"Write\", tool_input:{file_path:\$fp}}" \
-        | bash scripts/write-guard.sh
-    ' _ "$tmp"
+@test "write-guard (TODO.md: allow a Write and an Edit)" {
+    run_write_guard Write "$tmp" "$tmp/TODO.md"
+    [ "$status" -eq 0 ]
+    [ "$output" = "" ]
+    run_write_guard Edit "$tmp" "$tmp/TODO.md"
+    [ "$status" -eq 0 ]
+    [ "$output" = "" ]
+}
+
+@test "write-guard (autodrive.md: a longer basename is not the sentinel, allow)" {
+    run_write_guard Write "$tmp" "$tmp/.claude/autodrive.md"
+    [ "$status" -eq 0 ]
+    [ "$output" = "" ]
+}
+
+@test "write-guard (no file_path in the event: allow)" {
+    run bash -c 'jq -nc "{cwd:\"$1\", tool_name:\"Write\", tool_input:{}}" \
+        | bash scripts/write-guard.sh' _ "$tmp"
     [ "$status" -eq 0 ]
     [ "$output" = "" ]
 }
@@ -707,8 +576,8 @@ compact" ]
 # --- load-handoff ---
 
 @test "load-handoff (read-time assembly): injects header + task, echoes event" {
-    asm_tmp="$BATS_TEST_TMPDIR/asm"; mkdir -p "$asm_tmp/.claude"
-    cat > "$asm_tmp/.claude/handoff-task.md" <<'ASMTASK'
+    asm_tmp="$BATS_TEST_TMPDIR/asm"; mkdir -p "$asm_tmp"
+    cat > "$asm_tmp/TASK.md" <<'ASMTASK'
 ## Current task
 
 hook smoke test
@@ -731,7 +600,7 @@ ASMTASK
 }
 
 @test "load-handoff (read-time assembly): silent no-op without task file" {
-    asm_tmp="$BATS_TEST_TMPDIR/asm"; mkdir -p "$asm_tmp/.claude"
+    asm_tmp="$BATS_TEST_TMPDIR/asm"; mkdir -p "$asm_tmp"
     run bash -c '
         jq -nc --arg e "clear" "{hook_event_name:\$e}" \
         | CLAUDE_PROJECT_DIR="$1" bash scripts/load-handoff.sh
@@ -741,9 +610,9 @@ ASMTASK
 }
 
 @test "load-handoff (read-time assembly): injects the todo remainder too" {
-    asm_tmp="$BATS_TEST_TMPDIR/asm-todo"; mkdir -p "$asm_tmp/.claude"
-    printf '## Current task\n\ntask body\n' > "$asm_tmp/.claude/handoff-task.md"
-    printf '## Remaining\n\n- wire the loader\n' > "$asm_tmp/.claude/handoff-todo.md"
+    asm_tmp="$BATS_TEST_TMPDIR/asm-todo"; mkdir -p "$asm_tmp"
+    printf '## Current task\n\ntask body\n' > "$asm_tmp/TASK.md"
+    printf '## Remaining\n\n- wire the loader\n' > "$asm_tmp/TODO.md"
     run bash -c '
         jq -nc --arg e "clear" "{hook_event_name:\$e}" \
         | CLAUDE_PROJECT_DIR="$1" bash scripts/load-handoff.sh
@@ -758,8 +627,8 @@ ASMTASK
 # A remainder with no active task still has to cross: the todo file alone
 # must not read as "nothing pending".
 @test "load-handoff (read-time assembly): todo alone still injects" {
-    asm_tmp="$BATS_TEST_TMPDIR/asm-todo-only"; mkdir -p "$asm_tmp/.claude"
-    printf '## Remaining\n\n- lone remainder\n' > "$asm_tmp/.claude/handoff-todo.md"
+    asm_tmp="$BATS_TEST_TMPDIR/asm-todo-only"; mkdir -p "$asm_tmp"
+    printf '## Remaining\n\n- lone remainder\n' > "$asm_tmp/TODO.md"
     run bash -c '
         jq -nc --arg e "clear" "{hook_event_name:\$e}" \
         | CLAUDE_PROJECT_DIR="$1" bash scripts/load-handoff.sh
@@ -770,10 +639,10 @@ ASMTASK
 }
 
 @test "load-handoff (size formatting: KiB threshold)" {
-    sz_tmp="$BATS_TEST_TMPDIR/sz"; mkdir -p "$sz_tmp/.claude"
+    sz_tmp="$BATS_TEST_TMPDIR/sz"; mkdir -p "$sz_tmp"
     # ~2048 bytes of content so the assembled output crosses the KiB threshold.
-    python3 -c "print('x' * 2048)" > "$sz_tmp/.claude/handoff-task.md"
-    touch "$sz_tmp/.claude/handoff-task.md"
+    python3 -c "print('x' * 2048)" > "$sz_tmp/TASK.md"
+    touch "$sz_tmp/TASK.md"
     run bash -c '
         jq -nc --arg e "SessionStart" "{hook_event_name:\$e}" \
         | CLAUDE_PROJECT_DIR="$1" bash scripts/load-handoff.sh
@@ -784,7 +653,7 @@ ASMTASK
 
 @test "load-handoff (worktree cwd: reads worktree task, not main)" {
     wt="$(make_worktree wtL)"
-    cat > "$wt/.claude/handoff-task.md" <<'WTTASK'
+    cat > "$wt/TASK.md" <<'WTTASK'
 ## Current task
 
 worktree handoff body
@@ -836,7 +705,7 @@ run_load_handoff() {
 # first. Otherwise a driven clear whose task file is empty strands the pending
 # file, and the next transition's sentinel is read as one still in flight.
 @test "load-handoff (clear, pending present but NO frame: still consumes)" {
-    rm -f "$tmp/.claude/handoff-task.md" "$tmp/.claude/handoff-todo.md"
+    rm -f "$tmp/TASK.md" "$tmp/TODO.md"
     seed_pending "$tmp" "clear" "/rename A Title" "/clear" "resume anyway"
     run_load_handoff "$tmp" clear
     [ "$status" -eq 0 ]
@@ -950,17 +819,17 @@ run_load_compact() {
 # load-handoff.sh injects it at startup|clear.
 @test "load-compact (task file present: injects the frame)" {
     seed_pending "$tmp" "compact" "/compact" "resume per the task file"
-    printf '%s\n' "## Now" "- rewire the parser" > "$tmp/.claude/handoff-task.md"
+    printf '%s\n' "## Now" "- rewire the parser" > "$tmp/TASK.md"
     run_load_compact "$tmp"
     [ "$status" -eq 0 ]
     echo "$output" | jq -e '.hookSpecificOutput.additionalContext | test("rewire the parser")' >/dev/null
     echo "$output" | jq -e '.hookSpecificOutput.hookEventName == "SessionStart"' >/dev/null
     # The task file survives — it is not consumed by being read.
-    [ -s "$tmp/.claude/handoff-task.md" ]
+    [ -s "$tmp/TASK.md" ]
 }
 
 @test "load-compact (no task file: consumed, no frame)" {
-    rm -f "$tmp/.claude/handoff-task.md"
+    rm -f "$tmp/TASK.md"
     seed_pending "$tmp" "compact" "/compact" "continue with task 3"
     run_load_compact "$tmp"
     [ "$status" -eq 0 ]

@@ -7,14 +7,12 @@
 # Canonical relative paths inside the project. Changing these is a
 # breaking change (see CLAUDE.md conventions).
 # shellcheck disable=SC2034  # consumed by sourcing scripts
-HANDOFF_REL_TASK=".claude/handoff-task.md"
-# The remainder ledger: open todo items only, never completion state. Tracked
-# on the same terms as the task file (write-stage.sh force-adds both) — it is
-# overflow from that file, so it earns the same persistence. See
-# docs/changelog/2026-07-22-a-place-for-the-todo-list.md and
-# docs/changelog/2026-07-23-overflow-deserves-persistence.md.
+HANDOFF_REL_TASK="TASK.md"
+# The remainder ledger: open todo items only, never completion state. A plain
+# tracked file in the project root, like the task file beside it. See
+# docs/changelog/2026-07-22-a-place-for-the-todo-list.md.
 # shellcheck disable=SC2034
-HANDOFF_REL_TODO=".claude/handoff-todo.md"
+HANDOFF_REL_TODO="TODO.md"
 # The transition. One session, at most one transition in flight —
 # so one file, whose *body* names both the transition and where it has got to.
 # Line 1 is the state (armed -> pending -> gone), line 2 the kind. See
@@ -293,20 +291,6 @@ handoff_resolve() {
 for p in sys.argv[1:]: print(os.path.realpath(p))' "$@"
 }
 
-# Parse the three fields every path-scoped tool hook needs from the
-# hook-input JSON ($1) in a single jq pass, populating the caller's
-# HOOK_FILE_PATH, HOOK_CWD, and HOOK_TRANSCRIPT. HOOK_CWD is the raw
-# .cwd — callers pass it through handoff_root to anchor on the worktree
-# root. One field per line (not @tsv: tab is IFS-whitespace, so an empty
-# field between two tabs would collapse and shift the rest).
-# shellcheck disable=SC2034  # assigned for the caller's scope
-handoff_hook_fields() {
-    { read -r HOOK_FILE_PATH; read -r HOOK_CWD; read -r HOOK_TRANSCRIPT; } < <(
-        jq -r '.tool_input.file_path // "", .cwd // "", .transcript_path // ""' \
-            <<<"$1"
-    )
-}
-
 # Effective project root for the handoff files of THIS session, into the
 # caller's HANDOFF_ROOT, plus the branch that produced it in
 # HANDOFF_ROOT_BRANCH: `inside` (cwd is the project or under it), `worktree`
@@ -346,42 +330,6 @@ handoff_root_read() {
 handoff_root() {
     handoff_root_read "${1:-}" || return 1
     printf '%s\n' "$HANDOFF_ROOT"
-}
-
-# Match the hook-input JSON ($1) against one or more handoff-owned files, given
-# as (basename, project-relative-path) pairs: the basename is the cheap filter,
-# then resolved-path equality with $cwd/<rel> is the cross-project guard. Pairs
-# are tried in order and the first basename hit wins. Populates the caller's
-# HOOK_* fields (via handoff_hook_fields) plus cwd, target, expected and
-# MATCHED_NAME (the basename that matched, so a caller guarding several files
-# can name the right one in a deny). Returns 0 when the event resolves to this
-# project's file, 1 when it is about some other file (no file_path, no basename
-# hit, or the root cannot be resolved), and 2 when a basename matched but the
-# resolved path is elsewhere (cross-project) — write-guard.sh denies on 2,
-# every other caller treats it as 1.
-#
-# Variadic rather than one call per file because the JSON parse is a jq spawn
-# on the Write/Edit hot path: guarding N files must stay one parse, not N.
-# shellcheck disable=SC2034  # cwd/target/expected/MATCHED_NAME for the caller
-handoff_match_target() {
-    local json="$1"; shift
-    local base rel=""
-    handoff_hook_fields "$json"
-    [[ -n "$HOOK_FILE_PATH" ]] || return 1
-    base="$(basename "$HOOK_FILE_PATH")"
-    MATCHED_NAME=""
-    while (( $# >= 2 )); do
-        if [[ "$base" == "$1" ]]; then
-            MATCHED_NAME="$1"; rel="$2"; break
-        fi
-        shift 2
-    done
-    [[ -n "$MATCHED_NAME" ]] || return 1
-    cwd="$(handoff_root "$HOOK_CWD")"
-    [[ -n "$cwd" ]] || return 1
-    { read -r target; read -r expected; } \
-        < <(handoff_resolve "$HOOK_FILE_PATH" "$cwd/$rel")
-    [[ "$target" == "$expected" ]] || return 2
 }
 
 # Emit a PreToolUse deny on stdout, then `exit 0` (not `return`) —

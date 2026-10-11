@@ -1,20 +1,8 @@
-# Runtime handoff artifacts (regenerated each session)
-.claude/handoff.md
-# Listed but force-added by write-stage.sh: both halves of the task frame ARE
-# tracked, as a versioned trail paired with gitlore memory commits. The listing
-# keeps them out of an incidental `git add .` — only the hook adds them.
-.claude/handoff-task.md
-.claude/handoff-todo.md
-
 # The transition, its non-delivery report (.failed), and the .arming.<pid> temp
 # the atomic state rewrite lands beside it. One transition file, because at most
 # one can be in flight; it carries its own state in line 1 and exists for part
 # of one turn (or one turn end -> transition window) before a hook consumes it.
 .claude/autodrive*
-
-# handoff-checkpoint's IPC to bash-post.sh: exists for one Bash-call turn,
-# consumed and deleted by the PostToolUse(Bash) hook.
-.claude/checkpoint-manifest
 
 # The checkpoint's IPC to gitlore, written on the memory directive's
 # instruction and consumed by gitlore's own hooks. Listed because a `git add
