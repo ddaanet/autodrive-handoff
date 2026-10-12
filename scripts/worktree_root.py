@@ -6,7 +6,8 @@ worktree root so each worktree owns its own ``.claude/``; otherwise returns
 ``project``. Pure filesystem reads, no subprocess. Port of the cwd-safety
 plugin's ``_worktree_root`` plus a ``-> project`` fallback.
 
-CLI: ``worktree_root.py <cwd> <project>`` prints the resolved root.
+CLI: ``worktree_root.py <cwd> <project>`` prints the resolved root and branch,
+each NUL-terminated.
 """
 
 import os
@@ -92,15 +93,16 @@ def worktree_root(cwd: str, project: str) -> tuple[str, str]:
 def main() -> None:
     """Print the resolved handoff root for argv's cwd and project.
 
-    Two lines: the root, then the branch label. ``handoff_root`` in
-    ``scripts/_lib.sh`` reads both and prints only the first, so its own stdout
-    contract — the root alone — is unchanged.
+    The root, then the branch label, each terminated by a NUL byte: a root is
+    any string, and one holding a newline would be cut by a line-wise read.
+    ``handoff_root_read`` in ``scripts/_lib.sh`` reads both; ``handoff_root``
+    prints only the first, so its own stdout contract — the root alone — is
+    unchanged.
     """
     cwd = sys.argv[1] if len(sys.argv) > 1 else ""
     project = sys.argv[2] if len(sys.argv) > 2 else ""
     root, branch = worktree_root(cwd, project)
-    print(root)
-    print(branch)
+    sys.stdout.write(f"{root}\0{branch}\0")
 
 
 if __name__ == "__main__":

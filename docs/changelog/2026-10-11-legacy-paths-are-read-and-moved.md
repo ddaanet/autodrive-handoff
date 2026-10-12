@@ -158,6 +158,11 @@ are added by the commit the request calls for, git records a rename. An
 untracked legacy path is a no-op, and a file the call left in place, as ignored,
 is never named.
 
+> **Superseded 2026-10-12** (see [The git line names paths from the
+> top](2026-10-12-the-git-line-names-paths-from-the-top.md)): the line does
+> carry the root's path below the top of the repository, shell-quoted, when the
+> root is not the top of its repository.
+
 **Why `:/`.** The first form was the bare relative path. A pathspec is
 relative to the working directory, and the agent's Bash working directory
 persists across calls and may be anywhere under the root; the plugin itself

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import re
+import shlex
 import subprocess
 import sys
 from collections.abc import Sequence
@@ -197,15 +198,34 @@ def legacy_unstage_directive(paths: Sequence[str]) -> str:
 
     One line, the paths on it: the legacy files this call moved or removed,
     never one it left in place. The line does not ask which are tracked. Each
-    path takes git's top-level form (`:/`), so the line runs from any directory
-    of the repository, the agent's own working directory included.
+    path is relative to the top of the repository, the root's `repo_prefix`
+    ahead of it, and takes git's top-level form (`:/`), so the line runs from
+    any directory of the repository, the agent's own working directory included.
+    Each pathspec is shell-quoted, which leaves one under a root that is the top
+    of its repository as it is. A newline in the prefix still splits the line.
     """
     if not paths:
         return ""
-    pathspecs = " ".join(f":/{path}" for path in paths)
+    pathspecs = " ".join(shlex.quote(f":/{path}") for path in paths)
     return _printf_lines(
         f"Before committing, run `git rm --cached --ignore-unmatch -q -- {pathspecs}`."
     )
+
+
+def repo_prefix(root: str) -> str:
+    """Return root's path below the top of its repository, "" at the top.
+
+    Ends in `/` when not empty. A read-only query; "" too when root is in no
+    repository or git cannot say, which leaves the paths as the root has them. A
+    root that is a submodule is the top of its own repository.
+    """
+    result = subprocess.run(
+        ["git", "-C", root, "rev-parse", "--show-prefix"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.stdout.removesuffix("\n") if result.returncode == 0 else ""
 
 
 def arming_directive() -> str:

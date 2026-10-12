@@ -21,9 +21,11 @@ set -euo pipefail
 # shellcheck source-path=SCRIPTDIR source=_lib.sh
 source "$(dirname "$0")/_lib.sh"
 
-{ read -r hook_cwd; read -r hook_event; read -r hook_source; } < <(
-    jq -r '.cwd // "", .hook_event_name // "SessionStart", .source // ""'
-)
+# NUL-terminated and read whole: a cwd is any string, and one holding a newline
+# or ending in a space would otherwise be cut or trimmed, and shift the fields.
+{ IFS= read -r -d '' hook_cwd; IFS= read -r -d '' hook_event; IFS= read -r -d '' hook_source; } < <(
+    jq -j '(.cwd // ""), "\u0000", (.hook_event_name // "SessionStart"), "\u0000", (.source // ""), "\u0000"'
+) || true
 cwd="$(handoff_root "$hook_cwd")"
 [[ -n "$cwd" ]] || exit 0
 

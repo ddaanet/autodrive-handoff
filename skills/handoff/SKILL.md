@@ -130,6 +130,11 @@ Task file rules:
   sentence at most; `git log` has the rest.
 - No file paths or code beyond what's needed to say what's in progress.
   The working set is reconstructable from `git status` at load time.
+- **No commit, push or release status** ("the work is uncommitted", "ready
+  to commit", "release is a separate request"). `git status` and `git log`
+  have it at load time, and the line is false after the next commit. If
+  uncommitted work matters, what matters is *why* (tests red, decision
+  pending): write that as an open decision in `TODO.md`.
 
 **Todo file template** (`./TODO.md`):
 
@@ -157,6 +162,8 @@ Todo file rules:
   declined, not missed.** Drop it, and never annotate one with the number of
   times it has been raised. A listed decision blocks nothing either: work
   that can proceed without the answer is listed as work.
+- **No commit or push status here either**, and no item saying "commit the
+  work" or "push the branch". A release still owed is an item.
 - It is a remainder plus the open questions blocking it, not a plan of
   record — but it is versioned like the task file, so write it as
   something that reads well in history.
@@ -212,12 +219,6 @@ It must be a **single line**: it is submitted as one prompt.
   holds only what's still open — decisions and remainder alike.
 - Durable lessons in `## Open decisions`. Those go to feedback memory.
 - Extra sections in either file. Both templates are fixed.
-- Commit/push status anywhere in either file ("work is uncommitted",
-  "ready to commit", a `TODO.md` item saying "commit the work" or
-  "push the branch"). It's reconstructable from `git status`/`git log`
-  at load time and goes stale the moment the user commits after handoff.
-  If uncommitted work matters, what matters is *why* (tests red, decision
-  pending) — write that as an open decision, not a status line.
 - Asking whether to clear, or telling the user to run `/clear`, under a
   driven transition. Both are settled by the request and the armed file.
 - Reprinting the continuation prompt, or printing the `/clear` line, as

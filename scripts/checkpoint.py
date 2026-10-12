@@ -802,7 +802,9 @@ def compose_directives(
     Print order: the legacy reports, then memory, then the todo boundary/SDD
     nudge, then the commit act (present only under "with-commit"), then either
     the arming instruction (held) or the closing line (not held) — always last,
-    and mutually exclusive. [] under autoname. The clause-file refusal
+    and mutually exclusive. [] under autoname. The act that stages the legacy
+    paths names them from the top of the repository, the reports from the root.
+    The clause-file refusal
     (`memory.refusal`) suppresses every other part but the legacy reports and
     the act that stages the legacy paths: it prints last.
     """
@@ -816,6 +818,9 @@ def compose_directives(
         if plan.legacy is not None and plan.legacy.fate != "ignored"
     ]
     with_commit = commit_mode == "with-commit"
+    if gone and with_commit:
+        prefix = lib.repo_prefix(str(root))
+        gone = [prefix + rel for rel in gone]
     if memory.refusal:
         unstage = lib.legacy_unstage_directive(gone) if with_commit else ""
         return [part for part in (reports, unstage, memory.text) if part]

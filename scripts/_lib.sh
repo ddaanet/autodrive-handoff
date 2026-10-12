@@ -106,7 +106,12 @@ handoff_frame() {
 
 # <is_empty_body library> <path>. True when the path is a file with a body.
 _handoff_has_body() {
-    [[ -n "$2" && -f "$2" ]] && ! python3 "$1" --is-empty-body <"$2"
+    local rc=0
+    [[ -n "$2" && -f "$2" && -r "$2" ]] || return 1
+    python3 "$1" --is-empty-body <"$2" || rc=$?
+    # Exit 1 is "has a body"; 0 is empty and anything else (a crash, an
+    # unknown invocation) is not evidence of a body.
+    (( rc == 1 ))
 }
 
 # The notes for the legacy flags `handoff_frame` just set, in the order both
@@ -385,7 +390,9 @@ handoff_root_read() {
         HANDOFF_ROOT_BRANCH="inside"
         return 0
     fi
-    { IFS= read -r HANDOFF_ROOT; IFS= read -r HANDOFF_ROOT_BRANCH; } < <(
+    # The resolver answers NUL-terminated: a root is any string, and one holding
+    # a newline would be cut by a line-wise read.
+    { IFS= read -r -d '' HANDOFF_ROOT; IFS= read -r -d '' HANDOFF_ROOT_BRANCH; } < <(
         python3 "$(dirname "${BASH_SOURCE[0]}")/worktree_root.py" "$1" "$project"
     )
 }

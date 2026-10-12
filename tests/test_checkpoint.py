@@ -3486,22 +3486,16 @@ def run_printed_git_rm(repo: Path, out: str) -> None:
     The agent's Bash cwd persists across calls and is anywhere under the root,
     so the act must work from there: a pathspec relative to the cwd matches
     nothing and `--ignore-unmatch -q` hides it. The wording around the act is
-    free, so the paths are the tokens after the literal command that name a
-    legacy file (a `:/` top-level prefix aside), trailing punctuation
-    stripped, and each is run as printed.
+    free; the command is what the line holds between backticks, and it is run
+    through a shell exactly as printed, quoting included.
     """
     line = next(ln for ln in out.splitlines() if GIT_RM in ln)
-    pathspecs = []
-    for token in line[line.index(GIT_RM) + len(GIT_RM) :].split():
-        pathspec = token.lstrip("`\"'(").rstrip("`.,;:)\"'")
-        if pathspec.removeprefix(":/") not in (LEGACY_TASK_REL, LEGACY_TODO_REL):
-            break
-        pathspecs.append(pathspec)
-    assert pathspecs, line
+    command = line[line.index(GIT_RM) :]
+    command = command[: command.index("`")]
+    assert command.removeprefix(GIT_RM).strip(), line
     sub = repo / "sub"
     sub.mkdir(exist_ok=True)
-    cmd = ["git", *GIT_RM.split()[1:], *pathspecs]
-    subprocess.run(cmd, cwd=sub, check=True)
+    subprocess.run(["bash", "-c", command], cwd=sub, check=True)
 
 
 @pytest.mark.parametrize("commit", ["without-commit", "with-commit"])
@@ -3553,6 +3547,42 @@ def test_printed_git_act_over_an_untracked_legacy_file_is_a_silent_no_op(
     before = git_status_lines(repo)
     run_printed_git_rm(repo, result.stdout)
     assert git_status_lines(repo) == before
+
+
+@pytest.mark.parametrize("below", ["pkg", "pkg dir"], ids=["plain", "spaced"])
+def test_printed_git_act_reaches_a_root_below_the_top_of_its_repository(
+    tmp_path: Path, below: str
+) -> None:
+    """The root is a subdirectory of a larger repository, not its toplevel.
+
+    `:/` anchors at the top of the repository, so each pathspec carries the
+    root's own prefix: without it the act names a path beside the root's, which
+    `--ignore-unmatch -q` passes over in silence, and the legacy file stays in
+    the index. The spaced row is the prefix reaching the line quoted.
+    """
+    repo = make_repo(tmp_path)
+    root = repo / below
+    (root / ".claude").mkdir(parents=True)
+    put(root, LEGACY_TODO_REL, TODO_LEGACY_BODY)
+    tracked = f"{below}/{LEGACY_TODO_REL}"
+    git = ["git", "-c", "user.email=t@t", "-c", "user.name=t"]
+    subprocess.run([*git, "add", "-f", tracked], cwd=repo, check=True)
+    subprocess.run([*git, "commit", "-qm", "seed"], cwd=repo, check=True)
+    payload = migration_payload(task_clear(), todo_keep(), "with-commit")
+    result = run_checkpoint(repo, payload, root)
+    ok(result)
+    assert read(root / "TODO.md") == TODO_LEGACY_BODY
+    assert_reported(result.stdout, LEGACY_TODO_REL, "moved")
+
+    def in_index() -> str:
+        listing = ["git", "ls-files", "-z", "--", tracked]
+        return subprocess.run(
+            listing, cwd=repo, capture_output=True, text=True, check=True
+        ).stdout
+
+    assert in_index() == f"{tracked}\0"
+    run_printed_git_rm(repo, result.stdout)
+    assert in_index() == ""
 
 
 def test_git_rm_act_names_only_the_files_that_moved_or_went(tmp_path: Path) -> None:

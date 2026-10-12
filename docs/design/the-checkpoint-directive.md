@@ -26,7 +26,9 @@ condition:
    staged them. When the call moved or removed a legacy file it leads with the
    one git line the checkpoint does name, `git rm --cached --ignore-unmatch -q
    -- :/<path> …`, over those paths alone and never an ignored one, so git
-   records a rename once the files are added;
+   records a rename once the files are added. Each path is named from the top
+   of the repository, so it carries the root's path below the top when the
+   root is not the top;
 5. the arming instruction, when the sentinel is held — run
    `handoff-approved`;
 6. the closing line, when it is not — an instruction to end the reply on one

@@ -36,6 +36,12 @@ TASK
     source "$repo_root/scripts/_lib.sh"
 }
 
+# A row may leave a file at mode 000; bats removes the temp tree afterwards and
+# a leftover mode would only make that harder to debug.
+teardown() {
+    chmod -R u+rwX "$BATS_TEST_TMPDIR" 2>/dev/null || true
+}
+
 # Build a fake linked git worktree of $tmp under $BATS_TEST_TMPDIR/$name and
 # echo its path. Its .git is a *file* pointing under $tmp/.git/worktrees/$name,
 # mirroring real git worktree layout. $tmp is CLAUDE_PROJECT_DIR (set in setup).
@@ -486,6 +492,109 @@ assert_framed() {
     [ "${FRAME_TODO_LEGACY:-unset}" = "0" ]
     [ "${FRAME_TASK_SHADOWED:-unset}" = "0" ]
     [ "${FRAME_TODO_SHADOWED:-unset}" = "0" ]
+}
+
+# --- _lib.sh: handoff_frame, what counts as a body ---
+# A half counts only when the file is readable and the library answers with its
+# "has a body" status, exit 1. An unreadable file is no body, and neither is an
+# answer that is not that status (a crash, a missing library): the loader must
+# not inject a frame because a check failed to run.
+
+# <path> — skip when mode 000 does not deny this user's read (running as root).
+require_read_denied() {
+    if { : <"$1"; } 2>/dev/null; then
+        skip "mode 000 does not deny reads for this user"
+    fi
+}
+
+@test "handoff_frame (unreadable root files with a body): not a body — rc 1, FRAME empty, flags 0" {
+    fr="$BATS_TEST_TMPDIR/frame-unreadable"; mkdir -p "$fr"
+    printf '## Current task\n\ntask body\n' > "$fr/task.md"
+    printf '## Remaining\n\n- todo body\n' > "$fr/todo.md"
+    chmod 000 "$fr/task.md" "$fr/todo.md"
+    require_read_denied "$fr/task.md"
+    rc=0; handoff_frame "$fr/task.md" "$fr/todo.md" || rc=$?
+    [ "$rc" -eq 1 ]
+    [ "${FRAME-unset}" = "" ]
+    [ "${FRAME_TASK:-unset}" = "0" ]
+    [ "${FRAME_TODO:-unset}" = "0" ]
+}
+
+@test "handoff_frame (unreadable root files beside legacy bodies): the legacy files are loaded, not shadowing" {
+    fr="$BATS_TEST_TMPDIR/frame-unreadable-leg"; mkdir -p "$fr"
+    printf '## Current task\n\nroot task body\n' > "$fr/task.md"
+    printf '## Remaining\n\n- root item\n' > "$fr/todo.md"
+    printf '## Current task\n\nlegacy task body\n' > "$fr/legacy-task.md"
+    printf '## Remaining\n\n- legacy item\n' > "$fr/legacy-todo.md"
+    chmod 000 "$fr/task.md" "$fr/todo.md"
+    require_read_denied "$fr/task.md"
+    rc=0; handoff_frame "$fr/task.md" "$fr/todo.md" "$fr/legacy-task.md" "$fr/legacy-todo.md" || rc=$?
+    [ "$rc" -eq 0 ]
+    assert_framed "${FRAME-}" $'\n\n## Current task\n\nlegacy task body\n\n## Remaining\n\n- legacy item'
+    [ "${FRAME_TASK_LEGACY:-unset}" = "1" ]
+    [ "${FRAME_TODO_LEGACY:-unset}" = "1" ]
+    [ "${FRAME_TASK_SHADOWED:-unset}" = "0" ]
+    [ "${FRAME_TODO_SHADOWED:-unset}" = "0" ]
+}
+
+@test "handoff_frame (unreadable legacy files, no root files): not a body — rc 1, FRAME empty, legacy flags 0" {
+    fr="$BATS_TEST_TMPDIR/frame-leg-unreadable"; mkdir -p "$fr"
+    printf '## Current task\n\nlegacy task body\n' > "$fr/legacy-task.md"
+    printf '## Remaining\n\n- legacy item\n' > "$fr/legacy-todo.md"
+    chmod 000 "$fr/legacy-task.md" "$fr/legacy-todo.md"
+    require_read_denied "$fr/legacy-task.md"
+    rc=0; handoff_frame "$fr/task.md" "$fr/todo.md" "$fr/legacy-task.md" "$fr/legacy-todo.md" || rc=$?
+    [ "$rc" -eq 1 ]
+    [ "${FRAME-unset}" = "" ]
+    [ "${FRAME_TASK:-unset}" = "0" ]
+    [ "${FRAME_TODO:-unset}" = "0" ]
+    [ "${FRAME_TASK_LEGACY:-unset}" = "0" ]
+    [ "${FRAME_TODO_LEGACY:-unset}" = "0" ]
+}
+
+# The library is found beside the sourced _lib.sh, so a copy of _lib.sh in a
+# directory of its own, sourced over the setup's, reads the stub placed beside
+# it. Nothing in production changes for the test.
+# <exit status> — a stubbed library answering that status; a task file with a
+# body is then handed to handoff_frame.
+frame_with_stub_status() {
+    stub="$BATS_TEST_TMPDIR/stub-lib-$1"; mkdir -p "$stub"
+    cp "$repo_root/scripts/_lib.sh" "$stub/_lib.sh"
+    printf 'import sys\nsys.exit(%s)\n' "$1" > "$stub/_checkpoint_lib.py"
+    # shellcheck source-path=SCRIPTDIR source=../scripts/_lib.sh disable=SC1090,SC1091
+    source "$stub/_lib.sh"
+    fr="$BATS_TEST_TMPDIR/frame-stub-$1"; mkdir -p "$fr"
+    printf '## Current task\n\ntask body\n' > "$fr/task.md"
+    rc=0; handoff_frame "$fr/task.md" "$fr/todo.md" || rc=$?
+}
+
+@test "handoff_frame (library exits 1, the has-a-body status): the task counts" {
+    frame_with_stub_status 1
+    [ "$rc" -eq 0 ]
+    [ "${FRAME_TASK:-unset}" = "1" ]
+}
+
+@test "handoff_frame (library exits 0, the empty status): the task does not count" {
+    frame_with_stub_status 0
+    [ "$rc" -eq 1 ]
+    [ "${FRAME-unset}" = "" ]
+    [ "${FRAME_TASK:-unset}" = "0" ]
+}
+
+@test "handoff_frame (library exits 2): not evidence of a body — rc 1, FRAME empty" {
+    frame_with_stub_status 2
+    [ "$rc" -eq 1 ]
+    [ "${FRAME-unset}" = "" ]
+    [ "${FRAME_TASK:-unset}" = "0" ]
+}
+
+@test "handoff_frame (library missing, so python3 cannot open it): not evidence of a body" {
+    frame_with_stub_status 1
+    rm "$stub/_checkpoint_lib.py"
+    rc=0; handoff_frame "$fr/task.md" "$fr/todo.md" || rc=$?
+    [ "$rc" -eq 1 ]
+    [ "${FRAME-unset}" = "" ]
+    [ "${FRAME_TASK:-unset}" = "0" ]
 }
 
 # --- _lib.sh: handoff_drive_read shape matrix ---
@@ -1298,6 +1407,103 @@ WTTASK
     ' _ "$wt"
     [ "$status" -eq 0 ]
     echo "$output" | jq -r '.hookSpecificOutput.additionalContext' | grep -q 'worktree handoff body'
+}
+
+# --- load-handoff and report-drive-failure: a cwd that survives a line-wise read ---
+#
+# A path is any string, and these hooks take the hook input's `.cwd` (and the
+# root they resolve from it) through `read -r`: a newline cuts it short and the
+# default IFS trims a leading or trailing space. The rows assert the behaviour a
+# path of that shape is owed, the same as any other: the hook acts on the
+# project it was launched in. write-guard.sh reads its fields NUL-terminated and
+# has the rows (see "newline in a directory component").
+
+# <json> — the additionalContext of a loader's output, whole ("" when none).
+context_of() {
+    jq -j '.hookSpecificOutput.additionalContext // ""' <<<"$1"
+}
+
+@test "load-handoff (project root with a newline in a directory component): the frame is injected" {
+    nl="$BATS_TEST_TMPDIR/nl"$'\n'"proj"
+    mkdir -p "$nl/.claude"
+    printf '## Current task\n\nnewline root body\n' > "$nl/TASK.md"
+    CLAUDE_PROJECT_DIR="$nl" run_load_handoff "$nl" "startup"
+    [ "$status" -eq 0 ]
+    ctx="$(context_of "$output")"
+    [[ "$ctx" == *"newline root body"* ]]
+    split_output "$output"
+    [[ "$MSG" != *"No task frame or todo."* ]]
+}
+
+@test "load-handoff (project root ending in a space): the frame is injected" {
+    sp="$BATS_TEST_TMPDIR/trailing "
+    mkdir -p "$sp/.claude"
+    printf '## Current task\n\ntrailing space body\n' > "$sp/TASK.md"
+    CLAUDE_PROJECT_DIR="$sp" run_load_handoff "$sp" "startup"
+    [ "$status" -eq 0 ]
+    ctx="$(context_of "$output")"
+    [[ "$ctx" == *"trailing space body"* ]]
+    split_output "$output"
+    [[ "$MSG" != *"No task frame or todo."* ]]
+}
+
+@test "load-handoff (cwd in a linked worktree whose path has a newline): the worktree's frame is injected" {
+    wt="$BATS_TEST_TMPDIR/wt"$'\n'"nl"
+    mkdir -p "$wt/.claude" "$tmp/.git/worktrees/wtnl"
+    printf 'gitdir: %s\n' "$tmp/.git/worktrees/wtnl" > "$wt/.git"
+    printf '## Current task\n\nnewline worktree body\n' > "$wt/TASK.md"
+    run_load_handoff "$wt" "startup"
+    [ "$status" -eq 0 ]
+    ctx="$(context_of "$output")"
+    [[ "$ctx" == *"newline worktree body"* ]]
+    [[ "$ctx" != *"hook smoke test"* ]]
+}
+
+@test "load-handoff (cwd in a linked worktree whose path ends in a space): the worktree's frame is injected" {
+    wt="$BATS_TEST_TMPDIR/wt trailing "
+    mkdir -p "$wt/.claude" "$tmp/.git/worktrees/wtsp"
+    printf 'gitdir: %s\n' "$tmp/.git/worktrees/wtsp" > "$wt/.git"
+    printf '## Current task\n\ntrailing worktree body\n' > "$wt/TASK.md"
+    run_load_handoff "$wt" "startup"
+    [ "$status" -eq 0 ]
+    ctx="$(context_of "$output")"
+    [[ "$ctx" == *"trailing worktree body"* ]]
+    [[ "$ctx" != *"hook smoke test"* ]]
+}
+
+@test "report-drive-failure (project root with a newline in a directory component): sweeps an armed sentinel" {
+    nl="$BATS_TEST_TMPDIR/nl"$'\n'"proj"
+    mkdir -p "$nl/.claude"
+    seed_drive "$nl" "clear" "/rename Title" "/clear" "continue the work"
+    CLAUDE_PROJECT_DIR="$nl" run_report_failure "$nl"
+    [ "$status" -eq 0 ]
+    [ ! -e "$nl/.claude/autodrive" ]
+    echo "$output" | jq -e '.systemMessage | test("stale autodrive discarded")' >/dev/null
+}
+
+# With the cwd in the first position of a line-wise read, its second line
+# becomes the next field, so the rows above can pass on the root alone (the
+# project is known from CLAUDE_PROJECT_DIR) while the fields that follow the cwd
+# are wrong. These two pin those fields.
+@test "load-handoff (clear, pending present, project root with a newline): consumed, the source field intact" {
+    nl="$BATS_TEST_TMPDIR/nl"$'\n'"proj"
+    mkdir -p "$nl/.claude"
+    printf '## Current task\n\nnewline root body\n' > "$nl/TASK.md"
+    seed_pending "$nl" "clear" "/rename A Title" "/clear" "pick up per the task file"
+    CLAUDE_PROJECT_DIR="$nl" run_load_handoff "$nl" clear
+    [ "$status" -eq 0 ]
+    [ ! -e "$nl/.claude/autodrive" ]
+}
+
+@test "report-drive-failure (held file owned by this session, project root with a newline): left alone" {
+    nl="$BATS_TEST_TMPDIR/nl"$'\n'"proj"
+    mkdir -p "$nl/.claude"
+    printf '%s\n' "held $SESSION_ID" "clear" "/rename A Title" "/clear" "resume" \
+        > "$nl/.claude/autodrive"
+    CLAUDE_PROJECT_DIR="$nl" run_report_failure "$nl"
+    [ "$status" -eq 0 ]
+    [ "$output" = "" ]
+    [ "$(head -n1 "$nl/.claude/autodrive")" = "held $SESSION_ID" ]
 }
 
 # --- load-handoff on source: "clear" (consume the pending clear) ---

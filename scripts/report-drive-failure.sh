@@ -40,9 +40,11 @@ set -euo pipefail
 # shellcheck source-path=SCRIPTDIR source=_lib.sh
 source "$(dirname "$0")/_lib.sh"
 
-{ read -r hook_cwd; read -r session_id; } < <(
-    jq -r '.cwd // "", .session_id // ""'
-)
+# NUL-terminated and read whole, as in write-guard.sh: a cwd holding a newline
+# or ending in a space would otherwise be cut or trimmed.
+{ IFS= read -r -d '' hook_cwd; IFS= read -r -d '' session_id; } < <(
+    jq -j '(.cwd // ""), "\u0000", (.session_id // ""), "\u0000"'
+) || true
 handoff_root_read "$hook_cwd"
 cwd="$HANDOFF_ROOT"
 [[ -n "$cwd" ]] || exit 0

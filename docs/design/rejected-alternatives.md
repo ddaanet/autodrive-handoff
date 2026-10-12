@@ -116,9 +116,12 @@ recoverable, and the collision is the point: it is the same list.
 <root>`** in its place. The bare form is relative to the agent's Bash working
 directory, which persists across calls and can be any directory under the root;
 from a subdirectory it matched nothing, and `--ignore-unmatch -q` kept the miss
-silent. `-C` puts the root on the line, where a newline in it splits the line.
-`:/` embeds no root and runs from anywhere.
+silent. `-C` puts the whole absolute root on the line, where a newline in it
+splits the line. `:/` runs from anywhere and carries only the root's path below
+the top of the repository, shell-quoted, which is nothing in the common case
+where the root is the top.
 [Legacy paths are read, and the checkpoint moves them](../changelog/2026-10-11-legacy-paths-are-read-and-moved.md)
+[The git line names paths from the top](../changelog/2026-10-12-the-git-line-names-paths-from-the-top.md)
 
 **A parallel pipeline per transition** — the driven clear's first draft:
 `.claude/autoclear` beside `autocompact`, its own validator, `Stop` arm,

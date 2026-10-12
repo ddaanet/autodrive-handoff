@@ -57,7 +57,8 @@ body: the legacy file is left as it is and the agent is told it is ignored,
 with no advice to delete it. Both ends decide by body (`is_empty_body`) and
 shadowing by the legacy file's existence. The checkpoint does no git work, so
 under `with-commit` it prints the `git rm --cached` line that makes git record
-a rename, in the `:/` form that runs from any directory. The fallback is a
+a rename, in the `:/` form that runs from any directory, each path named from
+the top of the repository. The fallback is a
 bridge: it goes once no sibling repository still has `.claude/handoff-*.md`,
 with no version in code, docs or tests, and `grep -rni legacy scripts/ tests/`
 starts the one deletion pass. **Reopen if** the condition is not what ends it:

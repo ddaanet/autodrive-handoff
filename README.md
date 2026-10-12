@@ -53,9 +53,9 @@ and says so at session start, and the next checkpoint moves the todo onto
 A root file that has a body wins: the old file is left as it is, and every
 session start reports it as ignored until you delete it. Under a wrap-up that
 asked for a commit, the checkpoint also prints a `git rm --cached
---ignore-unmatch -q -- :/…` line over the old paths it moved or removed, so
-git records a rename. A wrap-up that asked for no commit prints nothing, and
-the deletion stays unstaged in `git status`.
+--ignore-unmatch -q -- :/…` line over the old paths it moved or removed, named
+from the top of the repository, so git records a rename. A wrap-up that asked
+for no commit prints nothing, and the deletion stays unstaged in `git status`.
 
 To move them yourself, once per project that has them:
 

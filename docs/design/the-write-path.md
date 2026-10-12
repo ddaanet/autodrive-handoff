@@ -160,7 +160,13 @@ leads with one line for the legacy paths this call moved or removed, `git rm
 --cached --ignore-unmatch -q -- :/<path> …`, so git records a rename once the
 files are added. `:/` anchors each pathspec at the top of the repository,
 because the agent's working directory can be anywhere under the root and a
-bare relative one matched nothing from a subdirectory, silently. The line is
+bare relative one matched nothing from a subdirectory, silently. The root is
+not always the top: when it lies below it, the path after `:/` is the root's
+path below the top (`git rev-parse --show-prefix`, a read-only query made only
+when the line is owed) followed by the legacy path, each pathspec shell-quoted.
+A root that is the top of its repository, a submodule included, has no prefix
+and the line is as shown. A newline in the prefix still splits the line. The
+reports name the same paths relative to the root. The line is
 owed only by the call that moved or removed the file: under `without-commit`
 nothing is printed and the files are left modified in the tree like any edited
 file, and a `with-commit` call after it has no legacy file left to report, so

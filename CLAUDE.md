@@ -191,8 +191,9 @@ note in `report-drive-failure.sh`.
   `handoff_deny()` (PreToolUse deny emitter, `exit 0`s);
   `handoff_root_read "<.cwd>"` setting `HANDOFF_ROOT` and
   `HANDOFF_ROOT_BRANCH` (`inside`, `worktree`, `foreign`, `unrelated` — the last
-  two are drift) in the caller's scope, and `handoff_root()` printing the root
-  alone; every cwd-scoped hook anchors on it, an empty or project-root cwd
+  two are drift) in the caller's scope, reading the resolver's answer
+  NUL-terminated so a root holding a newline survives, and `handoff_root()`
+  printing the root alone; every cwd-scoped hook anchors on it, an empty or project-root cwd
   short-circuiting in bash and labelling its own branch;
   `HANDOFF_POINTER_DIR` (`/tmp/claude`, overridable for tests);
   `handoff_drive_read()` parsing and validating
@@ -255,7 +256,10 @@ note in `report-drive-failure.sh`.
   <session>` iff `(sentinel names a command ∧ memory directive emitted) ∨
   (driven ∧ with-commit)`, else `armed` (`hold_decision`, one value that also
   picks the arming instruction or the closing line). NFR1: no git work; the git
-  line for a moved or removed legacy file is printed, never run.
+  line for a moved or removed legacy file is printed, never run, and names the
+  paths from the top of the repository, the root's `repo_prefix` ahead of each,
+  queried only when that line is owed (the reports keep them relative to the
+  root).
 - `scripts/_checkpoint_lib.py` — `is_empty_body` (markdown's own heading
   test; read by `handoff_frame` through the `--is-empty-body` CLI, and its
   `ATX_HEADING` by the task-shape check), `memory_directive` (gated on the
@@ -267,7 +271,11 @@ note in `report-drive-failure.sh`.
   (names `TASK.md` and `TODO.md`, since nothing has staged them, and takes the
   legacy paths this call moved or removed, to lead with
   `legacy_unstage_directive`: `git rm --cached --ignore-unmatch -q -- :/<path>
-  …`, `:/` so it runs from any directory of the repository),
+  …`, `:/` so it runs from any directory of the repository, each pathspec
+  `shlex.quote`d), `repo_prefix(root)` (`git rev-parse --show-prefix`, a
+  read-only query: the root's path below the top of its repository, ending in
+  `/`, or `""` at the top, in no repository or when git fails; a submodule root
+  is the top of its own repository),
   `arming_directive`, `closing_directive(skill, typed=…)` (literal text that
   `bin/handoff-approved` repeats), `ledger_path` (liveness of a workflow-owned
   ledger — SDD identity first line, newest mtime wins), `sdd_directive` and
@@ -426,7 +434,9 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
   payloads: `handoff_frame` (called directly, never through `run`, since it
   answers in variables: which file counts, headings-only and whitespace-only
   ones not, `#tag` and a shebang yes, the reset between calls, nothing
-  printed), the `handoff_drive_read` shape matrix, `load-handoff.sh` and
+  printed; an unreadable root or legacy file is no body, nor is a library that
+  exits 2 or is missing, the latter two through a copy of `_lib.sh` sourced
+  beside a stub library), the `handoff_drive_read` shape matrix, `load-handoff.sh` and
   `load-compact.sh` (consume only their own kind in state `pending`, leave
   `armed` for the sweep, spawn nothing; the four frame states of
   `load-handoff.sh` with both channels asserted whole, the age taken from the
@@ -440,7 +450,10 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
   with the note order pinned), `report-drive-failure.sh` (the failure file,
   the stranded-`pending` clear, the sweep's note naming the mod and printing the
   lines, held-by-another-session as abandoned with no lines, a malformed file
-  with none, session-root drift episodes), the write guard (the sentinel
+  with none, session-root drift episodes), a cwd holding a newline or ending in
+  a space (`load-handoff.sh` and `report-drive-failure.sh`, at the project root
+  and in a linked worktree; the fields that follow the cwd, `source` and
+  `session_id`, pinned apart from the root), the write guard (the sentinel
   denied under every spelling that normalises onto it — a trailing slash, a
   `/.`, a `..` detour, a newline in a directory component — and when it is a
   symlink or reached through an alias, in this project and across projects;
@@ -510,17 +523,22 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
   and the closing line last; the `git rm --cached` line only under
   `with-commit`, naming only what moved or went, run from a subdirectory over a
   tracked legacy file to the staged deletion and, once the new file is added, a
-  rename, and a silent no-op over an untracked one; `autoname` touching
-  nothing); and the `HANDOFF_ROOT` refusals with the negative that a drifted cwd
-  gets nothing written. The load-bearing rows are mutation-checked:
+  rename, and a silent no-op over an untracked one, and, for a root that is a
+  subdirectory of its repository (`pkg` and `pkg dir`), the command run through
+  a shell exactly as printed from another directory taking the file out of the
+  index; `autoname` touching nothing); and the `HANDOFF_ROOT` refusals with the
+  negative that a drifted cwd gets nothing written. The load-bearing rows are
+  mutation-checked:
   `with-commit` output never mentions the trigger file, the held/armed pair over
   one fixture (never hold ⟹ the held row alone reds; hold whatever the sentinel
   names ⟹ the names-nothing row alone reds), the `(driven ∧ with-commit)`
   disjunct, and `handoff-approved`'s bare-name row; and, for the migration,
   root-wins dropped, migrating before validation, the reports after the closing
   line, the legacy file unlinked ahead of the root write, a bare pathspec in
-  place of `:/`, a root file read on `keep` with no legacy file, the symlink
-  check disabled, and the rename replaced by a copy and an unlink.
+  place of `:/`, the prefix dropped (both subdirectory rows red), the quoting
+  dropped (the spaced row alone reds), a root file read on `keep` with no
+  legacy file, the symlink check disabled, and the rename replaced by a copy
+  and an unlink.
 
 Test files live under `tests/`. The justfile recipes are one-liners that
 delegate. Add new scenarios to the existing `.bats`/`test_*.py` files rather
