@@ -19,8 +19,11 @@ dev = [
 
 [tool.pytest.ini_options]
 # worktree_root.py lives under scripts/ and is not a package; put it on sys.path
-# so `import worktree_root` resolves without a conftest hack.
-pythonpath = ["scripts"]
+# so `import worktree_root` resolves. tests/ goes on it too: with importlib
+# import mode a test file cannot otherwise `from conftest import ...` the
+# helpers that the tests/test_checkpoint_*.py files share. mypy and ty resolve
+# `conftest` from the importing file's own directory, so they need no entry.
+pythonpath = ["scripts", "tests"]
 testpaths = ["tests"]
 # `-m "not live"` deselects the mod smoke test: it needs a real claude, so it
 # cannot run in the gate (nor inside the agent's sandbox). `just mod-smoke`

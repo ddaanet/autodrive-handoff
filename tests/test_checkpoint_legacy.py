@@ -1,0 +1,1371 @@
+"""Tests for scripts/checkpoint.py (handoff-checkpoint) — the legacy path
+migration: the frame halves a 0.15 session left under `.claude/handoff-*.md`,
+read and moved at the checkpoint. This is the whole block, helpers and harness
+strings included, and it goes in one pass when the legacy fallback is retired.
+
+The helpers shared with the other tests/test_checkpoint_*.py files are in
+tests/conftest.py.
+"""
+
+import errno
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+import _checkpoint_lib as lib
+import pytest
+from conftest import (
+    CHECKPOINT,
+    _run_checkpoint_no_session_id,
+    add_sdd_ledger,
+    dirty_memory,
+    drive_state,
+    frame_payload,
+    handoff_payload,
+    make_gitlore_repo,
+    make_repo,
+    precompact_payload,
+    run_checkpoint,
+    task_clear,
+    task_content,
+    todo_clear,
+    todo_content,
+    todo_edit,
+    todo_keep,
+)
+
+pytestmark = pytest.mark.usefixtures("_session_id")
+
+
+# ==========================================================================
+# Legacy path migration
+# ==========================================================================
+#
+# 0.15.0 kept the frame under `.claude/handoff-task.md` and
+# `.claude/handoff-todo.md`; the loader reads those as a fallback and the
+# checkpoint moves them to `TASK.md` / `TODO.md`. The plan leaves the wording
+# of the checkpoint's stdout free, so this block pins only what a reader of the
+# rows needs: a report is ONE line of stdout that names the legacy path
+# (relative to the root) and carries one action word, and the git act is the
+# literal command below. The word is matched whole and without regard to case
+# (`\bmoved\b`), because "removed" contains "moved".
+
+# Mirror HANDOFF_LEGACY_REL_TASK / _TODO in scripts/_lib.sh, by hand.
+LEGACY_TASK_REL = ".claude/handoff-task.md"
+LEGACY_TODO_REL = ".claude/handoff-todo.md"
+SENTINEL_REL = ".claude/autodrive"
+
+# The action words: a rename onto the root name, an unlink of a legacy file,
+# and a legacy file left alone because the root file wins.
+MOVED = re.compile(r"\bmoved\b", re.IGNORECASE)
+REMOVED = re.compile(r"\bremoved\b", re.IGNORECASE)
+IGNORED = re.compile(r"\bignored\b", re.IGNORECASE)
+
+# The with-commit act that stages a tracked legacy path as deleted. Paths follow
+# it space-separated, each as git's top-level pathspec (`:/<rel>`) so the act
+# runs from any directory of the repository, task before todo.
+#
+# Two constraints on the implementation that these rows make:
+# - `lib.commit_directive`'s legacy-paths parameter must be optional: the rows
+#   that expect today's text call it with no argument.
+# - A legacy path named on any line other than a `git rm` line counts as a
+#   report (`report_lines`), so an act split over two lines with a path on the
+#   second one reads as a duplicate report and fails the one-report rows.
+GIT_RM = "git rm --cached --ignore-unmatch -q --"
+
+
+def git_act(*rels: str) -> str:
+    """Return the printed act for these legacy paths, in the order given."""
+    return " ".join([GIT_RM, *(f":/{rel}" for rel in rels)])
+
+
+TASK_LEGACY_BODY = "## Current task\n\nlegacy task prose\n"
+TASK_ROOT_BODY = "## Current task\n\nroot task prose\n"
+TASK_WRITTEN = "## Current task\n\nwritten task prose\n"
+TODO_LEGACY_BODY = "## Remaining\n\n- legacy item\n- second legacy item\n"
+TODO_ROOT_BODY = "## Remaining\n\n- root item\n- second root item\n"
+TODO_WRITTEN = "## Remaining\n\n- written item\n"
+HEADINGS_ONLY = "## Remaining\n"
+
+# A root file the loader's own predicate (`is_empty_body`) counts as absent.
+BODYLESS_ROOTS = {
+    "headings_only": HEADINGS_ONLY,
+    "whitespace_only": "   \n\n\t\n",
+    "empty": "",
+}
+
+# A todo action, what TODO.md must hold after it over each starting content,
+# and which report the legacy file owes. A content string over a legacy-only
+# half is a move or a removal, whichever wording the report picks.
+TODO_OVER_LEGACY = {
+    "keep": (todo_keep(), TODO_LEGACY_BODY, "moved"),
+    "edit": (
+        todo_edit("- second legacy item", "- edited item"),
+        TODO_LEGACY_BODY.replace("- second legacy item", "- edited item"),
+        "moved",
+    ),
+    "content": (todo_content(TODO_WRITTEN), TODO_WRITTEN, "moved_or_removed"),
+}
+
+# The same three actions over a root file that has a body: what it ends as.
+TODO_OVER_ROOT = {
+    "keep": (todo_keep(), TODO_ROOT_BODY),
+    "edit": (
+        todo_edit("- second root item", "- edited root item"),
+        TODO_ROOT_BODY.replace("- second root item", "- edited root item"),
+    ),
+    "content": (todo_content(TODO_WRITTEN), TODO_WRITTEN),
+}
+
+
+def read(path: Path) -> str | None:
+    """Return the file's text, or None when there is no regular file."""
+    return path.read_text() if path.is_file() else None
+
+
+def put(repo: Path, rel: str, text: str | None) -> None:
+    """Write text at rel, or leave the path alone when text is None."""
+    if text is not None:
+        (repo / rel).write_text(text)
+
+
+def snapshot(root: Path) -> dict[str, tuple[str, bytes]]:
+    """Map every path under root (`.git` aside) to its kind and bytes.
+
+    A symlink is recorded by its target and never followed, so a dangling one
+    and a directory are told apart from a file whose bytes happen to match.
+    """
+    seen: dict[str, tuple[str, bytes]] = {}
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d != ".git"]
+        for name in [*dirnames, *filenames]:
+            path = Path(dirpath) / name
+            rel = str(path.relative_to(root))
+            if path.is_symlink():
+                seen[rel] = ("link", str(path.readlink()).encode())
+            elif path.is_dir():
+                seen[rel] = ("dir", b"")
+            else:
+                seen[rel] = ("file", path.read_bytes())
+    return seen
+
+
+def migration_payload(
+    task: object, todo: object, commit: str = "without-commit"
+) -> dict[str, object]:
+    """A `handoff` payload, untyped, carrying task and todo as given."""
+    payload = frame_payload(task, todo)
+    payload["commit"] = commit
+    return payload
+
+
+def report_lines(out: str, rel: str) -> list[str]:
+    """Return the stdout lines that name rel, the git act's line aside."""
+    return [ln for ln in out.splitlines() if rel in ln and "git rm" not in ln]
+
+
+def assert_reported(out: str, rel: str, kind: str) -> None:
+    """Assert stdout carries exactly one report of rel, of the given kind.
+
+    `kind` is "moved", "removed", "moved_or_removed" or "ignored". An ignored
+    file's report never says it moved or went, and the others never say it was
+    ignored.
+    """
+    lines = report_lines(out, rel)
+    assert len(lines) == 1, f"want one line naming {rel}, got {lines!r} in {out!r}"
+    line = lines[0]
+    acts = {
+        "moved": [MOVED],
+        "removed": [REMOVED],
+        "moved_or_removed": [MOVED, REMOVED],
+    }
+    if kind == "ignored":
+        assert re.search(IGNORED, line), line
+        assert not re.search(MOVED, line), line
+        assert not re.search(REMOVED, line), line
+    else:
+        assert any(re.search(word, line) for word in acts[kind]), line
+        assert not re.search(IGNORED, line), line
+
+
+def assert_not_reported(out: str, rel: str) -> None:
+    """Assert no stdout line outside the git act names rel."""
+    assert report_lines(out, rel) == [], out
+
+
+def assert_directive_tail(
+    out: str, repo: Path, skill: str, *, typed: bool, held: bool
+) -> None:
+    """Assert the sentinel's state is the expected one and its tail ends stdout.
+
+    `held` comes from the caller's parametrization, never from the sentinel the
+    code under test wrote: a migration that forced `held` (or `armed`) would
+    otherwise pick the matching tail and pass. The one closing line, or the
+    arming line when held, is that tail.
+    """
+    state, _owner = drive_state(repo / SENTINEL_REL)
+    assert state == ("held" if held else "armed")
+    tail = lib.arming_directive() if held else lib.closing_directive(skill, typed=typed)
+    assert tail
+    assert out.endswith(tail), out
+    assert out.count(tail) == 1, out
+
+
+def ok(result: subprocess.CompletedProcess[str]) -> None:
+    """Assert a clean exit, showing stderr when it was not."""
+    assert result.returncode == 0, result.stderr
+
+
+# --- 1. effective content: the root file with a body, else the legacy one ---
+
+
+@pytest.mark.parametrize(
+    "repo_name", ["repo", "spaced dir/repo name"], ids=["plain", "spaced"]
+)
+@pytest.mark.parametrize("action", list(TODO_OVER_LEGACY))
+def test_legacy_todo_with_no_root_file_is_moved_to_the_root_name(
+    tmp_path: Path, action: str, repo_name: str
+) -> None:
+    repo = make_repo(tmp_path, repo_name)
+    put(repo, LEGACY_TODO_REL, TODO_LEGACY_BODY)
+    todo, expected, kind = TODO_OVER_LEGACY[action]
+    result = run_checkpoint(repo, migration_payload(task_clear(), todo))
+    ok(result)
+    assert read(repo / "TODO.md") == expected
+    assert not (repo / LEGACY_TODO_REL).exists()
+    assert_reported(result.stdout, LEGACY_TODO_REL, kind)
+
+
+def test_keep_moves_the_legacy_todo_with_its_modification_time(
+    tmp_path: Path,
+) -> None:
+    """The move is a rename: the loader's "saved … ago" reads this mtime.
+
+    A copy and unlink would stamp the file "now". The legacy file is dated far
+    in the past so that a same-second copy cannot match by accident, and the
+    bytes are asserted first so the row fails on an assertion, not on a missing
+    file.
+    """
+    repo = make_repo(tmp_path)
+    put(repo, LEGACY_TODO_REL, TODO_LEGACY_BODY)
+    then = 1_700_000_000_000_000_000
+    os.utime(repo / LEGACY_TODO_REL, ns=(then, then))
+    ok(run_checkpoint(repo, migration_payload(task_clear(), todo_keep())))
+    assert read(repo / "TODO.md") == TODO_LEGACY_BODY
+    assert (repo / "TODO.md").stat().st_mtime_ns == then
+
+
+def test_legacy_task_with_no_root_file_is_replaced_by_the_written_task(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    put(repo, LEGACY_TASK_REL, TASK_LEGACY_BODY)
+    result = run_checkpoint(repo, migration_payload(task_content(TASK_WRITTEN), None))
+    ok(result)
+    assert read(repo / "TASK.md") == TASK_WRITTEN
+    assert not (repo / LEGACY_TASK_REL).exists()
+    assert_reported(result.stdout, LEGACY_TASK_REL, "moved_or_removed")
+
+
+def test_both_halves_migrate_in_one_call_each_reported(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    put(repo, LEGACY_TASK_REL, TASK_LEGACY_BODY)
+    put(repo, LEGACY_TODO_REL, TODO_LEGACY_BODY)
+    payload = migration_payload(task_content(TASK_WRITTEN), todo_keep())
+    result = run_checkpoint(repo, payload)
+    ok(result)
+    assert read(repo / "TASK.md") == TASK_WRITTEN
+    assert read(repo / "TODO.md") == TODO_LEGACY_BODY
+    assert not (repo / LEGACY_TASK_REL).exists()
+    assert not (repo / LEGACY_TODO_REL).exists()
+    assert_reported(result.stdout, LEGACY_TASK_REL, "moved_or_removed")
+    assert_reported(result.stdout, LEGACY_TODO_REL, "moved")
+
+
+def test_legacy_todo_with_no_body_and_no_root_file_is_still_moved(
+    tmp_path: Path,
+) -> None:
+    """A headings-only legacy file is the effective content when root is absent.
+
+    The loader says nothing about it, so the checkpoint's report is the only
+    notice the agent gets.
+    """
+    repo = make_repo(tmp_path)
+    put(repo, LEGACY_TODO_REL, HEADINGS_ONLY)
+    result = run_checkpoint(repo, migration_payload(task_clear(), todo_keep()))
+    ok(result)
+    assert read(repo / "TODO.md") == HEADINGS_ONLY
+    assert not (repo / LEGACY_TODO_REL).exists()
+    assert_reported(result.stdout, LEGACY_TODO_REL, "moved")
+
+
+# --- 2. a root file with no body is absent, whatever sits at its path ---
+
+
+@pytest.mark.parametrize(
+    "root_before", list(BODYLESS_ROOTS.values()), ids=list(BODYLESS_ROOTS)
+)
+@pytest.mark.parametrize("action", list(TODO_OVER_LEGACY))
+def test_bodyless_root_todo_is_replaced_by_the_move(
+    tmp_path: Path, action: str, root_before: str
+) -> None:
+    repo = make_repo(tmp_path)
+    put(repo, "TODO.md", root_before)
+    put(repo, LEGACY_TODO_REL, TODO_LEGACY_BODY)
+    todo, expected, kind = TODO_OVER_LEGACY[action]
+    result = run_checkpoint(repo, migration_payload(task_clear(), todo))
+    ok(result)
+    assert read(repo / "TODO.md") == expected
+    assert not (repo / LEGACY_TODO_REL).exists()
+    assert_reported(result.stdout, LEGACY_TODO_REL, kind)
+
+
+@pytest.mark.parametrize(
+    "root_before", list(BODYLESS_ROOTS.values()), ids=list(BODYLESS_ROOTS)
+)
+def test_bodyless_root_task_is_replaced_by_the_written_task(
+    tmp_path: Path, root_before: str
+) -> None:
+    repo = make_repo(tmp_path)
+    put(repo, "TASK.md", root_before)
+    put(repo, LEGACY_TASK_REL, TASK_LEGACY_BODY)
+    result = run_checkpoint(repo, migration_payload(task_content(TASK_WRITTEN), None))
+    ok(result)
+    assert read(repo / "TASK.md") == TASK_WRITTEN
+    assert not (repo / LEGACY_TASK_REL).exists()
+    assert_reported(result.stdout, LEGACY_TASK_REL, "moved_or_removed")
+
+
+# --- 3. a root file with a body wins; the legacy file is left and reported ---
+
+
+@pytest.mark.parametrize(
+    "legacy_before",
+    [TODO_LEGACY_BODY, HEADINGS_ONLY],
+    ids=["legacy_body", "legacy_bodyless"],
+)
+@pytest.mark.parametrize("action", list(TODO_OVER_ROOT))
+def test_root_todo_with_a_body_wins_and_the_legacy_file_is_reported_ignored(
+    tmp_path: Path, action: str, legacy_before: str
+) -> None:
+    repo = make_repo(tmp_path)
+    put(repo, "TODO.md", TODO_ROOT_BODY)
+    put(repo, LEGACY_TODO_REL, legacy_before)
+    todo, expected = TODO_OVER_ROOT[action]
+    result = run_checkpoint(repo, migration_payload(task_clear(), todo))
+    ok(result)
+    assert read(repo / "TODO.md") == expected
+    assert read(repo / LEGACY_TODO_REL) == legacy_before
+    assert_reported(result.stdout, LEGACY_TODO_REL, "ignored")
+
+
+@pytest.mark.parametrize(
+    "legacy_before",
+    [TASK_LEGACY_BODY, HEADINGS_ONLY],
+    ids=["legacy_body", "legacy_bodyless"],
+)
+def test_root_task_with_a_body_wins_and_the_legacy_file_is_reported_ignored(
+    tmp_path: Path, legacy_before: str
+) -> None:
+    repo = make_repo(tmp_path)
+    put(repo, "TASK.md", TASK_ROOT_BODY)
+    put(repo, LEGACY_TASK_REL, legacy_before)
+    result = run_checkpoint(repo, migration_payload(task_content(TASK_WRITTEN), None))
+    ok(result)
+    assert read(repo / "TASK.md") == TASK_WRITTEN
+    assert read(repo / LEGACY_TASK_REL) == legacy_before
+    assert_reported(result.stdout, LEGACY_TASK_REL, "ignored")
+
+
+def test_edit_applies_to_the_root_file_never_to_the_ignored_legacy_one(
+    tmp_path: Path,
+) -> None:
+    """`old_string` lives only in the legacy file: the root file is the frame.
+
+    The refusal is the root-wins rule from the other side, and it leaves both
+    files as they were.
+    """
+    repo = make_repo(tmp_path)
+    put(repo, "TODO.md", TODO_ROOT_BODY)
+    put(repo, LEGACY_TODO_REL, TODO_LEGACY_BODY)
+    before = snapshot(repo)
+    payload = migration_payload(task_clear(), todo_edit("- second legacy item", "- x"))
+    result = run_checkpoint(repo, payload)
+    assert result.returncode == 2
+    assert "todo.old_string" in result.stderr
+    assert "not found" in result.stderr
+    assert snapshot(repo) == before
+
+
+def test_each_ignored_legacy_file_is_reported_once(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    put(repo, "TASK.md", TASK_ROOT_BODY)
+    put(repo, "TODO.md", TODO_ROOT_BODY)
+    put(repo, LEGACY_TASK_REL, TASK_LEGACY_BODY)
+    put(repo, LEGACY_TODO_REL, TODO_LEGACY_BODY)
+    before = snapshot(repo)
+    payload = migration_payload(task_content(TASK_ROOT_BODY), todo_keep())
+    result = run_checkpoint(repo, payload)
+    ok(result)
+    after = snapshot(repo)
+    after.pop(SENTINEL_REL)
+    assert after == before
+    assert_reported(result.stdout, LEGACY_TASK_REL, "ignored")
+    assert_reported(result.stdout, LEGACY_TODO_REL, "ignored")
+
+
+# --- 4. a write that leaves the root file without a body removes the legacy ---
+
+
+@pytest.mark.parametrize(
+    ("root_before", "kind"),
+    [(None, "moved_or_removed"), (TODO_ROOT_BODY, "removed")],
+    ids=["root_absent", "root_with_body"],
+)
+def test_bodyless_todo_content_removes_the_legacy_file_and_says_so(
+    tmp_path: Path, root_before: str | None, kind: str
+) -> None:
+    repo = make_repo(tmp_path)
+    put(repo, "TODO.md", root_before)
+    put(repo, LEGACY_TODO_REL, TODO_LEGACY_BODY)
+    payload = migration_payload(task_clear(), todo_content(HEADINGS_ONLY))
+    result = run_checkpoint(repo, payload)
+    ok(result)
+    assert read(repo / "TODO.md") == HEADINGS_ONLY
+    assert not (repo / LEGACY_TODO_REL).exists()
+    assert_reported(result.stdout, LEGACY_TODO_REL, kind)
+
+
+def test_edit_that_strikes_the_last_item_removes_the_legacy_file_and_says_so(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    put(repo, "TODO.md", "## Remaining\n\n- only item\n")
+    put(repo, LEGACY_TODO_REL, TODO_LEGACY_BODY)
+    payload = migration_payload(task_clear(), todo_edit("- only item\n", ""))
+    result = run_checkpoint(repo, payload)
+    ok(result)
+    assert read(repo / "TODO.md") == "## Remaining\n\n"
+    assert not (repo / LEGACY_TODO_REL).exists()
+    assert_reported(result.stdout, LEGACY_TODO_REL, "removed")
+
+
+def test_edit_that_strikes_the_last_item_of_a_legacy_only_todo_leaves_no_legacy_file(
+    tmp_path: Path,
+) -> None:
+    """The edit applies to the legacy file, then the post-write rule sees a root
+    file without a body: either way the legacy file must be gone."""
+    repo = make_repo(tmp_path)
+    put(repo, LEGACY_TODO_REL, "## Remaining\n\n- only item\n")
+    payload = migration_payload(task_clear(), todo_edit("- only item\n", ""))
+    result = run_checkpoint(repo, payload)
+    ok(result)
+    assert read(repo / "TODO.md") == "## Remaining\n\n"
+    assert not (repo / LEGACY_TODO_REL).exists()
+    assert_reported(result.stdout, LEGACY_TODO_REL, "moved_or_removed")
+
+
+@pytest.mark.parametrize(
+    ("root_before", "kind"),
+    [(None, "moved_or_removed"), (TASK_ROOT_BODY, "removed")],
+    ids=["root_absent", "root_with_body"],
+)
+def test_bodyless_task_content_removes_the_legacy_file_and_says_so(
+    tmp_path: Path, root_before: str | None, kind: str
+) -> None:
+    repo = make_repo(tmp_path)
+    put(repo, "TASK.md", root_before)
+    put(repo, LEGACY_TASK_REL, TASK_LEGACY_BODY)
+    headings = "## Current task\n"
+    result = run_checkpoint(repo, migration_payload(task_content(headings), None))
+    ok(result)
+    assert read(repo / "TASK.md") == headings
+    assert not (repo / LEGACY_TASK_REL).exists()
+    assert_reported(result.stdout, LEGACY_TASK_REL, kind)
+
+
+# --- 5. clear, and precompact's task removal, take the legacy file too ---
+
+
+@pytest.mark.parametrize(
+    "root_before", [None, TODO_ROOT_BODY], ids=["root_absent", "root_with_body"]
+)
+def test_todo_clear_removes_the_legacy_file_too_and_says_so(
+    tmp_path: Path, root_before: str | None
+) -> None:
+    repo = make_repo(tmp_path)
+    put(repo, "TODO.md", root_before)
+    put(repo, LEGACY_TODO_REL, TODO_LEGACY_BODY)
+    result = run_checkpoint(repo, migration_payload(task_clear(), todo_clear()))
+    ok(result)
+    assert not (repo / "TODO.md").exists()
+    assert not (repo / LEGACY_TODO_REL).exists()
+    assert_reported(result.stdout, LEGACY_TODO_REL, "removed")
+
+
+@pytest.mark.parametrize(
+    "root_before", [None, TASK_ROOT_BODY], ids=["root_absent", "root_with_body"]
+)
+def test_task_clear_removes_the_legacy_file_too_and_says_so(
+    tmp_path: Path, root_before: str | None
+) -> None:
+    repo = make_repo(tmp_path)
+    put(repo, "TASK.md", root_before)
+    put(repo, LEGACY_TASK_REL, TASK_LEGACY_BODY)
+    result = run_checkpoint(repo, migration_payload(task_clear(), todo_keep()))
+    ok(result)
+    assert not (repo / "TASK.md").exists()
+    assert not (repo / LEGACY_TASK_REL).exists()
+    assert_reported(result.stdout, LEGACY_TASK_REL, "removed")
+
+
+def test_clear_with_no_legacy_file_says_nothing_about_one(tmp_path: Path) -> None:
+    """The clear rows' negative: the root file goes, no legacy line appears.
+
+    Its positive is the pair of rows above, over the same root fixture.
+    """
+    repo = make_repo(tmp_path)
+    put(repo, "TASK.md", TASK_ROOT_BODY)
+    put(repo, "TODO.md", TODO_ROOT_BODY)
+    result = run_checkpoint(repo, migration_payload(task_clear(), todo_clear()))
+    ok(result)
+    assert not (repo / "TASK.md").exists()
+    assert not (repo / "TODO.md").exists()
+    assert_not_reported(result.stdout, LEGACY_TASK_REL)
+    assert_not_reported(result.stdout, LEGACY_TODO_REL)
+
+
+@pytest.mark.parametrize(
+    "root_before", [None, TASK_ROOT_BODY], ids=["root_absent", "root_with_body"]
+)
+def test_precompact_task_removal_takes_the_legacy_task_file_too(
+    tmp_path: Path, root_before: str | None
+) -> None:
+    repo = make_repo(tmp_path)
+    put(repo, "TASK.md", root_before)
+    put(repo, LEGACY_TASK_REL, TASK_LEGACY_BODY)
+    result = run_checkpoint(repo, precompact_payload("without-commit"))
+    ok(result)
+    assert not (repo / "TASK.md").exists()
+    assert not (repo / LEGACY_TASK_REL).exists()
+    assert_reported(result.stdout, LEGACY_TASK_REL, "removed")
+
+
+@pytest.mark.parametrize("action", ["keep", "content"])
+def test_precompact_carries_a_legacy_todo_by_the_todo_rules(
+    tmp_path: Path, action: str
+) -> None:
+    repo = make_repo(tmp_path)
+    put(repo, LEGACY_TODO_REL, TODO_LEGACY_BODY)
+    todo, expected, kind = TODO_OVER_LEGACY[action]
+    result = run_checkpoint(repo, precompact_payload("without-commit", todo))
+    ok(result)
+    assert read(repo / "TODO.md") == expected
+    assert not (repo / LEGACY_TODO_REL).exists()
+    assert_reported(result.stdout, LEGACY_TODO_REL, kind)
+
+
+# --- 6. a rejected payload leaves every file as it was, and moves nothing ---
+
+# A prose task and a keep: both legacy files would go (the task is rewritten,
+# the todo moves) if the call succeeded. Each case spoils one thing, names
+# what stderr must say (so the refusal is for that reason and not another),
+# and says whether the bad run has a session id. The fixed run then proves the
+# same fixture migrates once the spoiled thing is right.
+REJECTIONS = [
+    pytest.param({"bogus": 1}, {}, "bogus", True, id="schema_error"),
+    pytest.param(
+        {"task": "## Current task\n\n- a list item\n"},
+        {},
+        "list item",
+        True,
+        id="task_shape_error",
+    ),
+    pytest.param(
+        {"todo": todo_edit("- missing item", "- x")},
+        {"todo": todo_edit("- second legacy item", "- x")},
+        "not found",
+        True,
+        id="edit_old_string_absent",
+    ),
+    pytest.param(
+        {"todo": todo_edit("legacy item", "- x")},
+        {"todo": todo_edit("- second legacy item", "- x")},
+        "ambiguous",
+        True,
+        id="edit_old_string_ambiguous",
+    ),
+    pytest.param(
+        {"clear": True, "commit": "with-commit"},
+        {"clear": True, "commit": "with-commit"},
+        "CLAUDE_CODE_SESSION_ID",
+        False,
+        id="held_without_a_session_id",
+    ),
+]
+
+
+@pytest.mark.parametrize(("spoiled", "fixed", "stderr_says", "has_session"), REJECTIONS)
+def test_a_rejected_payload_moves_nothing_and_the_fixed_one_migrates(
+    tmp_path: Path,
+    spoiled: dict[str, object],
+    fixed: dict[str, object],
+    stderr_says: str,
+    *,
+    has_session: bool,
+) -> None:
+    repo = make_repo(tmp_path)
+    put(repo, LEGACY_TASK_REL, TASK_LEGACY_BODY)
+    put(repo, LEGACY_TODO_REL, TODO_LEGACY_BODY)
+    before = snapshot(repo)
+    base = migration_payload(task_content(TASK_WRITTEN), todo_keep())
+    run = run_checkpoint if has_session else _run_checkpoint_no_session_id
+    rejected = run(repo, {**base, **spoiled})
+    assert rejected.returncode != 0
+    assert stderr_says in rejected.stderr
+    assert snapshot(repo) == before
+    accepted = run_checkpoint(repo, {**base, **fixed})
+    ok(accepted)
+    assert read(repo / "TASK.md") == TASK_WRITTEN
+    assert read(repo / "TODO.md") is not None
+    assert not (repo / LEGACY_TASK_REL).exists()
+    assert not (repo / LEGACY_TODO_REL).exists()
+
+
+def test_a_failing_todo_edit_does_not_remove_a_legacy_task_the_task_half_would(
+    tmp_path: Path,
+) -> None:
+    """The task half resolves first and would remove its legacy file.
+
+    Nothing moves unless BOTH halves resolve: the todo half's refusal, which
+    comes second, leaves the legacy task in place.
+    """
+    repo = make_repo(tmp_path)
+    put(repo, "TASK.md", TASK_ROOT_BODY)
+    put(repo, LEGACY_TASK_REL, TASK_LEGACY_BODY)
+    put(repo, "TODO.md", TODO_ROOT_BODY)
+    before = snapshot(repo)
+    payload = migration_payload(task_clear(), todo_edit("- missing item", "- x"))
+    result = run_checkpoint(repo, payload)
+    assert result.returncode == 2
+    assert "not found" in result.stderr
+    assert snapshot(repo) == before
+    payload["todo"] = todo_keep()
+    ok(run_checkpoint(repo, payload))
+    assert not (repo / "TASK.md").exists()
+    assert not (repo / LEGACY_TASK_REL).exists()
+
+
+# --- 7. stdout: the reports, then the directive parts, the closing line last ---
+
+
+@pytest.mark.parametrize("commit", ["without-commit", "with-commit"])
+@pytest.mark.parametrize("typed", [False, True], ids=["untyped", "typed"])
+@pytest.mark.parametrize("skill", ["handoff", "precompact"])
+def test_reports_come_first_and_the_tail_stays_last(
+    tmp_path: Path, skill: str, *, typed: bool, commit: str
+) -> None:
+    repo = make_gitlore_repo(tmp_path)
+    put(repo, LEGACY_TASK_REL, TASK_LEGACY_BODY)
+    put(repo, LEGACY_TODO_REL, TODO_LEGACY_BODY)
+    if skill == "handoff":
+        payload = handoff_payload(commit)
+        payload["clear"] = typed
+    else:
+        payload = precompact_payload(commit)
+        payload["compact"] = typed
+    result = run_checkpoint(repo, payload)
+    ok(result)
+    out = result.stdout
+    assert_reported(out, LEGACY_TASK_REL, "removed")
+    assert_reported(out, LEGACY_TODO_REL, "moved")
+    # Held iff the transition is carried out and the commit is owed (the
+    # memory submodule is clean, so no memory directive holds it).
+    held = typed and commit == "with-commit"
+    assert_directive_tail(out, repo, skill, typed=typed, held=held)
+    reports = [
+        ln
+        for rel in (LEGACY_TASK_REL, LEGACY_TODO_REL)
+        for ln in report_lines(out, rel)
+    ]
+    last_report = max(out.index(ln) for ln in reports)
+    assert last_report < out.rindex("Once everything above is done")
+
+
+def test_reports_precede_every_directive_part(tmp_path: Path) -> None:
+    repo = make_gitlore_repo(tmp_path)
+    dirty_memory(repo)
+    add_sdd_ledger(repo)
+    put(repo, LEGACY_TASK_REL, TASK_LEGACY_BODY)
+    put(repo, LEGACY_TODO_REL, TODO_LEGACY_BODY)
+    result = run_checkpoint(repo, handoff_payload("with-commit"))
+    ok(result)
+    out = result.stdout
+    assert_reported(out, LEGACY_TASK_REL, "removed")
+    assert_reported(out, LEGACY_TODO_REL, "moved")
+    boundary = lib.todo_boundary(str(repo))
+    assert boundary
+    parts = [
+        "gitlore memory has uncommitted changes",
+        boundary.rstrip("\n"),
+        "make the commit the request called for",
+    ]
+    reports = [
+        ln
+        for rel in (LEGACY_TASK_REL, LEGACY_TODO_REL)
+        for ln in report_lines(out, rel)
+    ]
+    assert max(out.index(ln) for ln in reports) < min(out.index(p) for p in parts)
+    # Untyped, but the sentinel names `/rename` and the memory directive is
+    # emitted: held, whatever the migration did.
+    assert_directive_tail(out, repo, "handoff", typed=False, held=True)
+
+
+@pytest.mark.parametrize("commit", ["without-commit", "with-commit"])
+def test_reports_and_the_git_rm_act_print_ahead_of_the_clause_file_refusal(
+    tmp_path: Path, commit: str
+) -> None:
+    """The refusal still prints last; the migration it follows is not dropped.
+
+    The files are written before the refusal prints, so on a retry there is
+    nothing legacy left and the agent would never be told of the move. The
+    reports, and the git act under with-commit, therefore precede the refusal.
+    """
+    repo = make_gitlore_repo(tmp_path)
+    dirty_memory(repo)
+    subprocess.run(
+        ["git", "config", "--unset", "gitlore.memoryApprovalClauseFile"],
+        cwd=repo,
+        check=True,
+    )
+    put(repo, LEGACY_TODO_REL, TODO_LEGACY_BODY)
+    refusal = lib.memory_directive(str(repo), commit)
+    assert refusal.refusal
+    result = run_checkpoint(repo, handoff_payload(commit))
+    ok(result)
+    out = result.stdout
+    assert read(repo / "TODO.md") == TODO_LEGACY_BODY
+    assert not (repo / LEGACY_TODO_REL).exists()
+    assert_reported(out, LEGACY_TODO_REL, "moved")
+    assert out.endswith(refusal.text)
+    assert out.count(refusal.text) == 1
+    report_at = out.index(report_lines(out, LEGACY_TODO_REL)[0])
+    if commit == "with-commit":
+        act = git_act(LEGACY_TODO_REL)
+        assert report_at < out.index(act) < out.index(refusal.text)
+    else:
+        assert "git rm" not in out
+        assert report_at < out.index(refusal.text)
+
+
+@pytest.mark.parametrize("skill", ["handoff", "precompact"])
+@pytest.mark.parametrize("commit", ["without-commit", "with-commit"])
+@pytest.mark.parametrize("typed", [False, True], ids=["untyped", "typed"])
+def test_stdout_with_no_legacy_file_anywhere_is_what_it_was(
+    tmp_path: Path, skill: str, commit: str, *, typed: bool
+) -> None:
+    """The commit act, when owed, then the one tail line; nothing else.
+
+    Its positive is every migrating row above: the same call over a legacy file
+    adds the reports.
+    """
+    repo = make_gitlore_repo(tmp_path)
+    if skill == "handoff":
+        payload = handoff_payload(commit)
+        payload["clear"] = typed
+    else:
+        payload = precompact_payload(commit)
+        payload["compact"] = typed
+    result = run_checkpoint(repo, payload)
+    ok(result)
+    held = typed and commit == "with-commit"
+    state, _owner = drive_state(repo / SENTINEL_REL)
+    assert state == ("held" if held else "armed")
+    tail = lib.arming_directive() if held else lib.closing_directive(skill, typed=typed)
+    commit_act = lib.commit_directive().rstrip("\n") + "\n\n"
+    expected = (commit_act if commit == "with-commit" else "") + tail
+    assert result.stdout == expected
+
+
+# --- 8. the with-commit act that stages a tracked legacy path as deleted ---
+
+
+@pytest.mark.parametrize("skill", ["handoff", "precompact"])
+@pytest.mark.parametrize("with_legacy", [True, False], ids=["legacy", "no_legacy"])
+@pytest.mark.parametrize("commit", ["without-commit", "with-commit"])
+def test_git_rm_act_is_owed_only_to_with_commit_over_a_legacy_file(
+    tmp_path: Path, commit: str, *, with_legacy: bool, skill: str
+) -> None:
+    repo = make_gitlore_repo(tmp_path)
+    if with_legacy:
+        put(repo, LEGACY_TASK_REL, TASK_LEGACY_BODY)
+        put(repo, LEGACY_TODO_REL, TODO_LEGACY_BODY)
+    payload = (
+        handoff_payload(commit) if skill == "handoff" else precompact_payload(commit)
+    )
+    result = run_checkpoint(repo, payload)
+    ok(result)
+    out = result.stdout
+    if with_legacy and commit == "with-commit":
+        act = git_act(LEGACY_TASK_REL, LEGACY_TODO_REL)
+        assert act in out
+        assert out.index(act) < out.rindex("Once everything above is done")
+    else:
+        assert "git rm" not in out
+        assert "--ignore-unmatch" not in out
+
+
+def git_status_lines(repo: Path) -> list[str]:
+    """Return `git status --porcelain` as lines."""
+    result = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return result.stdout.splitlines()
+
+
+def run_printed_git_rm(repo: Path, out: str) -> None:
+    """Run the git act stdout prints, from a subdirectory of the repository.
+
+    The agent's Bash cwd persists across calls and is anywhere under the root,
+    so the act must work from there: a pathspec relative to the cwd matches
+    nothing and `--ignore-unmatch -q` hides it. The wording around the act is
+    free; the command is what the line holds between backticks, and it is run
+    through a shell exactly as printed, quoting included.
+    """
+    line = next(ln for ln in out.splitlines() if GIT_RM in ln)
+    command = line[line.index(GIT_RM) :]
+    command = command[: command.index("`")]
+    assert command.removeprefix(GIT_RM).strip(), line
+    sub = repo / "sub"
+    sub.mkdir(exist_ok=True)
+    subprocess.run(["bash", "-c", command], cwd=sub, check=True)
+
+
+@pytest.mark.parametrize("commit", ["without-commit", "with-commit"])
+def test_checkpoint_leaves_a_tracked_legacy_file_to_the_printed_git_act(
+    tmp_path: Path, commit: str
+) -> None:
+    """NFR1: the checkpoint renames on the filesystem and stages nothing.
+
+    The legacy file is tracked, as it is in most repositories: the index is
+    untouched (` D`, not `D `) whatever the commit mode, so git work cannot hide
+    behind an untracked fixture. Under with-commit, running the printed act and
+    adding the root file is what makes git record a rename.
+    """
+    repo = make_repo(tmp_path)
+    put(repo, LEGACY_TODO_REL, TODO_LEGACY_BODY)
+    git = ["git", "-c", "user.email=t@t", "-c", "user.name=t"]
+    subprocess.run([*git, "add", "-f", LEGACY_TODO_REL], cwd=repo, check=True)
+    subprocess.run([*git, "commit", "-qm", "seed"], cwd=repo, check=True)
+    result = run_checkpoint(repo, migration_payload(task_clear(), todo_keep(), commit))
+    ok(result)
+    assert read(repo / "TODO.md") == TODO_LEGACY_BODY
+    status = git_status_lines(repo)
+    assert f" D {LEGACY_TODO_REL}" in status, status
+    assert "?? TODO.md" in status, status
+    if commit == "with-commit":
+        run_printed_git_rm(repo, result.stdout)
+        status = git_status_lines(repo)
+        assert f"D  {LEGACY_TODO_REL}" in status, status
+        subprocess.run(["git", "add", "TODO.md"], cwd=repo, check=True)
+        status = git_status_lines(repo)
+        assert f"R  {LEGACY_TODO_REL} -> TODO.md" in status, status
+
+
+def test_printed_git_act_over_an_untracked_legacy_file_is_a_silent_no_op(
+    tmp_path: Path,
+) -> None:
+    """The act does not ask which legacy files are tracked: untracked is rc 0.
+
+    Its positive is the tracked row above, the same call over a tracked file,
+    where the act stages the deletion from the same subdirectory.
+    """
+    repo = make_repo(tmp_path)
+    put(repo, LEGACY_TODO_REL, TODO_LEGACY_BODY)
+    result = run_checkpoint(
+        repo, migration_payload(task_clear(), todo_keep(), "with-commit")
+    )
+    ok(result)
+    assert read(repo / "TODO.md") == TODO_LEGACY_BODY
+    before = git_status_lines(repo)
+    run_printed_git_rm(repo, result.stdout)
+    assert git_status_lines(repo) == before
+
+
+@pytest.mark.parametrize("below", ["pkg", "pkg dir"], ids=["plain", "spaced"])
+def test_printed_git_act_reaches_a_root_below_the_top_of_its_repository(
+    tmp_path: Path, below: str
+) -> None:
+    """The root is a subdirectory of a larger repository, not its toplevel.
+
+    `:/` anchors at the top of the repository, so each pathspec carries the
+    root's own prefix: without it the act names a path beside the root's, which
+    `--ignore-unmatch -q` passes over in silence, and the legacy file stays in
+    the index. The spaced row is the prefix reaching the line quoted.
+    """
+    repo = make_repo(tmp_path)
+    root = repo / below
+    (root / ".claude").mkdir(parents=True)
+    put(root, LEGACY_TODO_REL, TODO_LEGACY_BODY)
+    tracked = f"{below}/{LEGACY_TODO_REL}"
+    git = ["git", "-c", "user.email=t@t", "-c", "user.name=t"]
+    subprocess.run([*git, "add", "-f", tracked], cwd=repo, check=True)
+    subprocess.run([*git, "commit", "-qm", "seed"], cwd=repo, check=True)
+    payload = migration_payload(task_clear(), todo_keep(), "with-commit")
+    result = run_checkpoint(repo, payload, root)
+    ok(result)
+    assert read(root / "TODO.md") == TODO_LEGACY_BODY
+    assert_reported(result.stdout, LEGACY_TODO_REL, "moved")
+
+    def in_index() -> str:
+        listing = ["git", "ls-files", "-z", "--", tracked]
+        return subprocess.run(
+            listing, cwd=repo, capture_output=True, text=True, check=True
+        ).stdout
+
+    assert in_index() == f"{tracked}\0"
+    run_printed_git_rm(repo, result.stdout)
+    assert in_index() == ""
+
+
+def test_git_rm_act_names_only_the_files_that_moved_or_went(tmp_path: Path) -> None:
+    """The task's legacy file is ignored (root wins): it is not a target."""
+    repo = make_gitlore_repo(tmp_path)
+    put(repo, "TASK.md", TASK_ROOT_BODY)
+    put(repo, LEGACY_TASK_REL, TASK_LEGACY_BODY)
+    put(repo, LEGACY_TODO_REL, TODO_LEGACY_BODY)
+    payload = migration_payload(task_content(TASK_WRITTEN), todo_keep(), "with-commit")
+    result = run_checkpoint(repo, payload)
+    ok(result)
+    assert_reported(result.stdout, LEGACY_TASK_REL, "ignored")
+    assert_reported(result.stdout, LEGACY_TODO_REL, "moved")
+    lines = [ln for ln in result.stdout.splitlines() if "git rm" in ln]
+    assert len(lines) == 1, result.stdout
+    assert git_act(LEGACY_TODO_REL) in lines[0]
+    assert LEGACY_TASK_REL not in lines[0]
+
+
+def test_git_rm_act_is_not_owed_to_a_legacy_file_that_is_only_ignored(
+    tmp_path: Path,
+) -> None:
+    repo = make_gitlore_repo(tmp_path)
+    put(repo, "TASK.md", TASK_ROOT_BODY)
+    put(repo, "TODO.md", TODO_ROOT_BODY)
+    put(repo, LEGACY_TASK_REL, TASK_LEGACY_BODY)
+    put(repo, LEGACY_TODO_REL, TODO_LEGACY_BODY)
+    payload = migration_payload(
+        task_content(TASK_ROOT_BODY), todo_keep(), "with-commit"
+    )
+    result = run_checkpoint(repo, payload)
+    ok(result)
+    assert_reported(result.stdout, LEGACY_TASK_REL, "ignored")
+    assert_reported(result.stdout, LEGACY_TODO_REL, "ignored")
+    assert "git rm" not in result.stdout
+
+
+# --- 9. what is not a legacy file, and what cannot be written to ---
+
+
+def make_legacy_of_kind(repo: Path, rel: str, kind: str) -> None:
+    """Put a regular file, a directory or a dangling symlink at rel."""
+    path = repo / rel
+    if kind == "file":
+        path.write_text(TODO_LEGACY_BODY)
+    elif kind == "dir":
+        path.mkdir()
+    else:
+        path.symlink_to("nowhere.md")
+
+
+@pytest.mark.parametrize(
+    "root_before", [None, TODO_ROOT_BODY], ids=["root_absent", "root_with_body"]
+)
+@pytest.mark.parametrize("kind", ["file", "dir", "dangling_symlink"])
+def test_only_a_regular_file_at_the_legacy_path_counts(
+    tmp_path: Path, kind: str, root_before: str | None
+) -> None:
+    repo = make_repo(tmp_path)
+    put(repo, "TODO.md", root_before)
+    make_legacy_of_kind(repo, LEGACY_TODO_REL, kind)
+    before = snapshot(repo)
+    result = run_checkpoint(repo, migration_payload(task_clear(), todo_keep()))
+    ok(result)
+    after = snapshot(repo)
+    after.pop(SENTINEL_REL)
+    if kind == "file":
+        assert read(repo / "TODO.md") == (root_before or TODO_LEGACY_BODY)
+        assert_reported(
+            result.stdout, LEGACY_TODO_REL, "ignored" if root_before else "moved"
+        )
+        assert (LEGACY_TODO_REL in after) == bool(root_before)
+    else:
+        assert after == before
+        assert result.stdout == lib.closing_directive("handoff", typed=False)
+
+
+@pytest.mark.parametrize("action", ["keep", "edit", "content"])
+def test_todo_directory_with_a_legacy_body_is_refused_not_a_traceback(
+    tmp_path: Path, action: str
+) -> None:
+    repo = make_repo(tmp_path)
+    (repo / "TODO.md").mkdir()
+    put(repo, LEGACY_TODO_REL, TODO_LEGACY_BODY)
+    put(repo, LEGACY_TASK_REL, TASK_LEGACY_BODY)
+    before = snapshot(repo)
+    todo, _expected, _kind = TODO_OVER_LEGACY[action]
+    payload = migration_payload(task_content(TASK_WRITTEN), todo)
+    result = run_checkpoint(repo, payload)
+    assert result.returncode != 0
+    assert "Traceback" not in result.stderr
+    assert "TODO.md" in result.stderr
+    assert "directory" in result.stderr.lower()
+    assert snapshot(repo) == before
+
+
+def test_task_directory_with_a_legacy_body_is_refused_not_a_traceback(
+    tmp_path: Path,
+) -> None:
+    repo = make_repo(tmp_path)
+    (repo / "TASK.md").mkdir()
+    put(repo, LEGACY_TASK_REL, TASK_LEGACY_BODY)
+    put(repo, LEGACY_TODO_REL, TODO_LEGACY_BODY)
+    before = snapshot(repo)
+    result = run_checkpoint(
+        repo, migration_payload(task_content(TASK_WRITTEN), todo_keep())
+    )
+    assert result.returncode != 0
+    assert "Traceback" not in result.stderr
+    assert "TASK.md" in result.stderr
+    assert "directory" in result.stderr.lower()
+    assert snapshot(repo) == before
+
+
+@pytest.mark.parametrize("half", ["todo", "task"])
+def test_clear_over_a_directory_with_a_legacy_file_is_refused_naming_it(
+    tmp_path: Path, half: str
+) -> None:
+    """The refusal holds when the action removes rather than moves.
+
+    The message names the path and says it is a directory; it does not claim a
+    move, which a `clear` is not. Its positive is the rows above, the same
+    fixture under the actions that move or write.
+    """
+    repo = make_repo(tmp_path)
+    root_rel, legacy_rel, legacy_body = {
+        "todo": ("TODO.md", LEGACY_TODO_REL, TODO_LEGACY_BODY),
+        "task": ("TASK.md", LEGACY_TASK_REL, TASK_LEGACY_BODY),
+    }[half]
+    (repo / root_rel).mkdir()
+    put(repo, legacy_rel, legacy_body)
+    before = snapshot(repo)
+    payload = migration_payload(
+        task_clear(), todo_clear() if half == "todo" else todo_keep()
+    )
+    result = run_checkpoint(repo, payload)
+    assert result.returncode != 0
+    assert "Traceback" not in result.stderr
+    assert root_rel in result.stderr
+    assert "directory" in result.stderr.lower()
+    assert snapshot(repo) == before
+
+
+# --- 10. a second call finds nothing left to move ---
+
+
+def test_a_second_identical_call_changes_and_reports_nothing(tmp_path: Path) -> None:
+    repo = make_gitlore_repo(tmp_path)
+    put(repo, LEGACY_TODO_REL, TODO_LEGACY_BODY)
+    payload = migration_payload(task_clear(), todo_keep(), "with-commit")
+    first = run_checkpoint(repo, payload)
+    ok(first)
+    assert read(repo / "TODO.md") == TODO_LEGACY_BODY
+    assert not (repo / LEGACY_TODO_REL).exists()
+    settled = snapshot(repo)
+    second = run_checkpoint(repo, payload)
+    ok(second)
+    assert snapshot(repo) == settled
+    assert_not_reported(second.stdout, LEGACY_TODO_REL)
+    assert "git rm" not in second.stdout
+
+
+# --- 11. autoname is a rename only: it never touches the frame files ---
+
+
+@pytest.mark.parametrize(
+    "root_before", [None, TODO_ROOT_BODY], ids=["root_absent", "root_with_body"]
+)
+def test_autoname_leaves_legacy_files_alone_and_reports_nothing(
+    tmp_path: Path, root_before: str | None
+) -> None:
+    """Its positive is the same legacy fixture under `handoff`: moved there when
+    no root file counts, reported ignored when one does."""
+    repo = make_repo(tmp_path)
+    put(repo, "TODO.md", root_before)
+    put(repo, LEGACY_TASK_REL, TASK_LEGACY_BODY)
+    put(repo, LEGACY_TODO_REL, TODO_LEGACY_BODY)
+    before = snapshot(repo)
+    result = run_checkpoint(repo, {"skill": "autoname", "rename": "T"})
+    ok(result)
+    after = snapshot(repo)
+    after.pop(SENTINEL_REL)
+    assert after == before
+    assert_not_reported(result.stdout, LEGACY_TASK_REL)
+    assert_not_reported(result.stdout, LEGACY_TODO_REL)
+
+
+# --- 12. a failed root write leaves the legacy file where it was ---
+
+NOT_ROOT = pytest.mark.skipif(
+    os.geteuid() == 0, reason="root ignores file modes, so no write fails"
+)
+
+# Each case: the root file's name, its legacy rel and body, a headings-only
+# root file the write cannot open, and the task and todo that reach it.
+FAILING_WRITES = {
+    "todo_edit": (
+        "TODO.md",
+        LEGACY_TODO_REL,
+        TODO_LEGACY_BODY,
+        HEADINGS_ONLY,
+        task_clear(),
+        todo_edit("- second legacy item", "- c"),
+    ),
+    "todo_content": (
+        "TODO.md",
+        LEGACY_TODO_REL,
+        TODO_LEGACY_BODY,
+        HEADINGS_ONLY,
+        task_clear(),
+        todo_content(TODO_WRITTEN),
+    ),
+    "task_content": (
+        "TASK.md",
+        LEGACY_TASK_REL,
+        TASK_LEGACY_BODY,
+        "## Current task\n",
+        task_content(TASK_WRITTEN),
+        todo_keep(),
+    ),
+}
+
+
+@NOT_ROOT
+@pytest.mark.parametrize("case", list(FAILING_WRITES))
+def test_a_root_write_that_fails_leaves_the_legacy_file_as_it_was(
+    tmp_path: Path, case: str
+) -> None:
+    """The legacy file goes only once the root file holds its bytes.
+
+    The root file has no body, so the legacy file is the half's content, and
+    the write to the root name fails (mode 444, standing in for any failure).
+    Taking the legacy file off its path first would leave the content nowhere:
+    the loader would say `No todo`. Its positive is the rows that move or
+    replace the legacy file when the write succeeds.
+    """
+    root_rel, legacy_rel, legacy_body, bodyless, task, todo = FAILING_WRITES[case]
+    repo = make_repo(tmp_path)
+    put(repo, legacy_rel, legacy_body)
+    put(repo, root_rel, bodyless)
+    (repo / root_rel).chmod(0o444)
+    before = snapshot(repo)
+    result = run_checkpoint(repo, migration_payload(task, todo))
+    assert result.returncode != 0
+    assert read(repo / legacy_rel) == legacy_body
+    assert snapshot(repo) == before
+
+
+# --- 13. a root file the call does not touch is not read either ---
+
+
+@NOT_ROOT
+@pytest.mark.parametrize("todo_action", ["keep", "clear"])
+def test_root_files_that_cannot_be_read_stay_unread_with_no_legacy_file(
+    tmp_path: Path, todo_action: str
+) -> None:
+    """No legacy file anywhere: the call behaves as it did before migration.
+
+    `keep` neither reads nor stats the list, and `clear` only unlinks, so a mode
+    000 file is no reason to fail either. Its positive is the same call over a
+    legacy file, where the root file is read to tell whether it has a body.
+    """
+    repo = make_repo(tmp_path)
+    put(repo, "TASK.md", TASK_ROOT_BODY)
+    put(repo, "TODO.md", TODO_ROOT_BODY)
+    then = 1_700_000_000_000_000_000
+    os.utime(repo / "TODO.md", ns=(then, then))
+    (repo / "TASK.md").chmod(0o000)
+    (repo / "TODO.md").chmod(0o000)
+    todo = todo_keep() if todo_action == "keep" else todo_clear()
+    result = run_checkpoint(repo, migration_payload(task_clear(), todo))
+    ok(result)
+    assert not (repo / "TASK.md").exists()
+    if todo_action == "clear":
+        assert not (repo / "TODO.md").exists()
+    else:
+        assert (repo / "TODO.md").stat().st_mode & 0o777 == 0
+        assert (repo / "TODO.md").stat().st_mtime_ns == then
+        (repo / "TODO.md").chmod(0o644)
+        assert read(repo / "TODO.md") == TODO_ROOT_BODY
+
+
+# --- 14. a legacy path that is a symlink to a file is refused ---
+
+# A symlink at the legacy path resolves from its own directory, so renaming it
+# onto the root name leaves a link that points nowhere (a relative target) or
+# reads through to a file the checkpoint does not own. It is refused like a
+# directory at the root path. A dangling one holds no file and is no legacy
+# file at all (`test_only_a_regular_file_at_the_legacy_path_counts`).
+
+
+def make_symlinked_legacy(repo: Path, rel: str, body: str, *, relative: bool) -> None:
+    """Link rel to a file under `notes/`, by a relative or an absolute path."""
+    target = repo / "notes" / "elsewhere.md"
+    target.parent.mkdir()
+    target.write_text(body)
+    link = repo / rel
+    link.symlink_to(os.path.relpath(target, link.parent) if relative else target)
+
+
+@pytest.mark.parametrize("relative", [True, False], ids=["relative", "absolute"])
+@pytest.mark.parametrize("action", ["keep", "edit", "content", "clear"])
+def test_todo_symlinked_at_the_legacy_path_is_refused_and_nothing_moves(
+    tmp_path: Path, action: str, *, relative: bool
+) -> None:
+    """Refused whole: the task half's legacy file stays too.
+
+    Its positive is `test_legacy_todo_with_no_root_file_is_moved_to_the_root_name`,
+    the same call over a regular file at the same path.
+    """
+    todo = {
+        "keep": todo_keep(),
+        "edit": todo_edit("- second legacy item", "- c"),
+        "content": todo_content(TODO_WRITTEN),
+        "clear": todo_clear(),
+    }[action]
+    repo = make_repo(tmp_path)
+    make_symlinked_legacy(repo, LEGACY_TODO_REL, TODO_LEGACY_BODY, relative=relative)
+    put(repo, LEGACY_TASK_REL, TASK_LEGACY_BODY)
+    before = snapshot(repo)
+    result = run_checkpoint(repo, migration_payload(task_content(TASK_WRITTEN), todo))
+    assert result.returncode != 0
+    assert "Traceback" not in result.stderr
+    assert LEGACY_TODO_REL in result.stderr
+    assert snapshot(repo) == before
+
+
+@pytest.mark.parametrize("relative", [True, False], ids=["relative", "absolute"])
+@pytest.mark.parametrize("action", ["content", "clear"])
+def test_task_symlinked_at_the_legacy_path_is_refused_and_nothing_moves(
+    tmp_path: Path, action: str, *, relative: bool
+) -> None:
+    """Its positive: the written task replacing a regular legacy task file."""
+    task = task_content(TASK_WRITTEN) if action == "content" else task_clear()
+    repo = make_repo(tmp_path)
+    make_symlinked_legacy(repo, LEGACY_TASK_REL, TASK_LEGACY_BODY, relative=relative)
+    put(repo, LEGACY_TODO_REL, TODO_LEGACY_BODY)
+    before = snapshot(repo)
+    result = run_checkpoint(repo, migration_payload(task, todo_keep()))
+    assert result.returncode != 0
+    assert "Traceback" not in result.stderr
+    assert LEGACY_TASK_REL in result.stderr
+    assert snapshot(repo) == before
+
+
+# --- 15. a move survives a rename across devices ---
+
+# A cross-device rename cannot be provoked portably, so the harness makes every
+# rename or replace of a path under `.claude/handoff-` raise EXDEV, as the
+# kernel does when `.claude` is another mount, and runs checkpoint.py under it.
+CROSS_DEVICE_HARNESS = """\
+import errno
+import os
+import runpy
+import sys
+
+real = {"rename": os.rename, "replace": os.replace}
+
+
+def across_devices(name):
+    def move(src, dst, *args, **kwargs):
+        if ".claude/handoff-" in os.fspath(src):
+            raise OSError(errno.EXDEV, os.strerror(errno.EXDEV), src, None, dst)
+        return real[name](src, dst, *args, **kwargs)
+
+    return move
+
+
+os.rename = across_devices("rename")
+os.replace = across_devices("replace")
+script = sys.argv[1]
+sys.path.insert(0, os.path.dirname(script))
+runpy.run_path(script, run_name="__main__")
+"""
+
+# Reports which errno each rename of a legacy path raises under the harness.
+CROSS_DEVICE_PROBE = """\
+import os
+
+for name in ("rename", "replace"):
+    try:
+        getattr(os, name)(".claude/handoff-todo.md", "TODO.md")
+    except OSError as exc:
+        print(name, exc.errno)
+"""
+
+
+def cross_device_command(tmp_path: Path, script: Path = CHECKPOINT) -> list[str]:
+    """Return the argv that runs script under the cross-device harness."""
+    harness = tmp_path / "cross_device_harness.py"
+    harness.write_text(CROSS_DEVICE_HARNESS)
+    return [sys.executable, str(harness), str(script)]
+
+
+def test_the_cross_device_harness_fails_a_rename_of_a_legacy_file(
+    tmp_path: Path,
+) -> None:
+    """The control for the row below, which would pass if the patch missed."""
+    probe = tmp_path / "probe.py"
+    probe.write_text(CROSS_DEVICE_PROBE)
+    result = subprocess.run(
+        cross_device_command(tmp_path, probe),
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.stdout.split() == [
+        "rename",
+        str(errno.EXDEV),
+        "replace",
+        str(errno.EXDEV),
+    ], result.stderr
+
+
+def test_keep_moves_a_legacy_todo_across_devices_with_its_modification_time(
+    tmp_path: Path,
+) -> None:
+    """The move falls back to a copy that keeps the time, then unlinks.
+
+    Its positive is `test_keep_moves_the_legacy_todo_with_its_modification_time`,
+    the same fixture where the rename works, and the control above shows the
+    harness makes the rename fail.
+    """
+    repo = make_repo(tmp_path)
+    put(repo, LEGACY_TODO_REL, TODO_LEGACY_BODY)
+    then = 1_700_000_000_000_000_000
+    os.utime(repo / LEGACY_TODO_REL, ns=(then, then))
+    command = cross_device_command(tmp_path)
+    result = run_checkpoint(
+        repo, migration_payload(task_clear(), todo_keep()), command=command
+    )
+    ok(result)
+    assert read(repo / "TODO.md") == TODO_LEGACY_BODY
+    assert (repo / "TODO.md").stat().st_mtime_ns == then
+    assert not (repo / LEGACY_TODO_REL).exists()
+    assert_reported(result.stdout, LEGACY_TODO_REL, "moved")

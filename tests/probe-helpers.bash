@@ -2,8 +2,8 @@
 # Shared synthetic-repo builder for tests/checkpoint.bats's shim test — the
 # one row left there that needs a gitlore-managed repo with dirty memory.
 # checkpoint.py's own memory-directive tests (schema, composition, ledger
-# liveness) moved to tests/test_checkpoint.py, which carries its own Python
-# equivalents of these builders — see
+# liveness) moved to tests/test_checkpoint_*.py, which share their own Python
+# equivalents of these builders through tests/conftest.py — see
 # docs/changelog/2026-08-10-python-split.md.
 
 # A gitlore-managed repo: a .gitmodules registration for the gitlore-memory

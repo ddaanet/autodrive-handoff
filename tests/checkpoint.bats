@@ -7,7 +7,7 @@
 #
 # checkpoint.py's own behavior (schema validation, write semantics,
 # sentinel/directive composition) is covered in
-# tests/test_checkpoint.py (pytest) — see docs/changelog/2026-07-27-one-channel-one-writer.md
+# tests/test_checkpoint_*.py (pytest) — see docs/changelog/2026-07-27-one-channel-one-writer.md
 # for the channel's original design and docs/changelog/2026-08-10-python-split.md
 # for what moved.
 #
@@ -254,7 +254,7 @@ print(closing_directive('$skill', typed=$typed), end='')
 # ==========================================================================
 
 # The union's spelling, hardcoded outside the Python factories: keep in step
-# with task_clear()/todo_keep() in tests/test_checkpoint.py.
+# with task_clear()/todo_keep() in tests/conftest.py.
 handoff_payload() {
     jq -nc --arg commit "$1" '{skill:"handoff", commit:$commit, rename:"Session Title", clear:false, continue:null, task:{action:"clear"}, todo:{action:"keep"}}'
 }

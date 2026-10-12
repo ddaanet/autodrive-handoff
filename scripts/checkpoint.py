@@ -6,7 +6,9 @@ violation exits 2 naming the offending field on stderr), applies the task/todo
 tagged union — content, or an object naming an action (FR5) — to `TASK.md` and
 `TODO.md` in the root, composes the sentinel (FR8), and prints the directive
 output (FR9). Only `handoff` carries a `task`; `precompact` forbids the key and
-removes any task file on disk.
+removes any task file on disk. Validation, the sentinel and the directive
+composition live here; resolving the two halves to file plans, the legacy
+migration included, and applying them live in _checkpoint_plan.py.
 
 NFR1: nothing here mutates git state — this is the agent's sandboxed Bash, and
 both files are plain tracked files whichever commit comes next picks up. A file
@@ -24,38 +26,27 @@ the drift the single-parser design exists to prevent.
 
 from __future__ import annotations
 
-import errno
 import json
 import os
 import re
 import shlex
-import shutil
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
-from typing import Any, Literal, NamedTuple, NoReturn, cast
+from typing import Any, NamedTuple, cast
 
 import _checkpoint_lib as lib
+import _checkpoint_plan as planning
 
 # A parsed JSON object. The payload's shape is validated at runtime (FR2),
 # not by static typing — every value is Any until a validate_* function
 # narrows it.
 JSONDict = dict[str, Any]
 
-# Mirrors _lib.sh's HANDOFF_REL_* constants. Changing either side is a
-# breaking change (see CLAUDE.md conventions); kept in sync by hand rather
-# than sourced, since _lib.sh stays bash.
-HANDOFF_REL_TASK = "TASK.md"
-HANDOFF_REL_TODO = "TODO.md"
+# Mirrors _lib.sh's HANDOFF_REL_DRIVE. Changing either side is a breaking
+# change (see CLAUDE.md conventions); kept in sync by hand rather than sourced,
+# since _lib.sh stays bash.
 HANDOFF_REL_DRIVE = ".claude/autodrive"
-
-# Mirrors _lib.sh's HANDOFF_LEGACY_REL_*: where the task and todo files lived
-# before they moved to the root. The checkpoint moves a file off them; the
-# fallback goes once no sibling repository still has a `.claude/handoff-*.md`.
-# `grep -rni legacy scripts/ tests/` lists all of it.
-HANDOFF_LEGACY_REL_TASK = ".claude/handoff-task.md"
-HANDOFF_LEGACY_REL_TODO = ".claude/handoff-todo.md"
 
 _LIB_SH = Path(__file__).resolve().parent / "_lib.sh"
 
@@ -92,16 +83,16 @@ def main() -> int:
             "transition", "cannot compose a held sentinel naming the session holding it"
         )
 
-    plans: list[FilePlan] = []
+    plans: list[planning.FilePlan] = []
     if skill in ("handoff", "precompact"):
         task_action, task_content = validate_task(payload, skill)
         todo_action, todo_content, todo_old, todo_new = validate_todo(payload)
         plans = [
-            plan_task(root, task_action, task_content),
-            plan_todo(root, todo_action, todo_content, todo_old, todo_new),
+            planning.plan_task(root, task_action, task_content),
+            planning.plan_todo(root, todo_action, todo_content, todo_old, todo_new),
         ]
         for plan in plans:
-            apply_plan(plan)
+            planning.apply_plan(plan)
 
     compose_sentinel(root, transition, continuation, held=held)
     ending = Ending(held=held, typed=transition.typed)
@@ -117,12 +108,6 @@ class Transition(NamedTuple):
     kind: str
     cmds: list[str]
     typed: bool
-
-
-def err(field: str, message: str) -> NoReturn:
-    """Print a schema/write-time error naming field, then exit 2."""
-    print(f"handoff-checkpoint: {field}: {message}", file=sys.stderr)
-    raise SystemExit(2)
 
 
 def _json_type(value: object) -> str:
@@ -145,9 +130,9 @@ def _json_type(value: object) -> str:
 def require_one_line(field: str, value: str) -> None:
     """Error unless value is non-blank and holds no embedded newline."""
     if not re.sub(r"\s", "", value):
-        err(field, "must not be empty or whitespace only")
+        lib.err(field, "must not be empty or whitespace only")
     if "\n" in value:
-        err(field, "must be a single line")
+        lib.err(field, "must be a single line")
 
 
 def read_payload() -> JSONDict:
@@ -156,9 +141,9 @@ def read_payload() -> JSONDict:
     try:
         payload = json.loads(raw)
     except json.JSONDecodeError:
-        err("payload", "malformed JSON on stdin")
+        lib.err("payload", "malformed JSON on stdin")
     if not isinstance(payload, dict):
-        err("payload", "malformed JSON on stdin")
+        lib.err("payload", "malformed JSON on stdin")
     return payload
 
 
@@ -170,14 +155,14 @@ def validate_root() -> Path:
     """
     root = os.environ.get("HANDOFF_ROOT", "")
     if not root:
-        err(
+        lib.err(
             "root",
             "HANDOFF_ROOT is unset — call via the handoff-checkpoint shim on PATH, "
             "unmodified, so the PreToolUse(Bash) hook recognises and injects it",
         )
     path = Path(root)
     if not path.is_dir():
-        err("root", f'HANDOFF_ROOT does not name a directory (got "{root}")')
+        lib.err("root", f'HANDOFF_ROOT does not name a directory (got "{root}")')
     return path
 
 
@@ -188,12 +173,12 @@ def validate_skill(payload: JSONDict) -> str:
     """
     skill = payload.get("skill")
     if "skill" not in payload or skill in (None, ""):
-        err(
+        lib.err(
             "skill",
             'required, one of "handoff", "precompact" or "autoname"',
         )
     if skill not in ("handoff", "precompact", "autoname"):
-        err(
+        lib.err(
             "skill",
             f'must be "handoff", "precompact" or "autoname", got "{skill}"',
         )
@@ -216,7 +201,7 @@ def validate_top_level_keys(payload: JSONDict) -> None:
     if not extra:
         return
     takes = ", ".join(f'"{k}"' for k in _TOP_LEVEL_KEYS)
-    err("payload", f'unknown key "{extra[0]}", takes only {takes}')
+    lib.err("payload", f'unknown key "{extra[0]}", takes only {takes}')
 
 
 _TOP_LEVEL_KEYS = (
@@ -242,8 +227,10 @@ def validate_commit_mode(payload: JSONDict, skill: str) -> str:
     commit_mode = payload.get("commit")
     if commit_mode not in ("with-commit", "without-commit"):
         if commit_mode in (None, ""):
-            err("commit", 'required, one of "with-commit" or "without-commit"')
-        err("commit", f'must be "with-commit" or "without-commit", got "{commit_mode}"')
+            lib.err("commit", 'required, one of "with-commit" or "without-commit"')
+        lib.err(
+            "commit", f'must be "with-commit" or "without-commit", got "{commit_mode}"'
+        )
     return cast("str", commit_mode)
 
 
@@ -251,7 +238,7 @@ def validate_autoname_forbidden_fields(payload: JSONDict) -> None:
     """Error naming the field if any boundary-only field is present."""
     for forbidden in ("commit", "task", "todo", "clear", "compact", "continue"):
         if forbidden in payload:
-            err(forbidden, 'forbidden when skill is "autoname"')
+            lib.err(forbidden, 'forbidden when skill is "autoname"')
 
 
 def validate_rename(payload: JSONDict, skill: str) -> str:
@@ -262,15 +249,17 @@ def validate_rename(payload: JSONDict, skill: str) -> str:
     """
     if skill == "precompact":
         if "rename" in payload:
-            err("rename", 'forbidden when skill is "precompact"')
+            lib.err("rename", 'forbidden when skill is "precompact"')
         return ""
     if "rename" not in payload or payload.get("rename") is None:
-        err("rename", f'required when skill is "{skill}"')
+        lib.err("rename", f'required when skill is "{skill}"')
     if _json_type(payload["rename"]) != "string":
-        err("rename", f"must be a title string, got {_json_type(payload['rename'])}")
+        lib.err(
+            "rename", f"must be a title string, got {_json_type(payload['rename'])}"
+        )
     title = re.sub(r"\s+", " ", payload["rename"]).strip()
     if not title:
-        err("rename", "must be a non-empty title")
+        lib.err("rename", "must be a non-empty title")
     return title
 
 
@@ -287,17 +276,17 @@ def require_session_id(field: str, reason: str) -> str:
     """Return CLAUDE_CODE_SESSION_ID, or error naming field with reason."""
     session_id = os.environ.get("CLAUDE_CODE_SESSION_ID", "")
     if not session_id:
-        err(field, f"CLAUDE_CODE_SESSION_ID is unset — {reason}")
+        lib.err(field, f"CLAUDE_CODE_SESSION_ID is unset — {reason}")
     return session_id
 
 
 def _build_handoff_transition(payload: JSONDict, title: str) -> Transition:
     if "compact" in payload:
-        err("compact", 'forbidden when skill is "handoff"')
+        lib.err("compact", 'forbidden when skill is "handoff"')
     if "clear" not in payload:
-        err("clear", 'required when skill is "handoff"')
+        lib.err("clear", 'required when skill is "handoff"')
     if not isinstance(payload["clear"], bool):
-        err("clear", "must be true or false")
+        lib.err("clear", "must be true or false")
     if payload["clear"] is True:
         return Transition("clear", [f"/rename {title}", "/clear"], typed=True)
     return Transition("rename", [f"/rename {title}"], typed=False)
@@ -305,9 +294,9 @@ def _build_handoff_transition(payload: JSONDict, title: str) -> Transition:
 
 def _build_precompact_transition(payload: JSONDict) -> Transition:
     if "clear" in payload:
-        err("clear", 'forbidden when skill is "precompact"')
+        lib.err("clear", 'forbidden when skill is "precompact"')
     if "compact" not in payload:
-        err("compact", 'required when skill is "precompact"')
+        lib.err("compact", 'required when skill is "precompact"')
     compact_val = payload["compact"]
     ctype = _json_type(compact_val)
     if ctype == "boolean":
@@ -317,8 +306,8 @@ def _build_precompact_transition(payload: JSONDict) -> Transition:
     if ctype == "string":
         require_one_line("compact", compact_val)
         return Transition("compact", [f"/compact {compact_val}"], typed=True)
-    err("compact", "must be true, false, or a focus directive string")
-    raise AssertionError("unreachable")  # err() always raises
+    lib.err("compact", "must be true, false, or a focus directive string")
+    raise AssertionError("unreachable")  # lib.err() always raises
 
 
 def validate_continuation(payload: JSONDict, skill: str, *, typed: bool) -> str:
@@ -326,17 +315,17 @@ def validate_continuation(payload: JSONDict, skill: str, *, typed: bool) -> str:
     if skill == "autoname":
         return ""
     if "continue" not in payload:
-        err("continue", "required, either null or one line of prose")
+        lib.err("continue", "required, either null or one line of prose")
     if payload["continue"] is None:
         return ""
     if not isinstance(payload["continue"], str):
-        err("continue", "must be null or one line of prose")
+        lib.err("continue", "must be null or one line of prose")
     continuation = payload["continue"]
     require_one_line("continue", continuation)
     if continuation.startswith("/"):
-        err("continue", "must not begin with `/`")
+        lib.err("continue", "must not begin with `/`")
     if not typed:
-        err("continue", "must be null when the transition is not driven")
+        lib.err("continue", "must be null when the transition is not driven")
     return continuation
 
 
@@ -371,7 +360,7 @@ def _reject_unknown_keys(
         if not allowed
         else "takes only " + " and ".join(f'"{k}"' for k in allowed)
     )
-    err(field, f'unknown key "{extra[0]}", {{"action": "{action}"}} {takes}')
+    lib.err(field, f'unknown key "{extra[0]}", {{"action": "{action}"}} {takes}')
 
 
 def validate_task(payload: JSONDict, skill: str) -> tuple[str, str]:
@@ -383,10 +372,10 @@ def validate_task(payload: JSONDict, skill: str) -> tuple[str, str]:
     """
     if skill == "precompact":
         if "task" in payload:
-            err("task", 'forbidden when skill is "precompact"')
+            lib.err("task", 'forbidden when skill is "precompact"')
         return "clear", ""
     if "task" not in payload:
-        err("task", 'required, a content string or {"action": "clear"}')
+        lib.err("task", 'required, a content string or {"action": "clear"}')
     task = payload["task"]
     ttype = _json_type(task)
     if ttype == "string":
@@ -394,17 +383,17 @@ def validate_task(payload: JSONDict, skill: str) -> tuple[str, str]:
         return "write", cast("str", task)
     if ttype == "object":
         if "action" not in task:
-            err("task.action", 'required, a content string or {"action": "clear"}')
+            lib.err("task.action", 'required, a content string or {"action": "clear"}')
         action = task["action"]
         if action == "clear":
             _reject_unknown_keys("task", task, "clear", ())
             return "clear", ""
-        err("task.action", f'must be "clear", got {_got(action)}')
-    err(
+        lib.err("task.action", f'must be "clear", got {_got(action)}')
+    lib.err(
         "task",
         f'must be a content string or {{"action": "clear"}}, got {ttype}',
     )
-    raise AssertionError("unreachable")  # err() always raises
+    raise AssertionError("unreachable")  # lib.err() always raises
 
 
 def validate_task_shape(content: str) -> None:
@@ -430,7 +419,7 @@ def validate_task_shape(content: str) -> None:
         )
     if not facts:
         return
-    err(
+    lib.err(
         "task",
         "; ".join(facts) + ". The task is prose within the limit: keep the task in "
         'hand and where it stands, move remaining steps and open decisions to "todo", '
@@ -453,14 +442,14 @@ def validate_todo(payload: JSONDict) -> tuple[str, str, str, str]:
     "", "", "") or ("keep", "", "", "").
     """
     if "todo" not in payload:
-        err("todo", "required, a content string or an object naming an action")
+        lib.err("todo", "required, a content string or an object naming an action")
     todo = payload["todo"]
     ttype = _json_type(todo)
     if ttype == "string":
         return "write", cast("str", todo), "", ""
     if ttype == "object":
         if "action" not in todo:
-            err(
+            lib.err(
                 "todo.action",
                 'required, a content string or "clear", "keep" or "edit"',
             )
@@ -472,15 +461,15 @@ def validate_todo(payload: JSONDict) -> tuple[str, str, str, str]:
             _reject_unknown_keys("todo", todo, "edit", ("old_string", "new_string"))
             old_string, new_string = _todo_edit_strings(todo)
             return "edit", "", old_string, new_string
-        err(
+        lib.err(
             "todo.action",
             f'must be "clear", "keep" or "edit", got {_got(action)}',
         )
-    err(
+    lib.err(
         "todo",
         f"must be a content string or an object naming an action, got {ttype}",
     )
-    raise AssertionError("unreachable")  # err() always raises
+    raise AssertionError("unreachable")  # lib.err() always raises
 
 
 def _todo_edit_strings(todo: JSONDict) -> tuple[str, str]:
@@ -494,222 +483,12 @@ def _todo_edit_strings(todo: JSONDict) -> tuple[str, str]:
     strings: list[str] = []
     for key in ("old_string", "new_string"):
         if key not in todo:
-            err(f"todo.{key}", 'required for {"action": "edit"}')
+            lib.err(f"todo.{key}", 'required for {"action": "edit"}')
         ktype = _json_type(todo[key])
         if ktype != "string":
-            err(f"todo.{key}", f"must be a string, got {ktype}")
+            lib.err(f"todo.{key}", f"must be a string, got {ktype}")
         strings.append(cast("str", todo[key]))
     return strings[0], strings[1]
-
-
-class Legacy(NamedTuple):
-    """What a plan does about the file at its half's legacy path.
-
-    `moved`: its bytes become the root file. `removed`: it goes, its bytes
-    carried nowhere. `ignored`: the root file wins and it stays as it is.
-    """
-
-    path: Path
-    rel: str
-    fate: Literal["moved", "removed", "ignored"]
-
-
-class FilePlan(NamedTuple):
-    """What one half will do to its file, resolved before anything is written.
-
-    A NamedTuple, like Transition beside it, so the record itself is frozen.
-    `none` leaves the list as it is: with no legacy file it neither reads nor
-    stats the root file (FR4). `move` carries the legacy file onto `path` with
-    its modification time; a `write` or a `remove` also takes its legacy file
-    away unless that one is `ignored`.
-    """
-
-    act: Literal["write", "remove", "move", "none"]
-    path: Path
-    body: str
-    legacy: Legacy | None = None
-
-
-class Half(NamedTuple):
-    """One half's root file and legacy path, and whether the root file counts.
-
-    A root file counts when it has a body: the loader's own test, so what the
-    checkpoint treats as the frame is what the next session is shown. Only a
-    half with a legacy file asks; any other reads `False` and its root file is
-    left unread.
-    """
-
-    path: Path
-    legacy_path: Path
-    legacy_rel: str
-    has_body: bool
-
-
-def edited_body(field: str, path: Path, old: str, new: str) -> str:
-    """Return path's content with old replaced by new, first occurrence only.
-
-    Errors, naming field, if old is absent or ambiguous. Returns the replacement
-    rather than writing it, which is what lets both err() sites run while a plan
-    is still being resolved, ahead of any write (FR2).
-    """
-    content = path.read_text(encoding="utf-8")
-    count = content.count(old)
-    if count == 0:
-        err(f"{field}.old_string", f"not found in {path}")
-    if count > 1:
-        err(f"{field}.old_string", f"ambiguous, {count} occurrences in {path}")
-    return content.replace(old, new, 1)
-
-
-def read_half(field: str, root: Path, rel: str, legacy_rel: str) -> Half:
-    """Return the half's paths, or error when its legacy file cannot be handled.
-
-    Errors when a directory sits on the root file, which leaves the legacy file
-    nowhere to go, and when the legacy path is a symlink to a file, whose
-    relative target would not resolve from the root. The root file is read only
-    when a legacy file exists.
-    """
-    path = root / rel
-    legacy_path = root / legacy_rel
-    if not legacy_path.is_file():
-        return Half(path, legacy_path, legacy_rel, has_body=False)
-    if legacy_path.is_symlink():
-        err(field, f"{legacy_rel} is a symbolic link, not a file")
-    if path.is_dir():
-        err(field, f"{rel} is a directory, not a file")
-    counts = path.is_file() and not lib.is_empty_body(
-        path.read_text(encoding="utf-8", errors="replace")
-    )
-    return Half(path, legacy_path, legacy_rel, counts)
-
-
-def legacy_fate(half: Half, *, after: bool, carried: bool) -> Legacy | None:
-    """Return what becomes of the half's legacy file, None when there is none.
-
-    `after` is whether the root file will have a body once the plan is applied;
-    `carried` is whether the legacy file's bytes are what it will hold. A root
-    file with a body before and after is the frame and the legacy file stays.
-    Any other outcome would leave the legacy file as a frame the loader could
-    pick up again, so it goes.
-    """
-    if not half.legacy_path.is_file():
-        return None
-    if half.has_body and after:
-        return Legacy(half.legacy_path, half.legacy_rel, "ignored")
-    fate: Literal["moved", "removed"] = "moved" if carried else "removed"
-    return Legacy(half.legacy_path, half.legacy_rel, fate)
-
-
-def plan_task(root: Path, action: str, content: str) -> FilePlan:
-    """Resolve the task write or clear to a plan (FR5).
-
-    A content string is written as given; only `clear` removes the root file.
-    """
-    half = read_half("task", root, HANDOFF_REL_TASK, HANDOFF_LEGACY_REL_TASK)
-    if action == "clear":
-        legacy = legacy_fate(half, after=False, carried=False)
-        return FilePlan("remove", half.path, "", legacy)
-    after = not lib.is_empty_body(content)
-    legacy = legacy_fate(half, after=after, carried=False)
-    return FilePlan("write", half.path, content, legacy)
-
-
-def plan_todo(root: Path, action: str, content: str, old: str, new: str) -> FilePlan:
-    """Resolve the todo write, edit, clear or keep to a plan (FR5).
-
-    A content string and an edit's result are written as given, whatever is left
-    in them; only `clear` removes the root file. `edit` errors here, ahead of
-    any write, when the file is absent or `old` does not occur in it exactly
-    once. The file is the root one when it has a body, else the legacy one.
-    """
-    half = read_half("todo", root, HANDOFF_REL_TODO, HANDOFF_LEGACY_REL_TODO)
-    if action == "keep":
-        legacy = legacy_fate(half, after=half.has_body, carried=True)
-        if legacy is not None and legacy.fate == "moved":
-            return FilePlan("move", half.path, "", legacy)
-        return FilePlan("none", half.path, "", legacy)
-    if action == "clear":
-        legacy = legacy_fate(half, after=False, carried=False)
-        return FilePlan("remove", half.path, "", legacy)
-    if action == "edit":
-        use_legacy = not half.has_body and half.legacy_path.is_file()
-        source = half.legacy_path if use_legacy else half.path
-        if not source.is_file():
-            err(
-                "todo.old_string",
-                f"edit requested but {HANDOFF_REL_TODO} does not exist",
-            )
-        body = edited_body("todo", source, old, new)
-        legacy = legacy_fate(
-            half, after=not lib.is_empty_body(body), carried=use_legacy
-        )
-        return FilePlan("write", half.path, body, legacy)
-    legacy = legacy_fate(half, after=not lib.is_empty_body(content), carried=False)
-    return FilePlan("write", half.path, content, legacy)
-
-
-def apply_plan(plan: FilePlan) -> None:
-    """Perform the write, unlink or move a plan names.
-
-    Then take the legacy file off its path unless it is ignored, so the root
-    file is current before the legacy one goes. A failed move errors; the other
-    arms leave a filesystem failure to surface as it is, every payload failure
-    having been found while the plans were being resolved.
-    """
-    legacy = plan.legacy
-    if plan.act == "write":
-        plan.path.write_text(plan.body, encoding="utf-8")
-    elif plan.act == "remove":
-        plan.path.unlink(missing_ok=True)
-    elif plan.act == "move" and legacy is not None:
-        move_legacy(legacy, plan.path)
-    if legacy is not None and legacy.fate != "ignored":
-        legacy.path.unlink(missing_ok=True)
-
-
-def move_legacy(legacy: Legacy, path: Path) -> None:
-    """Put the legacy file's bytes and modification time at `path`.
-
-    A rename when the two share a device. Across devices, a copy lands beside
-    `path` and is renamed onto it, so the root file is whole or untouched; the
-    caller removes the legacy file after. Any other failure errors naming it.
-    """
-    try:
-        legacy.path.replace(path)
-    except OSError as exc:
-        if exc.errno != errno.EXDEV:
-            err(legacy.rel, f"cannot be moved to {path.name}: {exc.strerror}")
-        copy_across_devices(legacy, path)
-
-
-def copy_across_devices(legacy: Legacy, path: Path) -> None:
-    """Copy the legacy file onto `path` through a sibling temporary file."""
-    fd, name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
-    os.close(fd)
-    try:
-        shutil.copy2(legacy.path, name)
-        Path(name).replace(path)
-    except OSError as exc:
-        Path(name).unlink(missing_ok=True)
-        err(legacy.rel, f"cannot be moved to {path.name}: {exc.strerror}")
-
-
-def legacy_reports(plans: list[FilePlan]) -> str:
-    """Return one line per legacy file the plans found, or "" for none."""
-    lines = []
-    for plan in plans:
-        legacy = plan.legacy
-        if legacy is None:
-            continue
-        if legacy.fate == "moved":
-            lines.append(f"Legacy {legacy.rel} moved to {plan.path.name}.")
-        elif legacy.fate == "removed":
-            lines.append(f"Legacy {legacy.rel} removed.")
-        else:
-            lines.append(
-                f"Legacy {legacy.rel} is ignored: {plan.path.name} has a body."
-            )
-    return "".join(f"{line}\n" for line in lines)
 
 
 def hold_decision(transition: Transition, *, memory: bool, commit: bool) -> bool:
@@ -749,7 +528,7 @@ def compose_sentinel(
     ok, drive_err = _read_back_drive(drive_path)
     if not ok:
         drive_path.unlink()
-        err(
+        lib.err(
             "transition",
             f"composed a sentinel this version cannot read back — {drive_err}",
         )
@@ -795,7 +574,7 @@ def compose_directives(
     boundary: Boundary,
     memory: lib.MemoryPart,
     ending: Ending,
-    plans: list[FilePlan],
+    plans: list[planning.FilePlan],
 ) -> list[str]:
     """Return the ordered, non-empty directive parts for this boundary.
 
@@ -811,7 +590,7 @@ def compose_directives(
     skill, root, commit_mode = boundary
     if skill not in ("handoff", "precompact"):
         return []
-    reports = legacy_reports(plans)
+    reports = planning.legacy_reports(plans)
     gone = [
         plan.legacy.rel
         for plan in plans

@@ -78,8 +78,9 @@ never touched. Both ends decide by body and shadowing by the legacy file's
 existence. It is a bridge that goes once no sibling repository still has
 `.claude/handoff-*.md`: `grep -rni legacy scripts/ tests/` starts the one
 deletion pass, with one name per language (`HANDOFF_LEGACY_REL_*` in `_lib.sh`
-and again in `checkpoint.py`). The retirement names no version, in code, docs or
-tests. See `docs/changelog/2026-10-11-legacy-paths-are-read-and-moved.md`.
+and again in `_checkpoint_plan.py`). The retirement names no version, in code,
+docs or tests. See
+`docs/changelog/2026-10-11-legacy-paths-are-read-and-moved.md`.
 
 The mod needs Claude Code >= 2.1.287. `plugin.json` has no minimum-version
 field, so that is stated in `README.md` and surfaced at runtime by the sweep
@@ -175,7 +176,7 @@ note in `report-drive-failure.sh`.
   only sourcing scripts read). `HANDOFF_REL_*` path constants;
   `HANDOFF_LEGACY_REL_*` beside them (the paths from before the move to the
   root, the loaders' fallback and the one marker of it, with a Python mirror in
-  `checkpoint.py`);
+  `_checkpoint_plan.py`);
   `handoff_frame <task> <todo> [<legacy task> <legacy todo>]` (sets `FRAME` —
   timestamp header plus each half that has a body, task first, the root file
   when it has a body and else the legacy one — and, in the caller's scope,
@@ -232,21 +233,12 @@ note in `report-drive-failure.sh`.
   the negative path is one jq parse and a substring test.
 - `scripts/checkpoint.py` — the one write path (FR1). Takes its root from
   `HANDOFF_ROOT` (refuses when unset or not a directory), validates the JSON
-  payload (FR2; the key set is closed, `validate_top_level_keys`), resolves the
+  payload (FR2; the key set is closed, `validate_top_level_keys`), hands the
   `task`/`todo` tagged union (content, or `clear`; `keep` and `edit` on `todo`
-  alone) into `FilePlan`s before writing anything, writes a content string as
-  given and removes the root file only on `clear`, composes `.claude/autodrive`
-  (creating `.claude/` when absent) and reads it back, then prints the directive
-  parts for a boundary skill. The legacy migration is part of that resolution
-  (`read_half`, `legacy_fate`, the `Legacy` and `Half` records, a
-  `FilePlan.legacy` and a `move` act): a half's effective content is its root
-  file when it has a body, else its legacy file; `keep` moves a legacy todo
-  (`move_legacy`, a rename that falls back to a copy across devices), a content
-  write, `edit` result or `clear` removes the legacy file unless the root file
-  has a body before and after, in which case it is left and reported ignored; a
-  directory at the root name and a symlink to a file at the legacy path are
-  refused naming the field, and the legacy file is unlinked only after the root
-  file is written. The reports (`legacy_reports`) print ahead of the directive
+  alone) to `_checkpoint_plan.py` to be resolved into `FilePlan`s and applied,
+  composes `.claude/autodrive` (creating `.claude/` when absent) and reads it
+  back, then prints the directive parts for a boundary skill. The legacy
+  reports (`legacy_reports`, from the plan module) print ahead of the directive
   parts, which `compose_directives(boundary, memory, ending, plans)` orders; the
   closing line stays last. `task` is required under `handoff`, where
   `validate_task_shape` holds it to 1000 characters of body and no list item
@@ -260,7 +252,26 @@ note in `report-drive-failure.sh`.
   paths from the top of the repository, the root's `repo_prefix` ahead of each,
   queried only when that line is owed (the reports keep them relative to the
   root).
-- `scripts/_checkpoint_lib.py` — `is_empty_body` (markdown's own heading
+- `scripts/_checkpoint_plan.py` — the plan layer, which `checkpoint.py`
+  imports as `planning`. Resolves each half into a
+  `FilePlan` before anything is written (`plan_task`, `plan_todo`, `edited_body`
+  for `edit`), writing a content string as given and removing the root file only
+  on `clear`; `apply_plan` then performs them. The legacy migration is part of
+  that resolution (`read_half`, `legacy_fate`, the `Legacy` and `Half` records,
+  a `FilePlan.legacy` and a `move` act): a half's effective content is its root
+  file when it has a body, else its legacy file; `keep` moves a legacy todo
+  (`move_legacy`, a rename that falls back to a copy across devices,
+  `copy_across_devices`), a content write, `edit` result or `clear` removes the
+  legacy file unless the root file has a body before and after, in which case it
+  is left and reported ignored; a directory at the root name and a symlink to a
+  file at the legacy path are refused naming the field, and the legacy file is
+  unlinked only after the root file is written. `legacy_reports` returns the
+  one-line reports. It holds `HANDOFF_REL_TASK`/`HANDOFF_REL_TODO` and
+  `HANDOFF_LEGACY_REL_TASK`/`_TODO`, the Python side of the pairs in `_lib.sh`;
+  errors go through `lib.err`.
+- `scripts/_checkpoint_lib.py` — `err` (the one exit for a schema or write-time
+  error: names the field, exits 2; shared by `checkpoint.py` and
+  `_checkpoint_plan.py`), `is_empty_body` (markdown's own heading
   test; read by `handoff_frame` through the `--is-empty-body` CLI, and its
   `ATX_HEADING` by the task-shape check), `memory_directive` (gated on the
   `gitlore-memory` submodule and a dirty worktree, FR12; couples only to the two
@@ -308,7 +319,8 @@ note in `report-drive-failure.sh`.
   routing table, one index line per decision and per rejected alternative,
   Non-goals); `docs/design/` holds one node per mechanism, read before making a
   claim about it. What you are touching → what to read first:
-  - `checkpoint.py`, `_checkpoint_lib.py`, `write-guard.sh`, `handoff_frame`,
+  - `checkpoint.py`, `_checkpoint_plan.py`, `_checkpoint_lib.py`,
+    `write-guard.sh`, `handoff_frame`,
     the two files, FR1–FR8, FR13, NFR1–NFR3 → `the-write-path.md`
   - any `skills/*/SKILL.md`, a `skill` value, the `clear`/`compact`/`continue`/
     `commit` fields → `the-skills.md`
@@ -364,8 +376,8 @@ note in `report-drive-failure.sh`.
   `# shellcheck source-path=SCRIPTDIR source=_lib.sh` above the
   `source` line so `shellcheck -x` follows it. Add
   `# shellcheck disable=SC2034` to vars consumed only by sourcing
-  scripts. `_checkpoint_lib.py` is imported, not
-  sourced, so this convention does not apply to them.
+  scripts. `_checkpoint_lib.py` and `_checkpoint_plan.py` are
+  imported, not sourced, so this convention does not apply to them.
 
 ## Testing
 
@@ -472,73 +484,94 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
   in the toolkit, not here.
 - `just py-test` — `pytest`: `tests/test_worktree_root.py` (the resolver's
   branch matrix, including the containment rule that keeps a submodule `inside`),
-  `tests/test_mod_fixtures.py`, and `tests/test_checkpoint.py`.
-  `tests/test_checkpoint.py` drives `scripts/checkpoint.py` end-to-end via
-  subprocess: schema validation (each required field missing, each literal with
-  an unknown value, a superfluous top-level key under each of the three skills —
-  spelled `bogus`, not a plausible field — `null` and an absent key on `task`
-  and `todo`, an action outside the field's own vocabulary, an object carrying a
-  key its action does not take, an `edit` with a missing or mistyped string,
-  malformed JSON, each asserting a non-zero exit and that the message names the
-  field); the write semantics (a content string written as given on both
-  halves, a headings-only, whitespace-only or empty one included; `clear`
-  leaving no file whether or not there was one; `keep` leaving a list, a
-  headings-only file or no file exactly as it was; a root with no `.claude/`
-  getting one for the sentinel); `edit` application (`old_string` absent,
-  ambiguous, file missing, successful, striking the last item — each failure
-  leaving both files' original bytes and composing no sentinel); `precompact`
-  rejecting `task` by key presence and removing the task file; the task shape
-  (the 1000-character boundary from both sides, headings not counted,
-  characters not bytes, each list marker named by its line and only the first,
-  `**bold**`, a mid-line hyphen, a year and a decimal accepted, both facts in
-  one error, nothing written on a rejection); `is_empty_body` itself and its
-  CLI's exit codes (whitespace-only, a `#!/bin/sh` body, `#tag`, seven `#`,
-  the indent boundary from both sides), each predicate half mutation-checked;
-  the `skill` enum (`autoname` accepted, the retired names
-  rejected, `rename` rejected under `precompact`, required under `handoff` and
-  `autoname`); the transition matrix (each of `clear`/`compact`/`continue`
-  missing, mistyped, the other boundary's field present, an empty or multi-line
-  `compact`, a `continue` that is multi-line, whitespace-only, starts with `/` or
-  stands against a non-driven transition); the six legal combinations pinning
-  the sentinel's exact bytes, read back through `handoff_drive_read`; the held
-  state and its owner; the directive composition (memory then SDD under
-  `precompact`, absent under `handoff`; the commit act present under
-  `with-commit` and absent without; stdout exactly the closing line through one
-  helper; part order pinned per skill, the closing line last; the clause-file
-  refusal printed last on a held and an armed fixture, after the legacy reports
-  and the git line); the ledger-liveness
-  matrix; `autoname`'s rows (exact sentinel, both frame files left
-  byte-identical, `rename` missing, each boundary field rejected by name, and
-  no directive against a dirty memory submodule); the legacy migration (a legacy
-  todo moved on `keep` with its modification time, across devices through a
-  harness that fails `rename`; carried by an `edit` and replaced by a content
-  write, removed on `clear` and under `precompact`; a headings-only root file
-  replaced by the move; a root file with a body winning and the legacy file left
-  ignored, one report each; a write that leaves the root file bodyless removing
-  the legacy file; a directory at the root name and a symlink to a file at the
-  legacy path refused with every file as it was, a dangling symlink no legacy
-  file; a rejected payload leaving legacy and root files byte-identical; a root
-  write that fails leaving the legacy file; a root file that cannot be read
-  staying unread with no legacy file; the reports ahead of every directive part
-  and the closing line last; the `git rm --cached` line only under
-  `with-commit`, naming only what moved or went, run from a subdirectory over a
-  tracked legacy file to the staged deletion and, once the new file is added, a
-  rename, and a silent no-op over an untracked one, and, for a root that is a
-  subdirectory of its repository (`pkg` and `pkg dir`), the command run through
-  a shell exactly as printed from another directory taking the file out of the
-  index; `autoname` touching nothing); and the `HANDOFF_ROOT` refusals with the
-  negative that a drifted cwd gets nothing written. The load-bearing rows are
-  mutation-checked:
-  `with-commit` output never mentions the trigger file, the held/armed pair over
-  one fixture (never hold ⟹ the held row alone reds; hold whatever the sentinel
-  names ⟹ the names-nothing row alone reds), the `(driven ∧ with-commit)`
-  disjunct, and `handoff-approved`'s bare-name row; and, for the migration,
-  root-wins dropped, migrating before validation, the reports after the closing
-  line, the legacy file unlinked ahead of the root write, a bare pathspec in
-  place of `:/`, the prefix dropped (both subdirectory rows red), the quoting
-  dropped (the spaced row alone reds), a root file read on `keep` with no
-  legacy file, the symlink check disabled, and the rename replaced by a copy
-  and an unlink.
+  `tests/test_mod_fixtures.py`, and the `tests/test_checkpoint_*.py` files,
+  which drive `scripts/checkpoint.py` end-to-end via subprocess.
+  `tests/conftest.py` holds what two or more of them use (the repository
+  builders `make_repo` and `make_gitlore_repo`, the payload builders, the
+  `run_checkpoint` runner, `drive_state`, the ledger and memory fixtures), which
+  they import by name, since pytest's `pythonpath` carries `tests/`; a helper
+  only one file uses is in that file. It also defines the `_session_id` fixture
+  without `autouse`, so the other test files do not inherit it: each
+  `tests/test_checkpoint_*.py` applies it with a module-level `pytestmark`.
+  What each file covers:
+  - `tests/test_checkpoint_schema.py` — the session root (the `HANDOFF_ROOT`
+    refusals with the negative that a drifted cwd gets nothing written) and the
+    schema validation: each required field missing, each literal with an unknown
+    value, a superfluous top-level key under each of the three skills — spelled
+    `bogus`, not a plausible field — `null` and an absent key on `task` and
+    `todo`, an action outside the field's own vocabulary, an object carrying a
+    key its action does not take, an `edit` with a missing or mistyped string,
+    malformed JSON, each asserting a non-zero exit and that the message names the
+    field; the `skill` enum (`autoname` accepted, the retired names rejected,
+    `rename` rejected under `precompact`, required under `handoff` and
+    `autoname`); `precompact` rejecting `task` by key presence and removing the
+    task file.
+  - `tests/test_checkpoint_writes.py` — the write semantics: a content string
+    written as given on both halves, a headings-only, whitespace-only or empty
+    one included; `clear` leaving no file whether or not there was one; `keep`
+    leaving a list, a headings-only file or no file exactly as it was; `edit`
+    application (`old_string` absent, ambiguous, file missing, successful,
+    striking the last item — each failure leaving both files' original bytes and
+    composing no sentinel); and the emptiness rule, `is_empty_body` itself and
+    its CLI's exit codes (whitespace-only, a `#!/bin/sh` body, `#tag`, seven
+    `#`, the indent boundary from both sides), each predicate half
+    mutation-checked.
+  - `tests/test_checkpoint_task_shape.py` — the task shape: the 1000-character
+    boundary from both sides, headings not counted, characters not bytes, each
+    list marker named by its line and only the first, `**bold**`, a mid-line
+    hyphen, a year and a decimal accepted, both facts in one error, nothing
+    written on a rejection.
+  - `tests/test_checkpoint_transition.py` — `rename` and the transition: a root
+    with no `.claude/` getting one for the sentinel; the transition matrix (each
+    of `clear`/`compact`/`continue` missing, mistyped, the other boundary's field
+    present, an empty or multi-line `compact`, a `continue` that is multi-line,
+    whitespace-only, starts with `/` or stands against a non-driven transition);
+    the six legal combinations pinning the sentinel's exact bytes, read back
+    through `handoff_drive_read`; the held state and its owner; and `autoname`'s
+    rows (exact sentinel, both frame files left byte-identical, `rename`
+    missing, each boundary field rejected by name, and no directive against a
+    dirty memory submodule). Mutation-checked: the held/armed pair over one
+    fixture (never hold ⟹ the held row alone reds; hold whatever the sentinel
+    names ⟹ the names-nothing row alone reds).
+  - `tests/test_checkpoint_directives.py` — the directive composition (memory
+    then SDD under `precompact`, absent under `handoff`; the commit act present
+    under `with-commit` and absent without; stdout exactly the closing line
+    through one helper; part order pinned per skill, the closing line last; the
+    clause-file refusal printed last on a held and an armed fixture) and the
+    ledger-liveness matrix. Mutation-checked: `with-commit` output never
+    mentions the trigger file.
+  - `tests/test_checkpoint_hold.py` — the arming instruction, the hold rule and
+    the held path's check of `CLAUDE_CODE_SESSION_ID`. Mutation-checked: the
+    `(driven ∧ with-commit)` disjunct.
+  - `tests/test_checkpoint_legacy.py` — the whole legacy migration, one file
+    whatever its length, since it is deleted in one pass when the fallback is
+    retired: a legacy todo moved on `keep` with its modification time, across
+    devices through a harness that fails `rename`; carried by an `edit` and
+    replaced by a content write, removed on `clear` and under `precompact`; a
+    headings-only root file replaced by the move; a root file with a body
+    winning and the legacy file left ignored, one report each; a write that
+    leaves the root file bodyless removing the legacy file; a directory at the
+    root name and a symlink to a file at the legacy path refused with every file
+    as it was, a dangling symlink no legacy file; a rejected payload leaving
+    legacy and root files byte-identical; a root write that fails leaving the
+    legacy file; a root file that cannot be read staying unread with no legacy
+    file; the reports ahead of every directive part (the clause-file refusal
+    after the legacy reports and the git line) and the closing line last; the
+    `git rm --cached` line only under `with-commit`, naming only what moved or
+    went, run from a subdirectory over a tracked legacy file to the staged
+    deletion and, once the new file is added, a rename, and a silent no-op over
+    an untracked one, and, for a root that is a subdirectory of its repository
+    (`pkg` and `pkg dir`), the command run through a shell exactly as printed
+    from another directory taking the file out of the index; `autoname`
+    touching nothing. Mutation-checked: root-wins dropped, migrating before
+    validation, the reports after the closing line, the legacy file unlinked
+    ahead of the root write, a bare pathspec in place of `:/`, the prefix
+    dropped (both subdirectory rows red), the quoting dropped (the spaced row
+    alone reds), a root file read on `keep` with no legacy file, the symlink
+    check disabled, and the rename replaced by a copy and an unlink.
+
+  The load-bearing rows are mutation-checked, as listed under each file, and
+  with them `handoff-approved`'s bare-name row in `tests/checkpoint.bats`.
 
 Test files live under `tests/`. The justfile recipes are one-liners that
 delegate. Add new scenarios to the existing `.bats`/`test_*.py` files rather

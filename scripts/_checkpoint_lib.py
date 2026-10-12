@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Shared helpers for checkpoint.py (handoff-checkpoint).
+"""Shared helpers for checkpoint.py and _checkpoint_plan.py.
 
 Port of _checkpoint-lib.sh — see docs/changelog/2026-08-10-python-split.md. Each
 directive function returns its directive text, or "" when silent
 (`memory_directive` wraps its text in a `MemoryPart`); the caller decides
-whether to print it. The emptiness rule is also reachable from bash through the
---is-empty-body CLI.
+whether to print it. `err` is the one exit for a schema or write-time error,
+shared by both callers. The emptiness rule is also reachable from bash through
+the --is-empty-body CLI.
 """
 
 from __future__ import annotations
@@ -17,12 +18,18 @@ import subprocess
 import sys
 from collections.abc import Sequence
 from pathlib import Path
-from typing import NamedTuple
+from typing import NamedTuple, NoReturn
 
 
 def _printf_lines(*args: str) -> str:
     r"""Mirror bash's `printf '%s\n' arg...`: each arg followed by a newline."""
     return "\n".join(args) + "\n"
+
+
+def err(field: str, message: str) -> NoReturn:
+    """Print a schema/write-time error naming field, then exit 2."""
+    print(f"handoff-checkpoint: {field}: {message}", file=sys.stderr)
+    raise SystemExit(2)
 
 
 def is_empty_body(content: str) -> bool:
