@@ -38,6 +38,13 @@ esac
 
 handoff_root_read "$cwd"
 root="$HANDOFF_ROOT"
+# The command is left as it is: both entry points refuse an unset HANDOFF_ROOT
+# naming it, and the user learns why here.
+if [[ "$HANDOFF_ROOT_BRANCH" == "unresolved" ]]; then
+    jq -nc --arg m "$HANDOFF_UNRESOLVED_MSG" \
+        '{systemMessage: ("handoff: " + $m + "; HANDOFF_ROOT not injected.")}'
+    exit 0
+fi
 [ -n "$root" ] || exit 0
 
 # export …; rather than a bare VAR=… prefix, so the value survives a batched

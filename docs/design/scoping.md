@@ -25,6 +25,17 @@ stripped — rather than line by line. Containment beats
 the branch the walk took: a submodule or vendored checkout inside the
 project is `inside`, not `foreign`.
 
+A fifth label, `unresolved`, is the resolver failing: `worktree_root.py`
+crashed or answered something that is not one of the four, which bash 3.2
+cannot see as an exit status through a process substitution, so the answer is
+judged. The root is then empty and every caller says so on its own channel
+rather than exiting 1 in silence: the write guard denies a write whose path
+names `autodrive`, since it can no longer tell the sentinel from another
+project's, the loaders and the prompt-time hook report on both channels,
+`inject-checkpoint-root.sh` leaves the command alone so the checkpoint refuses
+the unset `HANDOFF_ROOT`, and `drive-take.sh` hands the mod a plan carrying
+only the message to toast.
+
 The last two labels are **drift** — the session cwd has left the launch repo
 while the root, and every handoff file under it, has not. Nothing else
 announces that: the environment block, `gitStatus` and the project

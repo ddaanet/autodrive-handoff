@@ -17,6 +17,14 @@ source "$(dirname "$0")/_lib.sh"
 
 handoff_root_read "${1:-}"
 root="$HANDOFF_ROOT"
+# Nothing can be taken without the root; the plan carries the message alone, as
+# for a malformed file, so the mod toasts it instead of the turn ending silent.
+if [[ "$HANDOFF_ROOT_BRANCH" == "unresolved" ]]; then
+    jq -nc --arg m "$HANDOFF_UNRESOLVED_MSG" \
+        '{kind: null, before: [], after: [], failFile: "",
+          message: ("handoff: " + $m + "; no transition taken.")}'
+    exit 0
+fi
 session_id="${2:-}"
 [[ -n "$root" ]] || exit 0
 

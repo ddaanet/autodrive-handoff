@@ -167,6 +167,74 @@ inside" ]
     [ "$HANDOFF_ROOT_BRANCH" = "worktree" ]
 }
 
+# --- a resolver that crashes ---
+#
+# Past the fast path the root comes from worktree_root.py. When that fails the
+# root is unknown, and a hook acting on an empty or guessed root is the failure
+# that goes unseen: the write guard let a sentinel write through (a PreToolUse
+# that exits 1 is non-blocking), and the others exited 1 with nothing said.
+# handoff_root_read labels the branch `unresolved` and each caller says so on
+# its own channel.
+
+# Echoes a directory holding a python3 that exits 97, to put first on PATH.
+broken_python() {
+    local stub="$BATS_TEST_TMPDIR/broken-python"
+    mkdir -p "$stub"
+    printf '#!/usr/bin/env bash\nexit 97\n' > "$stub/python3"
+    chmod +x "$stub/python3"
+    printf '%s\n' "$stub"
+}
+
+@test "handoff_root_read (resolver crashes): branch unresolved, root empty, rc 0" {
+    stub="$(broken_python)"
+    HANDOFF_ROOT=stale HANDOFF_ROOT_BRANCH=stale
+    rc=0; PATH="$stub:$PATH" handoff_root_read "$other" || rc=$?
+    [ "$rc" -eq 0 ]
+    [ "$HANDOFF_ROOT" = "" ]
+    [ "$HANDOFF_ROOT_BRANCH" = "unresolved" ]
+}
+
+@test "write-guard (resolver crashes, a write to the sentinel): denied" {
+    stub="$(broken_python)"
+    PATH="$stub:$PATH" run_write_guard Write "$other" "$tmp/.claude/autodrive"
+    [ "$status" -eq 0 ]
+    echo "$output" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null
+    echo "$output" | jq -e '.systemMessage | test("did not resolve")' >/dev/null
+}
+
+@test "write-guard (resolver crashes, a write not naming the sentinel): allowed, silent" {
+    stub="$(broken_python)"
+    PATH="$stub:$PATH" run_write_guard Write "$other" "$tmp/TODO.md"
+    [ "$status" -eq 0 ]
+    [ "$output" = "" ]
+}
+
+@test "report-drive-failure (resolver crashes): says so on both channels, exit 0" {
+    stub="$(broken_python)"
+    PATH="$stub:$PATH" run_report_failure "$other"
+    [ "$status" -eq 0 ]
+    echo "$output" | jq -e '.systemMessage | test("did not resolve")' >/dev/null
+    echo "$output" | jq -e '.hookSpecificOutput.additionalContext | test("did not resolve")' >/dev/null
+}
+
+@test "load-handoff (resolver crashes): says so on both channels, no frame, exit 0" {
+    stub="$(broken_python)"
+    PATH="$stub:$PATH" run_load_handoff "$other" startup
+    [ "$status" -eq 0 ]
+    split_output "$output"
+    [[ "$MSG" == "handoff: "*"did not resolve"* ]]
+    [[ "$CTX" == *"did not resolve"* ]]
+    [[ "$CTX" != *"hook smoke test"* ]]
+}
+
+@test "load-compact (resolver crashes): says so, exit 0" {
+    stub="$(broken_python)"
+    seed_pending "$tmp" "compact" "/compact" "continue"
+    PATH="$stub:$PATH" run_load_compact "$other"
+    [ "$status" -eq 0 ]
+    echo "$output" | jq -e '.systemMessage | test("did not resolve")' >/dev/null
+}
+
 # --- _lib.sh: handoff_deny emitter ---
 # handoff_deny calls `exit 0`; `run` invokes it in a subshell so that exit
 # terminates only the subshell, not the test.

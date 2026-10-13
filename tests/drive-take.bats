@@ -171,3 +171,16 @@ take() {
     jq -e --arg f "$wt/.claude/autodrive.failed" '.kind == "compact" and .failFile == $f' <<<"$output" >/dev/null
     [ "$(head -n1 "$wt/.claude/autodrive")" = "pending" ]
 }
+
+# A resolver that crashes leaves the root unknown: nothing is taken, and the mod
+# toasts the plan's message rather than the turn ending in silence.
+@test "drive-take (resolver crashes: nothing taken, kind null, the message says so)" {
+    stub="$BATS_TEST_TMPDIR/broken-python"; mkdir -p "$stub"
+    printf '#!/usr/bin/env bash\nexit 97\n' > "$stub/python3"; chmod +x "$stub/python3"
+    wt="$(make_worktree wtCrash)"
+    seed "$wt" "armed sess-hook-test" compact "/compact" "continue with task 3"
+    PATH="$stub:$PATH" take "$wt"
+    [ "$status" -eq 0 ]
+    jq -e '.kind == null and .before == [] and .after == [] and (.message | test("did not resolve"))' <<<"$output" >/dev/null
+    [ "$(head -n1 "$wt/.claude/autodrive")" = "armed sess-hook-test" ]
+}

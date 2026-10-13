@@ -142,7 +142,8 @@ note in `report-drive-failure.sh`.
   before[], after[], failFile, message}`; empty stdout for no file, `pending`,
   `held`, or `armed` by another session or with no session id given. FR-G (empty
   `before`) leaves `pending` and prints only the message; a malformed file is
-  removed and reported with `kind: null`. Its stdout is pinned by
+  removed and reported with `kind: null`, and so is a root that did not
+  resolve (nothing taken, the message alone). Its stdout is pinned by
   `tests/mod/fixtures/*.json`.
 - `scripts/load-handoff.sh` — `SessionStart(startup|clear)`: assembles the
   frame in memory (`handoff_frame`, given the legacy paths too) and injects it
@@ -219,7 +220,12 @@ note in `report-drive-failure.sh`.
   NUL-terminated so a root holding a newline survives (nothing prints the
   root: a `$(...)` capture would strip a trailing newline); every cwd-scoped
   hook anchors on it, an empty or project-root cwd
-  short-circuiting in bash and labelling its own branch;
+  short-circuiting in bash and labelling its own branch, and a resolver that
+  crashed or answered no known label giving branch `unresolved` with an empty
+  root, rc 0, which every caller reports in `HANDOFF_UNRESOLVED_MSG`'s words
+  on its own channel (the write guard denies an `autodrive` write,
+  `inject-checkpoint-root.sh` leaves the command alone, `drive-take.sh` prints
+  a `kind: null` plan carrying the message);
   `HANDOFF_POINTER_DIR` (`/tmp/claude`, overridable for tests);
   `handoff_drive_read()` parsing and validating
   the sentinel into `DRIVE_STATE`, `DRIVE_OWNER`, `DRIVE_KIND`, `DRIVE_BEFORE[]`,
@@ -236,7 +242,8 @@ note in `report-drive-failure.sh`.
   loop, not `mapfile` (bash 3.2); callers expand the arrays as
   `${DRIVE_BEFORE[@]+"${DRIVE_BEFORE[@]}"}`.
 - `scripts/write-guard.sh` — `PreToolUse(Write|Edit)`: denies a direct write
-  to the `autodrive` sentinel and to nothing else. One jq parse and a
+  to the `autodrive` sentinel and to nothing else (and any write naming
+  `autodrive` when the root does not resolve). One jq parse and a
   substring test on the given path, both fields read NUL-terminated; past
   that one `python3` call resolves where the write lands, where this
   project's sentinel lands, and the given path normalised without following

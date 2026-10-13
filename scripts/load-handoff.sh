@@ -28,6 +28,13 @@ source "$(dirname "$0")/_lib.sh"
 ) || true
 handoff_root_read "$hook_cwd"
 cwd="$HANDOFF_ROOT"
+if [[ "$HANDOFF_ROOT_BRANCH" == "unresolved" ]]; then
+    jq -nc --arg m "$HANDOFF_UNRESOLVED_MSG" --arg e "$hook_event" \
+        '{systemMessage: ("handoff: " + $m + "; no frame loaded."),
+          hookSpecificOutput: {hookEventName: $e,
+            additionalContext: ("The handoff frame was not loaded: " + $m + ".\n")}}'
+    exit 0
+fi
 [[ -n "$cwd" ]] || exit 0
 
 notes=()   # systemMessage fragments from the transition, if any

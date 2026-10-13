@@ -433,10 +433,25 @@ handoff_root_read() {
     fi
     # The resolver answers NUL-terminated: a root is any string, and one holding
     # a newline would be cut by a line-wise read.
+    HANDOFF_ROOT="" HANDOFF_ROOT_BRANCH=""
     { IFS= read -r -d '' HANDOFF_ROOT; IFS= read -r -d '' HANDOFF_ROOT_BRANCH; } < <(
         python3 "$(dirname "${BASH_SOURCE[0]}")/worktree_root.py" "$1" "$project"
-    )
+    ) || true
+    # A process substitution's exit status is out of reach in bash 3.2, so the
+    # answer is judged instead: a resolver that crashed printed nothing, or not
+    # a label it has. Then the root is unknown, and saying so is each caller's
+    # business on its own channel — `unresolved` with an empty root, rc 0, so a
+    # caller under `set -e` reaches its report rather than dying silent.
+    case "$HANDOFF_ROOT_BRANCH" in
+        inside | worktree | foreign | unrelated)
+            [[ -n "$HANDOFF_ROOT" ]] && return 0 ;;
+    esac
+    HANDOFF_ROOT="" HANDOFF_ROOT_BRANCH="unresolved"
 }
+
+# The one wording of an unresolved root, for every caller's channels.
+# shellcheck disable=SC2034  # consumed by sourcing scripts
+HANDOFF_UNRESOLVED_MSG="the session root did not resolve (scripts/worktree_root.py failed)"
 
 # Emit a PreToolUse deny on stdout, then `exit 0` (not `return`) —
 # terminates the calling process, so only safe from a standalone hook

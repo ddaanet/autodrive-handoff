@@ -52,6 +52,17 @@ source "$(dirname "$0")/_lib.sh"
 ) || true
 handoff_root_read "$hook_cwd"
 cwd="$HANDOFF_ROOT"
+# Without the root none of the three checks can run; that is the report.
+if [[ "$HANDOFF_ROOT_BRANCH" == "unresolved" ]]; then
+    jq -nc --arg m "$HANDOFF_UNRESOLVED_MSG" --arg lead $'\033[0m' '{
+        systemMessage: ($lead + "handoff: " + $m + "; drift, failure and sweep checks skipped."),
+        hookSpecificOutput: {
+            hookEventName: "UserPromptSubmit",
+            additionalContext: ("The handoff plugin could not resolve this session'"'"'s root: " + $m + ". It skipped its drift, drive-failure and stale-transition checks for this turn.")
+        }
+    }'
+    exit 0
+fi
 [[ -n "$cwd" ]] || exit 0
 
 msgs=()

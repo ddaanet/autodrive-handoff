@@ -111,6 +111,22 @@ run_inject_root() {
     [ "$(cat "$repo/seen"; printf X)" = "$repo"X ]
 }
 
+# A resolver that crashes leaves the root unknown: the command is left as it
+# is, so the checkpoint refuses an unset HANDOFF_ROOT naming it, and the user
+# is told why.
+@test "inject-checkpoint-root: a resolver that crashes leaves the command alone and says so" {
+    repo="$(make_repo)"
+    stub="$BATS_TEST_TMPDIR/broken-python"; mkdir -p "$stub"
+    printf '#!/usr/bin/env bash\nexit 97\n' > "$stub/python3"; chmod +x "$stub/python3"
+    run bash -c '
+        jq -nc --arg cwd "$1/sub" --arg cmd "handoff-checkpoint" \
+          "{cwd:\$cwd, hook_event_name:\"PreToolUse\", tool_name:\"Bash\", tool_input:{command:\$cmd}}" \
+        | CLAUDE_PROJECT_DIR="$1" PATH="$2:$PATH" bash "$3"
+    ' _ "$repo" "$stub" "$INJECT_ROOT"
+    [ "$status" -eq 0 ]
+    jq -e '.hookSpecificOutput.updatedInput == null and (.systemMessage | test("did not resolve"))' <<<"$output" >/dev/null
+}
+
 # The row that would stay green under a bare `VAR=… cmd` prefix only by
 # accident: `VAR=x a && b` sets the variable for `a` alone, so a batched
 # command's SECOND stage would see nothing. `export …;` must survive it.

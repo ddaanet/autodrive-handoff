@@ -30,6 +30,13 @@ source "$(dirname "$0")/_lib.sh"
 # on a case-insensitive filesystem.
 handoff_root_read "$hook_cwd"
 cwd="$HANDOFF_ROOT"
+# Without the root, whether this write lands on the sentinel cannot be judged,
+# and the path already names it: refuse rather than let it through.
+if [[ "$HANDOFF_ROOT_BRANCH" == "unresolved" ]]; then
+    handoff_deny \
+        "autodrive write refused: $HANDOFF_UNRESOLVED_MSG, so whether this path is the sentinel cannot be judged." \
+        "write-guard: $HANDOFF_UNRESOLVED_MSG; autodrive write refused"
+fi
 [[ -n "$cwd" ]] || exit 0
 { IFS= read -r -d '' target; IFS= read -r -d '' expected; IFS= read -r -d '' lexical; } < <(
     python3 -c 'import os, sys

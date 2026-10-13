@@ -18,6 +18,13 @@ source "$(dirname "$0")/_lib.sh"
 IFS= read -r -d '' hook_cwd < <(jq -j '(.cwd // ""), "\u0000"') || true
 handoff_root_read "$hook_cwd"
 cwd="$HANDOFF_ROOT"
+# Not silent, unlike the no-transition path: whether a transition was pending
+# is exactly what cannot be known.
+if [[ "$HANDOFF_ROOT_BRANCH" == "unresolved" ]]; then
+    jq -nc --arg m "$HANDOFF_UNRESOLVED_MSG" \
+        '{systemMessage: ("handoff: " + $m + "; a pending compaction was not checked.")}'
+    exit 0
+fi
 [[ -n "$cwd" ]] || exit 0
 
 drive="$cwd/$HANDOFF_REL_DRIVE"
