@@ -132,7 +132,10 @@ the same session. See
 
 The checkpoint applies the writes, composes `.claude/autodrive` from the
 transition fields — creating `.claude/` when the project has none, the
-sentinel being the one thing left that needs it — and prints on stdout what
+sentinel being the one thing left that needs it — through the same sibling
+temporary file and rename as a root file, so a link at the sentinel is replaced
+rather than written through, and the temporary file's `autodrive.` prefix keeps
+an orphan under the `.claude/autodrive*` ignore — and prints on stdout what
 the agent does next (see [What the checkpoint
 prints](the-checkpoint-directive.md#what-the-checkpoint-prints)). A content
 string is written as given, whatever is in it; a root file is removed by

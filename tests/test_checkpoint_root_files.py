@@ -195,3 +195,39 @@ def test_a_new_file_takes_the_umask_mode_and_no_temporary_is_left(
     for rel in ("TASK.md", "TODO.md"):
         assert (repo / rel).stat().st_mode & 0o7777 == 0o640
     assert sorted(p.name for p in repo.iterdir() if p.name.startswith(".T")) == []
+
+
+# --- a symlink at the sentinel ---
+
+
+def test_a_symlinked_sentinel_is_replaced_and_its_target_is_untouched(
+    tmp_path: Path,
+) -> None:
+    """The sentinel is written by a rename over the name, so a link there is
+    swapped for the new file rather than written through; the target keeps its
+    bytes."""
+    repo = make_repo(tmp_path)
+    target = tmp_path / "linked-target"
+    target.write_text(TARGET_BODY)
+    (repo / SENTINEL_REL).symlink_to(target)
+    result = run_checkpoint(repo, frame_payload(TASK_WRITTEN, TODO_WRITTEN))
+    assert target.read_text() == TARGET_BODY
+    assert result.returncode == 0, result.stderr
+    sentinel = repo / SENTINEL_REL
+    assert not sentinel.is_symlink()
+    assert sentinel.read_text() == "armed sess-checkpoint\nrename\n/rename T\n"
+
+
+def test_a_dangling_symlinked_sentinel_creates_nothing_through_it(
+    tmp_path: Path,
+) -> None:
+    """Writing through a dangling link would create its target; no temporary
+    file is left beside the sentinel either."""
+    repo = make_repo(tmp_path)
+    target = tmp_path / "nowhere"
+    (repo / SENTINEL_REL).symlink_to(target)
+    result = run_checkpoint(repo, frame_payload(TASK_WRITTEN, TODO_WRITTEN))
+    assert not target.exists()
+    assert result.returncode == 0, result.stderr
+    assert not (repo / SENTINEL_REL).is_symlink()
+    assert sorted(p.name for p in (repo / ".claude").iterdir()) == ["autodrive"]

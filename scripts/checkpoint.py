@@ -137,7 +137,14 @@ def compose_sentinel(
     sentinel_lines = [state, transition.kind, *transition.cmds]
     if continuation:
         sentinel_lines.append(continuation)
-    drive_path.write_text("\n".join(sentinel_lines) + "\n", encoding="utf-8")
+    # Renamed into place rather than written through the name: a link at the
+    # sentinel is swapped for the new file, never followed onto what it names.
+    # The temporary file takes the `autodrive.` prefix, which the
+    # `.claude/autodrive*` ignore covers, so one orphaned by a kill is never
+    # committed.
+    planning.write_replacing(
+        drive_path, "\n".join(sentinel_lines) + "\n", prefix=f"{drive_path.name}."
+    )
 
     ok, drive_err = _read_back_drive(drive_path)
     if not ok:

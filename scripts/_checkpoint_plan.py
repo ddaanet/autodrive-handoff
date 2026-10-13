@@ -212,16 +212,19 @@ def apply_plan(plan: FilePlan) -> None:
         legacy.path.unlink(missing_ok=True)
 
 
-def write_replacing(path: Path, body: str) -> None:
+def write_replacing(path: Path, body: str, *, prefix: str | None = None) -> None:
     """Write body at path through a sibling temporary file and os.replace.
 
     The rename swaps whatever is at the name, a link included, for the new file
     rather than writing through it. The new file keeps the mode of the regular
     file it replaces, else takes the one the umask gives a new file; the
-    temporary file is removed when anything fails.
+    temporary file is removed when anything fails. `prefix` names the temporary
+    file, `.<name>.` by default.
     """
     mode = replaced_mode(path)
-    fd, name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    if prefix is None:
+        prefix = f".{path.name}."
+    fd, name = tempfile.mkstemp(prefix=prefix, dir=path.parent)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as tmp:
             tmp.write(body)
