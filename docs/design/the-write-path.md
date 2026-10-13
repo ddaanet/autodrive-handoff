@@ -46,7 +46,10 @@ before they moved to the root, and a repository that crossed the move still has
 them. They are the *legacy* files, and the frame reads them as a bridge: per
 half, the root file when it has a body, else the legacy file when it has a
 body. The root file wins, and a legacy file that exists beside a root file with
-a body, whatever it holds, is left as it is and reported ignored. The loader
+a body, whatever it holds, is left as it is and reported ignored. A legacy
+path that is a symlink is treated as absent by the loaders, neither read nor
+reported ignored: the checkpoint refuses one naming the field, which is where
+it is reported. The loader
 names a half read from a legacy path and a legacy file left ignored on both
 channels, from one producer, `handoff_frame_notes`, so the two channels and the
 two loaders word them alike; the note carries a fact, and no advice to delete.

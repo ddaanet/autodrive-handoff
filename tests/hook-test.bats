@@ -431,6 +431,50 @@ assert_framed() {
     [ "${FRAME_TODO_SHADOWED:-unset}" = "1" ]
 }
 
+# A legacy path that is a symlink is neither read nor counted as existing: the
+# checkpoint refuses one naming the field, and following it would inject
+# whatever file it names. A dangling link is the same refusal; it is the valid
+# link that discriminates, since `-f` already fails on a dangling one.
+@test "handoff_frame (legacy files are symlinks to bodies): not read — rc 1, FRAME empty, flags 0" {
+    fr="$BATS_TEST_TMPDIR/frame-leg-link"; mkdir -p "$fr"
+    printf '## Current task\n\nlinked task body\n' > "$fr/elsewhere-task.md"
+    printf '## Remaining\n\n- linked item\n' > "$fr/elsewhere-todo.md"
+    ln -s "$fr/elsewhere-task.md" "$fr/legacy-task.md"
+    ln -s "$fr/elsewhere-todo.md" "$fr/legacy-todo.md"
+    rc=0; handoff_frame "$fr/task.md" "$fr/todo.md" "$fr/legacy-task.md" "$fr/legacy-todo.md" || rc=$?
+    [ "$rc" -eq 1 ]
+    [ "${FRAME-unset}" = "" ]
+    [ "${FRAME_TASK_LEGACY:-unset}" = "0" ]
+    [ "${FRAME_TODO_LEGACY:-unset}" = "0" ]
+}
+
+@test "handoff_frame (root with a body beside symlinked legacy files): root loaded, nothing shadowed" {
+    fr="$BATS_TEST_TMPDIR/frame-leg-link-shadow"; mkdir -p "$fr"
+    printf '## Current task\n\nroot task body\n' > "$fr/task.md"
+    printf '## Remaining\n\n- root item\n' > "$fr/todo.md"
+    printf 'x\n' > "$fr/elsewhere.md"
+    ln -s "$fr/elsewhere.md" "$fr/legacy-task.md"
+    ln -s "$fr/elsewhere.md" "$fr/legacy-todo.md"
+    rc=0; handoff_frame "$fr/task.md" "$fr/todo.md" "$fr/legacy-task.md" "$fr/legacy-todo.md" || rc=$?
+    [ "$rc" -eq 0 ]
+    assert_framed "${FRAME-}" $'\n\n## Current task\n\nroot task body\n\n## Remaining\n\n- root item'
+    [ "${FRAME_TASK_SHADOWED:-unset}" = "0" ]
+    [ "${FRAME_TODO_SHADOWED:-unset}" = "0" ]
+}
+
+@test "handoff_frame (dangling legacy symlinks, root with a body): root loaded, nothing read or shadowed" {
+    fr="$BATS_TEST_TMPDIR/frame-leg-dangling"; mkdir -p "$fr"
+    printf '## Remaining\n\n- root item\n' > "$fr/todo.md"
+    ln -s "$fr/nowhere-task.md" "$fr/legacy-task.md"
+    ln -s "$fr/nowhere-todo.md" "$fr/legacy-todo.md"
+    rc=0; handoff_frame "$fr/task.md" "$fr/todo.md" "$fr/legacy-task.md" "$fr/legacy-todo.md" || rc=$?
+    [ "$rc" -eq 0 ]
+    assert_framed "${FRAME-}" $'\n\n## Remaining\n\n- root item'
+    [ "${FRAME_TASK:-unset}" = "0" ]
+    [ "${FRAME_TASK_LEGACY:-unset}" = "0" ]
+    [ "${FRAME_TODO_SHADOWED:-unset}" = "0" ]
+}
+
 @test "handoff_frame (headings-only root beside a legacy body): the legacy body is loaded, nothing shadowed" {
     fr="$BATS_TEST_TMPDIR/frame-heads-leg"; mkdir -p "$fr"
     printf '## Current task\n\n## Open decisions\n' > "$fr/task.md"
@@ -1255,6 +1299,30 @@ assert_notes() {
     [ -s "$tmp/.claude/handoff-task.md" ]
 }
 
+@test "load-handoff (legacy files are symlinks to bodies, no root file): the neither state, no legacy note" {
+    rm -f "$tmp/TASK.md"
+    printf '## Current task\n\nlinked task body\n' > "$other/task.md"
+    printf '## Remaining\n\n- linked item\n' > "$other/todo.md"
+    ln -s "$other/task.md" "$tmp/.claude/handoff-task.md"
+    ln -s "$other/todo.md" "$tmp/.claude/handoff-todo.md"
+    run_load_handoff "$tmp" startup
+    [ "$status" -eq 0 ]
+    split_output "$output"
+    [ "$MSG" = "handoff: No task frame or todo." ]
+    [ "$CTX" = $'No task frame or todo.\n' ]
+}
+
+@test "load-handoff (dangling legacy symlinks, no root file): the neither state, no legacy note" {
+    rm -f "$tmp/TASK.md"
+    ln -s "$other/nowhere-task.md" "$tmp/.claude/handoff-task.md"
+    ln -s "$other/nowhere-todo.md" "$tmp/.claude/handoff-todo.md"
+    run_load_handoff "$tmp" startup
+    [ "$status" -eq 0 ]
+    split_output "$output"
+    [ "$MSG" = "handoff: No task frame or todo." ]
+    [ "$CTX" = $'No task frame or todo.\n' ]
+}
+
 @test "load-handoff (legacy todo alone): loaded from the old path, noted on both channels, No task frame last" {
     rm -f "$tmp/TASK.md"
     printf '## Remaining\n\n- legacy item\n' > "$tmp/.claude/handoff-todo.md"
@@ -1815,6 +1883,19 @@ run_load_compact() {
     [ "$MSG" = "handoff: compacted — todo re-injected; $legacy_todo_msg." ]
     assert_framed "$CTX" $'\n\n## Remaining\n\n- legacy item\n\n'"$legacy_todo_ctx"$'\n'
     [ -s "$tmp/.claude/handoff-todo.md" ]
+}
+
+@test "load-compact (legacy todo is a symlink to a body): consumed, No todo, nothing injected" {
+    rm -f "$tmp/TASK.md"
+    printf '## Remaining\n\n- linked item\n' > "$other/todo.md"
+    ln -s "$other/todo.md" "$tmp/.claude/handoff-todo.md"
+    seed_pending "$tmp" "compact" "/compact" "continue with task 3"
+    run_load_compact "$tmp"
+    [ "$status" -eq 0 ]
+    [ ! -e "$tmp/.claude/autodrive" ]
+    split_output "$output"
+    [ "$MSG" = "handoff: compacted — No todo." ]
+    [ "$CTX" = "" ]
 }
 
 @test "load-compact (legacy task alone): injected from the old path, the message says No todo and names it" {

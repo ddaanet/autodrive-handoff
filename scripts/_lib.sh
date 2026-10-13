@@ -57,7 +57,7 @@ HANDOFF_POINTER_DIR="${HANDOFF_POINTER_DIR:-/tmp/claude}"
 # Assemble the injectable frame from the task file ($1) and the todo file
 # ($2): a timestamp header plus each half that counts inlined verbatim, task
 # first. $3 and $4 are the legacy task and todo paths, optional; an absent or
-# empty one is a path that does not exist. Per half, the root file counts when
+# empty one, or a symlink, is a path that does not exist. Per half, the root file counts when
 # it has a body (`is_empty_body` in _checkpoint_lib.py, through its
 # `--has-body` CLI), and otherwise the legacy file does when it has a body. A
 # missing, zero-byte, whitespace-only or headings-only file has none, and
@@ -86,6 +86,12 @@ handoff_frame() {
     local task="$1" todo="$2" legacy_task="${3:-}" legacy_todo="${4:-}" lib
     local task_src="$task" todo_src="$todo"
     lib="$(dirname "${BASH_SOURCE[0]}")/_checkpoint_lib.py"
+    # A legacy path that is a symlink, dangling or not, is treated as absent:
+    # never tested, read or counted as shadowed. The checkpoint refuses one
+    # naming the field, so the next checkpoint is what reports it; following it
+    # here would inject whatever file it names.
+    [[ -n "$legacy_task" && -L "$legacy_task" ]] && legacy_task=""
+    [[ -n "$legacy_todo" && -L "$legacy_todo" ]] && legacy_todo=""
     FRAME="" FRAME_TASK=0 FRAME_TODO=0
     FRAME_TASK_LEGACY=0 FRAME_TODO_LEGACY=0
     FRAME_TASK_SHADOWED=0 FRAME_TODO_SHADOWED=0
