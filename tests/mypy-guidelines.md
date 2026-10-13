@@ -368,7 +368,10 @@ mypy replacement:
   ([config_file.html](https://mypy.readthedocs.io/en/stable/config_file.html)).
   Keep the path settings of each tool (mypy `mypy_path`, pytest
   `pythonpath`, ty `extra-paths`) in sync — they should all point at the
-  same source dir; drift breaks one tool silently. Avoid same-named modules
+  same source dir; drift breaks one tool silently. The exception is the test
+  directory: pytest's `pythonpath` also carries `tests` (so test files can
+  `from conftest import …` under importlib mode), and mypy's `mypy_path` and
+  ty's `extra-paths` do not need it. Avoid same-named modules
   in two unpackaged dirs: importlib mode can't disambiguate them.
 - **`warn_redundant_casts`** (in `--strict`) flags casts that change
   nothing; treat its findings as "delete the cast," not "add an ignore."
