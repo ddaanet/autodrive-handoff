@@ -761,7 +761,7 @@ def test_reports_and_the_git_rm_act_print_ahead_of_the_clause_file_refusal(
         act = git_act(repo, LEGACY_TODO_REL)
         assert report_at < out.index(act) < out.index(refusal.text)
     else:
-        assert UNSTAGE_MARK not in out
+        assert "git -C" not in out
         assert report_at < out.index(refusal.text)
 
 
@@ -818,7 +818,7 @@ def test_git_rm_act_is_owed_only_to_with_commit_over_a_legacy_file(
         assert act in out
         assert out.index(act) < out.rindex("Once everything above is done")
     else:
-        assert UNSTAGE_MARK not in out
+        assert "git -C" not in out
 
 
 def git_status_lines(repo: Path) -> list[str]:
@@ -995,6 +995,67 @@ def test_printed_git_act_unstages_only_the_roots_own_legacy_file(
     )
     assert ran.returncode == 0, ran.stderr
     assert in_index() == set(tracked) - {own}
+
+
+# A root whose name would end the code span or split the line the act sits in.
+# Each carries INJECTED, the text an agent would read as a further instruction.
+UNPRINTABLE_ROOTS = {
+    "backtick": "a`INJECTED`b",
+    "newline": "a\nINJECTED",
+    "carriage_return": "a\rINJECTED",
+    "escape": "a\x1bINJECTED",
+    "delete": "a\x7fINJECTED",
+    "line_separator": "a\u2028INJECTED",
+    "next_line": "a\x85INJECTED",
+    "bidi_override": "a\u202eINJECTED",
+}
+UNPRINTABLE_SENTENCE = (
+    "The project path holds a character that cannot be printed safely. "
+    "From the directory that holds the project's `.claude/` directory, "
+    f"run `git rm --cached --ignore-unmatch -q -- {LEGACY_TODO_REL}`."
+)
+
+
+@pytest.mark.parametrize("name", UNPRINTABLE_ROOTS)
+def test_a_root_that_cannot_be_printed_is_refused_not_interpolated(
+    tmp_path: Path, name: str
+) -> None:
+    """A backtick or control character in the root never reaches stdout.
+
+    The act is replaced by one plain sentence that echoes nothing of the path,
+    and the closing line stays last. Letting the root through unchanged reds
+    every row on the marker, which the root's name carries.
+    """
+    repo = make_repo(tmp_path)
+    root = repo / UNPRINTABLE_ROOTS[name]
+    (root / LEGACY_TODO_REL).parent.mkdir(parents=True)
+    put(root, LEGACY_TODO_REL, TODO_LEGACY_BODY)
+    result = run_checkpoint(
+        repo, migration_payload(task_clear(), todo_keep(), "with-commit"), root
+    )
+    ok(result)
+    out = result.stdout
+    assert read(root / "TODO.md") == TODO_LEGACY_BODY
+    assert "INJECTED" not in out, out
+    assert str(root) not in out
+    assert UNPRINTABLE_SENTENCE in out
+    assert "git -C" not in out
+    assert "\x1b" not in out
+    assert out.count(UNPRINTABLE_SENTENCE) == 1
+    assert out.endswith(lib.closing_directive("handoff", typed=False)), out
+
+
+def test_a_printable_root_keeps_the_act_and_no_refusal(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    root = repo / "pkg dir"
+    (root / LEGACY_TODO_REL).parent.mkdir(parents=True)
+    put(root, LEGACY_TODO_REL, TODO_LEGACY_BODY)
+    result = run_checkpoint(
+        repo, migration_payload(task_clear(), todo_keep(), "with-commit"), root
+    )
+    ok(result)
+    assert git_act(root, LEGACY_TODO_REL) in result.stdout
+    assert UNPRINTABLE_SENTENCE not in result.stdout
 
 
 def test_git_rm_act_names_only_the_files_that_moved_or_went(tmp_path: Path) -> None:

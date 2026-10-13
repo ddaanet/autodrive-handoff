@@ -28,7 +28,11 @@ condition:
    --ignore-unmatch -q -- <path> …`, over those paths alone and
    never an ignored one, so git records a rename once the files are added.
    Each path is relative to the root, which `-C` names, so the line runs from
-   any directory;
+   any directory. A root holding a backtick or a control character (newline,
+   carriage return, escape, DEL) would end the code span or split the line, so
+   the line gives way to one plain sentence that echoes none of the path and
+   asks for the unstaging by hand with `git rm --cached` from the project
+   root; every other root prints byte for byte as before;
 5. the arming instruction, when the sentinel is held — run
    `handoff-approved`;
 6. the closing line, when it is not — an instruction to end the reply on one
