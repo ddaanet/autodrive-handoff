@@ -224,7 +224,9 @@ boundary, never on a hot path, so the interpreter-startup tax lands where it
 is cheapest to pay. The hooks that fire on every tool call stay bash. See
 [`docs/changelog/2026-08-10-python-split.md`](../changelog/2026-08-10-python-split.md).
 
-The port is three modules. `checkpoint.py` validates the payload, composes the
-sentinel and orders the directives; `_checkpoint_plan.py` resolves each half to
-a plan, the legacy migration included, and applies the plans;
-`_checkpoint_lib.py` holds what both import and the emptiness rule's CLI.
+The port is four modules. `checkpoint.py` runs the call in order, composes the
+sentinel and orders the directives; `_checkpoint_payload.py` validates the
+payload (FR2) and returns the transition and the two halves' actions, writing
+nothing; `_checkpoint_plan.py` resolves each half to a plan, the legacy
+migration included, and applies the plans; `_checkpoint_lib.py` holds what the
+others import and the emptiness rule's CLI.

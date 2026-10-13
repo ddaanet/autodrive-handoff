@@ -4,7 +4,7 @@
 
 ## Remaining
 
-- `scripts/checkpoint.py` is 633 lines after the plan layer left for `scripts/_checkpoint_plan.py`, still over the 400-line soft cap. The next seam is the payload validation (`read_payload` through `_todo_edit_strings`, about 350 lines); same contract as the plan split: no re-export, every caller patched, `CLAUDE.md` and `docs/design/the-write-path.md` updated.
+- `scripts/_checkpoint_payload.py` is 419 lines after the payload validation left `scripts/checkpoint.py` (now 241), just over the 400-line soft cap. The one cut that is not a reflexive split: `validate_root` and `require_session_id` read the environment, not the payload, and could go back to `checkpoint.py` (about 30 lines). Whether the overage is worth that is open.
 - Three of the files `tests/test_checkpoint.py` was split into are over the cap: `tests/test_checkpoint_schema.py` (628, one 531-line section), `tests/test_checkpoint_transition.py` (622) and `tests/test_checkpoint_directives.py` (552). The cuts on section boundaries are the rename and autoname sections out of the transition file, and Composition with Closing line out of the directives file. `tests/test_checkpoint_legacy.py` (1371) is one file on purpose, deleted whole with the fallback.
 - `tests/mypy-guidelines.md` says to keep mypy's `mypy_path`, pytest's `pythonpath` and ty's `extra-paths` in sync. pytest's now carries `tests` (for `from conftest import …` under importlib mode) and the other two do not need it; say so there.
 - Release 0.16.1, which ships the legacy-path migration and the https submodule urls (the memory repo is now `ddaanet/handoff-memory`, public), when my human partner asks for it; the next item has what the release must do in `claude-plugins`.
