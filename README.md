@@ -260,6 +260,9 @@ And under `./.claude/`, two transient files:
   prompt, one transition.
 - `autodrive.failed` — written only when a line was rejected, and consumed
   when you are told about it at your next prompt.
+- `autodrive.swept` — one line for each transition file the prompt-time sweep
+  removed (when, which session, its state, owner and age), newest first, the
+  last 50 kept. Never consumed; a diagnostic for a sentinel that went missing.
 
 Nothing outside the current project is modified.
 

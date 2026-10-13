@@ -170,10 +170,18 @@ note in `report-drive-failure.sh`.
   exempt unless its owner is not this session (then it is abandoned). It also
   reports session-root drift, once per episode (marker
   `/tmp/claude/handoff-drift-<session_id>`), with a `systemMessage` that leads
-  with an ANSI style reset.
+  with an ANSI style reset. Every removal it makes (`armed`, abandoned,
+  malformed, and a stranded `pending` cleared with a failure report) appends
+  one tab-separated line to `.claude/autodrive.swept` — UTC time,
+  `sweeper=<session id>`, `state=`, `owner=` (`-` for none), `kind=`,
+  `age=<s>s` by mtime, `cwd=` `%q`-quoted — newest first, trimmed to 50, never
+  consumed, and a write failure never blocks the sweep. The report goes to the
+  removing session's channels, invisible from the session that composed the
+  file, so this is the only trace of who took a sentinel.
 - `scripts/_lib.sh` — sourced helper (`# shellcheck source-path=SCRIPTDIR
   source=_lib.sh` above each `source`; `# shellcheck disable=SC2034` for vars
-  only sourcing scripts read). `HANDOFF_REL_*` path constants;
+  only sourcing scripts read). `HANDOFF_REL_*` path constants
+  (`HANDOFF_REL_DRIVE_SWEPT`, the sweep's record, among them);
   `HANDOFF_LEGACY_REL_*` beside them (the paths from before the move to the
   root, the loaders' fallback and the one marker of it, with a Python mirror in
   `_checkpoint_plan.py`);
@@ -461,7 +469,10 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
   with the note order pinned), `report-drive-failure.sh` (the failure file,
   the stranded-`pending` clear, the sweep's note naming the mod and printing the
   lines, held-by-another-session as abandoned with no lines, a malformed file
-  with none, session-root drift episodes), a cwd holding a newline or ending in
+  with none, session-root drift episodes, the sweep's record: one line per
+  removal naming the sweeper, newest 50 kept, an unwritable record not
+  blocking the sweep; the `|| true` after the trim pipeline is pinned by the
+  4000-line row and the record call by the first two rows), a cwd holding a newline or ending in
   a space (`load-handoff.sh` and `report-drive-failure.sh`, at the project root
   and in a linked worktree; the fields that follow the cwd, `source` and
   `session_id`, pinned apart from the root), the write guard (the sentinel

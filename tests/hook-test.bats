@@ -2041,6 +2041,69 @@ run_report_failure() {
     [ "$output" = "" ]
 }
 
+# Every sweep leaves a line in .claude/autodrive.swept: the removing session's
+# report goes to that session's own channels, so without the record a sentinel
+# that vanishes leaves nothing to say who took it, from what state, or how old.
+@test "report-drive-failure (a sweep records who removed what: armed)" {
+    seed_drive "$tmp" "compact" "/compact" "continue with task 3"
+    run_report_failure "$tmp"
+    [ "$status" -eq 0 ]
+    [ ! -e "$tmp/.claude/autodrive" ]
+    [ "$(wc -l < "$tmp/.claude/autodrive.swept")" -eq 1 ]
+    line="$(cat "$tmp/.claude/autodrive.swept")"
+    [[ "$line" == *$'\tsweeper='"$SESSION_ID"$'\tstate=armed\towner=-\tkind=compact\tage='[0-9]*s$'\tcwd='* ]]
+}
+
+@test "report-drive-failure (a sweep records who removed what: held by another session)" {
+    printf '%s\n' "held other-session" "clear" "/rename t" "/clear" "go" > "$tmp/.claude/autodrive"
+    run_report_failure "$tmp"
+    [ "$status" -eq 0 ]
+    [ ! -e "$tmp/.claude/autodrive" ]
+    line="$(cat "$tmp/.claude/autodrive.swept")"
+    [[ "$line" == *$'\tsweeper='"$SESSION_ID"$'\tstate=abandoned\towner=other-session\tkind=clear\t'* ]]
+}
+
+@test "report-drive-failure (a sweep records a stranded pending file)" {
+    printf '%s\n' "rejected before it ran" > "$tmp/.claude/autodrive.failed"
+    seed_pending "$tmp" "compact" "/compact" "continue"
+    run_report_failure "$tmp"
+    [ "$status" -eq 0 ]
+    [[ "$(cat "$tmp/.claude/autodrive.swept")" == *$'\tstate=pending\t'* ]]
+}
+
+@test "report-drive-failure (nothing swept: no record is written)" {
+    run_report_failure "$tmp"
+    [ "$status" -eq 0 ]
+    [ ! -e "$tmp/.claude/autodrive.swept" ]
+}
+
+# head closing its end of the pipe early must not take the script down under
+# pipefail: the sweep still removes the file and still reports.
+@test "report-drive-failure (the record keeps the newest 50 lines, newest first, and the sweep still reports)" {
+    # Enough bytes that cat is still writing when head closes its end of the pipe.
+    for i in $(seq 1 4000); do printf 'old-%s %0100d\n' "$i" 0; done > "$tmp/.claude/autodrive.swept"
+    seed_drive "$tmp" "compact" "/compact" "continue"
+    run_report_failure "$tmp"
+    [ "$status" -eq 0 ]
+    [ ! -e "$tmp/.claude/autodrive" ]
+    echo "$output" | jq -e '.systemMessage | test("stale")' >/dev/null
+    [ "$(wc -l < "$tmp/.claude/autodrive.swept")" -eq 50 ]
+    [[ "$(head -n1 "$tmp/.claude/autodrive.swept")" == *$'\tstate=armed\t'* ]]
+    [[ "$(sed -n 2p "$tmp/.claude/autodrive.swept")" == "old-1 "* ]]
+    [[ "$(tail -n1 "$tmp/.claude/autodrive.swept")" == "old-49 "* ]]
+}
+
+# The record is a diagnostic: when it cannot be written, the sweep is not
+# blocked and still reports.
+@test "report-drive-failure (an unwritable record does not stop the sweep)" {
+    mkdir "$tmp/.claude/autodrive.swept"
+    seed_drive "$tmp" "compact" "/compact" "continue"
+    run_report_failure "$tmp"
+    [ "$status" -eq 0 ]
+    [ ! -e "$tmp/.claude/autodrive" ]
+    echo "$output" | jq -e '.systemMessage | test("stale")' >/dev/null
+}
+
 # The armed sentinel that survived to the next prompt never ran. One cause is a
 # drive mod that did not load (--safe-mode, or Claude Code older than 2.1.287),
 # in which case nothing will ever run it: the report names that cause and prints

@@ -82,17 +82,44 @@ esac
 
 failed="$cwd/$HANDOFF_REL_DRIVE_FAILED"
 drive="$cwd/$HANDOFF_REL_DRIVE"
+swept="$cwd/$HANDOFF_REL_DRIVE_SWEPT"
+
+# Append one line to the sweep record before the sentinel goes: the removing
+# session, the state and owner it saw, the kind, the sentinel's age in seconds
+# and the hook's cwd. Tab-separated; the cwd is %q-quoted so one holding a
+# newline stays on its line. Keeps the last 50 lines. A failure to write is not
+# the sweep's failure.
+record_sweep() {
+    local mtime now age
+    now="$(date +%s)"
+    mtime="$(stat -c %Y "$drive" 2>/dev/null || stat -f %m "$drive" 2>/dev/null || true)"
+    age="?"
+    if [[ "$mtime" =~ ^[0-9]+$ ]]; then
+        age=$(( now - mtime ))
+    fi
+    {
+        printf '%s\tsweeper=%s\tstate=%s\towner=%s\tkind=%s\tage=%ss\tcwd=%q\n' \
+            "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${session_id:-?}" "$drive_state" \
+            "${drive_owner:--}" "${drive_kind:--}" "$age" "$hook_cwd"
+        if [[ -f "$swept" ]]; then
+            cat "$swept"
+        fi
+    } 2>/dev/null | head -n 50 > "$swept.tmp" 2>/dev/null || true
+    mv -f "$swept.tmp" "$swept" 2>/dev/null || true
+}
 
 # Parse once: the failure branch and the sweep want different states of the same
 # file. A file that will not parse is recorded as its own value — it describes
 # no transition anyone can complete, so the sweep takes it.
 drive_state=""
 drive_owner=""
+drive_kind=""
 drive_lines=()   # the lines an armed file held, before then after
 if [[ -f "$drive" ]]; then
     if handoff_drive_read "$drive"; then
         drive_state="$DRIVE_STATE"
         drive_owner="$DRIVE_OWNER"
+        drive_kind="$DRIVE_KIND"
         drive_lines=( ${DRIVE_BEFORE[@]+"${DRIVE_BEFORE[@]}"} ${DRIVE_AFTER[@]+"${DRIVE_AFTER[@]}"} )
     else
         drive_state="malformed"
@@ -116,6 +143,7 @@ if [[ -f "$failed" ]]; then
     # here — a stale armed file says nothing about one in flight, and sweeping
     # on that evidence would race a live SessionStart(compact|clear).
     if [[ "$drive_state" == "pending" ]]; then
+        record_sweep
         rm -f "$drive"
     fi
     msgs+=("transition drive did not deliver — $reason")
@@ -135,6 +163,7 @@ fi
 # conversation.
 armed_lines=""   # the armed lines, for the user to type in order
 if [[ -n "$drive_state" && "$drive_state" != "pending" && "$drive_state" != "held" ]]; then
+    record_sweep
     rm -f "$drive"
     if [[ "$drive_state" == "armed" ]]; then
         msgs+=("stale autodrive discarded — the drive mod did not run it")

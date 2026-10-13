@@ -185,6 +185,15 @@ names its states rather than taking anything that is not `pending`; a `held`
 file whose owner is another session is reclassified as abandoned first, and
 no lines are offered for it.
 
+Each removal the sweep makes also appends a line to `.claude/autodrive.swept`:
+time, the removing session, the file's state, owner, kind and age, and the
+cwd. The sweep's report lands on the removing session's own channels, which
+the session that composed the file never sees, and background sessions
+sharing the root (the commit review) run this hook too; without the record a
+vanished sentinel names no remover. It is newest first, trimmed to 50 lines,
+never consumed, and a failed write never blocks the sweep. It says who took
+the file and how old it was; it does not decide whether the sweep was right.
+
 ## Verification
 
 Three layers, because the mod's own seams are each reachable only one way:

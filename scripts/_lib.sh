@@ -36,6 +36,14 @@ HANDOFF_REL_DRIVE=".claude/autodrive"
 # report-drive-failure.sh at the next UserPromptSubmit.
 # shellcheck disable=SC2034
 HANDOFF_REL_DRIVE_FAILED=".claude/autodrive.failed"
+# Where report-drive-failure.sh appends one line for every transition file it
+# removes: when, which session removed it, what state and owner it had, how old
+# it was. The sweep reports on the removing session's own channels, which are
+# invisible from the session that composed the file, so without this record a
+# sentinel that vanishes leaves nothing to say who took it. Never consumed;
+# trimmed to its last lines by the writer.
+# shellcheck disable=SC2034
+HANDOFF_REL_DRIVE_SWEPT=".claude/autodrive.swept"
 
 # Where the drift report records the last destination it announced. A literal
 # directory rather than $TMPDIR: it used to also be where session-pointer.sh
