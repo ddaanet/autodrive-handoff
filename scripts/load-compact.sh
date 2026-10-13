@@ -28,7 +28,8 @@ fi
 [[ -n "$cwd" ]] || exit 0
 
 drive="$cwd/$HANDOFF_REL_DRIVE"
-[[ -f "$drive" ]] || exit 0
+# A link, dangling or not, reaches the reader, which refuses it.
+[[ -L "$drive" || -f "$drive" ]] || exit 0
 
 if ! handoff_drive_read "$drive"; then
     rm -f "$drive"

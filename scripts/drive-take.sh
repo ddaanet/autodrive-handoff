@@ -31,7 +31,8 @@ session_id="${2:-}"
 drive="$root/$HANDOFF_REL_DRIVE"
 fail_file="$root/$HANDOFF_REL_DRIVE_FAILED"
 
-[[ -f "$drive" ]] || exit 0
+# A link, dangling or not, reaches the reader, which refuses it.
+[[ -L "$drive" || -f "$drive" ]] || exit 0
 
 if ! handoff_drive_read "$drive"; then
     # A file no writer of this version composed: consume it so the complaint

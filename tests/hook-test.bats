@@ -967,6 +967,27 @@ read_drive() {
     [[ "$output" == *"must not begin"* ]]
 }
 
+# No writer of the sentinel makes a link, and a repository can commit one to
+# anything readable: following it would parse that file, quote its first line
+# into a report and let a later rewrite land on it. A link is refused before a
+# byte is read, whatever it names.
+@test "handoff_drive_read (a symlink to a well-formed sentinel): refused, nothing parsed" {
+    printf '%s\n' "armed sess-42" "rename" "/rename Linked" > "$other/sentinel"
+    ln -s "$other/sentinel" "$BATS_TEST_TMPDIR/sentinel"
+    run handoff_drive_read "$BATS_TEST_TMPDIR/sentinel"
+    [ "$status" -ne 0 ]
+    handoff_drive_read "$BATS_TEST_TMPDIR/sentinel" || true
+    [[ "$DRIVE_ERR" == *"symbolic link"* ]]
+    [ "$DRIVE_STATE" = "" ]
+    [ "$DRIVE_KIND" = "" ]
+}
+
+@test "handoff_drive_read (a dangling symlink): refused as a link" {
+    ln -s "$other/nowhere" "$BATS_TEST_TMPDIR/sentinel"
+    handoff_drive_read "$BATS_TEST_TMPDIR/sentinel" && false
+    [[ "$DRIVE_ERR" == *"symbolic link"* ]]
+}
+
 # --- _lib.sh: handoff_drive_arm ---
 
 # Everything below line 1 is copied through untouched: the arm never has to know
@@ -2568,6 +2589,88 @@ pick up '"'"'task  3'"'"' per the *file*; then \ done'
     [ ! -e "$tmp/.claude/autodrive" ]
     echo "$output" | jq -e '.systemMessage | test("discarded")' >/dev/null
     echo "$output" | jq -e '.systemMessage | test("Type in order") | not' >/dev/null
+}
+
+# --- the sentinel is a symlink ---
+#
+# Every reader refuses a link at .claude/autodrive, dangling or not, and takes
+# its malformed path: the link is removed (the name, never what it names) and
+# reported, and the target's bytes reach neither channel. A dangling link is
+# refused too, rather than read as no file and left for ever.
+
+# <first line> — .claude/autodrive becomes a link to a file under $other whose
+# first line is $1 and which parses as nothing, so a reader that followed it
+# would quote that line in its malformed report.
+link_drive() {
+    printf '%s\n' "$1" "clear" > "$other/linked-sentinel"
+    ln -s "$other/linked-sentinel" "$tmp/.claude/autodrive"
+}
+
+# <first line> <hook output> — the link is gone, its target byte-identical, the
+# report names the link, and $1 is on neither channel.
+assert_link_refused() {
+    [ ! -e "$tmp/.claude/autodrive" ] && [ ! -L "$tmp/.claude/autodrive" ]
+    [ "$(cat "$other/linked-sentinel")" = "$1
+clear" ]
+    split_output "$2"
+    [[ "$MSG" == *"symbolic link"* ]]
+    [[ "$MSG" != *"$1"* && "$CTX" != *"$1"* ]]
+}
+
+@test "load-handoff (clear, the sentinel is a symlink: removed unread, reported)" {
+    link_drive "LINKED-FIRST-LINE"
+    run_load_handoff "$tmp" clear
+    [ "$status" -eq 0 ]
+    assert_link_refused "LINKED-FIRST-LINE" "$output"
+}
+
+@test "load-handoff (clear, the sentinel is a dangling symlink: removed, reported)" {
+    ln -s "$other/nowhere" "$tmp/.claude/autodrive"
+    run_load_handoff "$tmp" clear
+    [ "$status" -eq 0 ]
+    [ ! -L "$tmp/.claude/autodrive" ]
+    [ ! -e "$other/nowhere" ]
+    split_output "$output"
+    [[ "$MSG" == *"symbolic link"* ]]
+}
+
+@test "load-compact (the sentinel is a symlink: removed unread, reported)" {
+    link_drive "LINKED-FIRST-LINE"
+    run_load_compact "$tmp"
+    [ "$status" -eq 0 ]
+    assert_link_refused "LINKED-FIRST-LINE" "$output"
+}
+
+@test "load-compact (the sentinel is a dangling symlink: removed, reported)" {
+    ln -s "$other/nowhere" "$tmp/.claude/autodrive"
+    run_load_compact "$tmp"
+    [ "$status" -eq 0 ]
+    [ ! -L "$tmp/.claude/autodrive" ]
+    split_output "$output"
+    [[ "$MSG" == *"symbolic link"* ]]
+}
+
+# The sweep quotes no line of a malformed file, but it prints an armed one's
+# lines for the user to type: through a link, those would be another file's.
+@test "report-drive-failure (the sentinel is a symlink to this session's armed file: swept unread, no lines offered)" {
+    printf '%s\n' "armed $SESSION_ID" "clear" "/rename LINKED-TITLE" "/clear" > "$other/linked-sentinel"
+    ln -s "$other/linked-sentinel" "$tmp/.claude/autodrive"
+    run_report_failure "$tmp"
+    [ "$status" -eq 0 ]
+    [ ! -L "$tmp/.claude/autodrive" ]
+    [ "$(head -n1 "$other/linked-sentinel")" = "armed $SESSION_ID" ]
+    split_output "$output"
+    [[ "$MSG" == *"symbolic link"* ]]
+    [[ "$MSG" != *"LINKED-TITLE"* && "$CTX" != *"LINKED-TITLE"* ]]
+}
+
+@test "report-drive-failure (the sentinel is a dangling symlink: swept, reported)" {
+    ln -s "$other/nowhere" "$tmp/.claude/autodrive"
+    run_report_failure "$tmp"
+    [ "$status" -eq 0 ]
+    [ ! -L "$tmp/.claude/autodrive" ]
+    split_output "$output"
+    [[ "$MSG" == *"symbolic link"* ]]
 }
 
 # A pending file is legitimate for the whole turn end -> transition window, and

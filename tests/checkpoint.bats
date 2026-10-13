@@ -212,6 +212,18 @@ pick up per the task file" ]
     [ "$(head -n1 "$repo/.claude/autodrive")" = "armed $CLAUDE_CODE_SESSION_ID" ]
 }
 
+# Armed through a link, the approval would rewrite whatever file it names.
+@test "handoff-approved: the sentinel is a symlink to a held file -> exit 2, target untouched" {
+    repo="$(make_repo)"
+    printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" compact "/compact" > "$BATS_TEST_TMPDIR/linked"
+    ln -s "$BATS_TEST_TMPDIR/linked" "$repo/.claude/autodrive"
+    run_approved "$repo"
+    [ "$status" -eq 2 ]
+    [[ "$stderr" == *"symbolic link"* ]]
+    [ "$(head -n1 "$BATS_TEST_TMPDIR/linked")" = "held $CLAUDE_CODE_SESSION_ID" ]
+    [ -L "$repo/.claude/autodrive" ]
+}
+
 @test "handoff-approved: HANDOFF_ROOT unset -> refuses, naming the unrecognised invocation" {
     repo="$(make_repo)"
     # shellcheck disable=SC2016   # $1/$2 are the inner bash -c's own positional params

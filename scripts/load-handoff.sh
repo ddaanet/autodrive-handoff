@@ -40,7 +40,9 @@ fi
 notes=()   # systemMessage fragments from the transition, if any
 
 drive="$cwd/$HANDOFF_REL_DRIVE"
-if [[ "$hook_source" == "clear" && -f "$drive" ]]; then
+# `-L` as well as `-f`: a link at the sentinel, dangling or not, is refused by
+# the reader and removed here, never read as no file and left in place.
+if [[ "$hook_source" == "clear" && ( -L "$drive" || -f "$drive" ) ]]; then
     if ! handoff_drive_read "$drive"; then
         rm -f "$drive"
         notes+=("autodrive malformed — $DRIVE_ERR; not resuming")

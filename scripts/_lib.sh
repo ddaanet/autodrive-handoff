@@ -228,7 +228,7 @@ _handoff_drive_prose() {
 # DRIVE_OWNER, DRIVE_KIND, DRIVE_BEFORE (lines the mod runs before the transition) and
 # DRIVE_AFTER (lines it runs in the session the transition opens). Returns 0 when
 # well-formed; otherwise returns 1 with DRIVE_ERR set to a one-phrase reason
-# naming the constraint that failed.
+# naming the constraint that failed. A symlink at $1 is refused, unread.
 #
 # Line 1 is the state and line 2 is the kind, and the kind fixes the shape — so
 # the remaining lines need no separator, and each kind keeps its own rules:
@@ -275,6 +275,18 @@ handoff_drive_read() {
     local -a lines=()
     DRIVE_STATE=""; DRIVE_OWNER=""; DRIVE_KIND=""
     DRIVE_BEFORE=(); DRIVE_AFTER=(); DRIVE_ERR=""
+
+    # A link at the sentinel is refused before a byte is read, dangling or not.
+    # No writer makes one — the checkpoint and handoff_drive_arm rename a file
+    # into place, which replaces a link rather than writing through it — and a
+    # repository can commit one to anything readable: followed, its target
+    # would be parsed, its first line quoted into a report, and a rewrite would
+    # land on it. Every caller takes its malformed path, whose `rm -f` removes
+    # the link and not what it names.
+    if [[ -L "$file" ]]; then
+        DRIVE_ERR="the file is a symbolic link, which no checkpoint writes"
+        return 1
+    fi
 
     while IFS= read -r line || [ -n "$line" ]; do
         lines+=("$line")

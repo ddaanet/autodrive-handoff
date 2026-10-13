@@ -146,17 +146,21 @@ record_sweep() {
 
 # Parse once: the failure branch and the sweep want different states of the same
 # file. A file that will not parse is recorded as its own value — it describes
-# no transition anyone can complete, so the sweep takes it.
+# no transition anyone can complete, so the sweep takes it. So is a link at the
+# sentinel, dangling or not, which the reader refuses unread: it is recorded as
+# `link`, so the report names it and offers no line of whatever it points at.
 drive_state=""
 drive_owner=""
 drive_kind=""
 drive_lines=()   # the lines an armed file held, before then after
-if [[ -f "$drive" ]]; then
+if [[ -L "$drive" || -f "$drive" ]]; then
     if handoff_drive_read "$drive"; then
         drive_state="$DRIVE_STATE"
         drive_owner="$DRIVE_OWNER"
         drive_kind="$DRIVE_KIND"
         drive_lines=( ${DRIVE_BEFORE[@]+"${DRIVE_BEFORE[@]}"} ${DRIVE_AFTER[@]+"${DRIVE_AFTER[@]}"} )
+    elif [[ -L "$drive" ]]; then
+        drive_state="link"
     else
         drive_state="malformed"
     fi
@@ -223,6 +227,9 @@ if [[ -n "$drive_state" && "$drive_state" != "pending" && "$drive_state" != "hel
             notes+=("Present these lines to the user in a fenced code block, to type in order:
 $armed_lines")
         fi
+    elif [[ "$drive_state" == "link" ]]; then
+        msgs+=("autodrive discarded — it was a symbolic link, which no checkpoint writes")
+        notes+=("A .claude/autodrive symbolic link was on disk when this turn began. No checkpoint writes one, so it was removed without reading what it points at, and no transition ran from it.")
     elif [[ "$drive_state" == "abandoned" ]]; then
         msgs+=("stale autodrive discarded — it was held by a session that is gone")
         notes+=("A .claude/autodrive file held by another session was still on disk when this turn began. The approval it waited on can no longer arrive, so it has been discarded and the transition it described did not happen.")

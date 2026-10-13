@@ -141,6 +141,30 @@ take() {
     [ ! -e "$tmp/.claude/autodrive" ]
 }
 
+# A link at the sentinel is refused before it is read, whatever it names: taken
+# through it, another file's transition would run in this session. The link is
+# removed, its target left as it was, and the plan is the malformed one.
+@test "drive-take (the sentinel is a symlink to this session's armed file: not taken, link removed)" {
+    printf '%s\n' "armed sess-hook-test" rename "/rename Linked Title" > "$BATS_TEST_TMPDIR/linked"
+    ln -s "$BATS_TEST_TMPDIR/linked" "$tmp/.claude/autodrive"
+    take "$tmp"
+    [ "$status" -eq 0 ]
+    jq -e '.kind == null and .before == [] and (.message | test("symbolic link"))' <<<"$output"
+    [[ "$output" != *"Linked Title"* ]]
+    [ ! -L "$tmp/.claude/autodrive" ]
+    [ "$(cat "$BATS_TEST_TMPDIR/linked")" = "armed sess-hook-test
+rename
+/rename Linked Title" ]
+}
+
+@test "drive-take (the sentinel is a dangling symlink: removed, kind null)" {
+    ln -s "$BATS_TEST_TMPDIR/nowhere" "$tmp/.claude/autodrive"
+    take "$tmp"
+    [ "$status" -eq 0 ]
+    jq -e '.kind == null and (.message | test("symbolic link"))' <<<"$output"
+    [ ! -L "$tmp/.claude/autodrive" ]
+}
+
 @test "drive-take (worktree cwd: takes the worktree file, failFile under the worktree)" {
     wt="$(make_worktree wtS)"
     seed "$wt" "armed sess-hook-test" compact "/compact keep the parser work" "continue with task 3"

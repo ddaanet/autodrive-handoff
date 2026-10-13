@@ -44,6 +44,16 @@ and validation anchors it — the *n*th line of kind *k* must begin with the
 expected command literal, and a prose line may not begin with `/` — so the
 file cannot be made to run something else. One fact per line throughout.
 
+A symbolic link at the sentinel is never followed. No writer makes one, and a
+repository can commit one to any readable file, whose bytes a reader would
+then parse, quote into a report, offer as lines to type or rewrite on arming.
+`handoff_drive_read` refuses a link, dangling or not, before reading a byte,
+and every caller gates on the name existing as a link or a file, so a dangling
+one is refused too rather than read as no file and left for ever. Each takes
+its malformed path: the loaders and `drive-take.sh` remove the link and report
+it, the sweep removes it as its own `link` state, and `handoff-approved`
+refuses to arm.
+
 `held` is the checkpoint's, released by `handoff-approved`
 ([The checkpoint directive](the-checkpoint-directive.md)). Everything after it
 is a hook's: `drive-take.sh` moves `armed` to `pending`, dropping the owner, and
