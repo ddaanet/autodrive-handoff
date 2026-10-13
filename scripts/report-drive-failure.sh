@@ -80,8 +80,9 @@ notes=()
 marker="$HANDOFF_POINTER_DIR/handoff-drift-$session_id"
 
 # The directory is shared by every local user, so it and every name in it may
-# be a link someone else planted. The marker is used only in a directory that
-# is no link and is this user's; it is read only when it is a regular file of
+# be a link someone else planted. The hook creates it 0700, and the marker is
+# used only in a directory that is no link, is this user's and is writable by
+# no one else; it is read only when it is a regular file of
 # this user's, opened without following a link (handoff_read_regular, so no
 # link put there between a check and the read is followed), and written through a mktemp file renamed over the
 # name (handoff_replace), which replaces a link rather than following it. The
@@ -89,7 +90,8 @@ marker="$HANDOFF_POINTER_DIR/handoff-drift-$session_id"
 # orphan. Where the directory fails the test there is no marker, and drift is
 # reported every turn instead of once.
 marker_dir_ok() {
-    [[ -d "$HANDOFF_POINTER_DIR" && ! -L "$HANDOFF_POINTER_DIR" && -O "$HANDOFF_POINTER_DIR" ]]
+    [[ -d "$HANDOFF_POINTER_DIR" && ! -L "$HANDOFF_POINTER_DIR" && -O "$HANDOFF_POINTER_DIR" ]] \
+        && [[ -z "$(find "$HANDOFF_POINTER_DIR" -maxdepth 0 \( -perm -020 -o -perm -002 \) 2>/dev/null)" ]]
 }
 
 # Record $hook_cwd, NUL-terminated, as the marker.
@@ -108,7 +110,10 @@ case "$HANDOFF_ROOT_BRANCH" in
         # NUL-terminated and read whole: a cwd holding a newline compared by
         # its first line would never match, and re-announce every turn.
         last="" marker_status=""
-        mkdir -p "$HANDOFF_POINTER_DIR" 2>/dev/null || true
+        # -m on the deepest directory only, by intent: it is the one the
+        # marker lives in, and its parents are not this hook's to set.
+        # shellcheck disable=SC2174
+        mkdir -m 700 -p "$HANDOFF_POINTER_DIR" 2>/dev/null || true
         if marker_dir_ok; then
             { IFS= read -r marker_status || true
               if [[ "$marker_status" == ok ]]; then

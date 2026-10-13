@@ -84,7 +84,7 @@ if [[ -n "$FRAME" ]]; then
     elif (( FRAME_TASK )); then counted+=("$task"); fi
     if (( FRAME_TODO_LEGACY )); then counted+=("$legacy_todo")
     elif (( FRAME_TODO )); then counted+=("$todo"); fi
-    mtime=$(python3 -c 'import os,sys
+    mtime=$(python3 -I -c 'import os,sys
 print(int(max(os.path.getmtime(p) for p in sys.argv[1:])))' "${counted[@]}")
     now=$(date +%s)
     delta=$(( now - mtime ))

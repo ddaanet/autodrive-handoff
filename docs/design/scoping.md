@@ -48,8 +48,9 @@ newline, an escape sequence or a backtick in a directory name arrives as data
 rather than as a line, a terminal restyle or the end of a code span. One report
 per episode: a marker holds the destination last announced, whole, and
 returning clears it. The marker's directory is shared by every local user, so
-any name in it may be a link someone else planted: the marker is used only in
-a directory that is no link and is this user's, read only through an
+any name in it may be a link someone else planted: the hook creates it 0700,
+and the marker is used only in a directory that is no link, is this user's
+and is writable by no one else, read only through an
 `O_NOFOLLOW` open of a regular file this user owns (`handoff_read_regular`),
 and written as a `mktemp` file renamed over the name, which replaces a link
 rather than following it. Where the directory fails that test there is no

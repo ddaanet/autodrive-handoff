@@ -461,7 +461,7 @@ handoff_drive_arm() {
 # as `{ IFS= read -r status; …; } < <(handoff_read_regular …)`, so the bytes
 # follow on the same stream and a NUL in them survives a `read -d ''`.
 handoff_read_regular() {
-    python3 -c '
+    python3 -I -c '
 import errno, os, stat, sys
 try:
     fd = os.open(sys.argv[1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
@@ -493,7 +493,7 @@ else:
 # destination is replaced, never followed. `mv` stats the destination, and a
 # link to a directory there would receive the file inside it.
 handoff_replace() {
-    python3 -c 'import os, sys; os.replace(sys.argv[1], sys.argv[2])' "$1" "$2"
+    python3 -I -c 'import os, sys; os.replace(sys.argv[1], sys.argv[2])' "$1" "$2"
 }
 
 # Effective project root for the handoff files of THIS session, into the

@@ -1030,6 +1030,16 @@ read_drive() {
     [ "$output" = $'ok\nx' ]
 }
 
+# `python3 -c` puts the working directory first on sys.path, and every hook
+# runs in a repository that can commit a module of any name there. Isolated
+# mode (-I) leaves it off, and ignores PYTHON* variables and the user site.
+@test "every python3 -c in the hooks and bin runs isolated (-I)" {
+    run grep -n 'python3 -c' scripts/*.sh bin/*
+    [ "$status" -eq 1 ]
+    run grep -c 'python3 -I -c' scripts/_lib.sh
+    [ "$output" -ge 1 ]
+}
+
 # --- _lib.sh: handoff_drive_arm ---
 
 # Everything below line 1 is copied through untouched: the arm never has to know
@@ -3171,6 +3181,28 @@ assert_drift_quoted() {
     [ "$status" -eq 0 ]
     echo "$output" | jq -e --arg c "$other" '.systemMessage | test($c)' >/dev/null
     [ -z "$(ls -A "$BATS_TEST_TMPDIR/planted-dir")" ]
+    run_report_failure "$other"
+    echo "$output" | jq -e --arg c "$other" '.systemMessage | test($c)' >/dev/null
+}
+
+# A directory the hook creates is this user's alone, so no one else can plant
+# a name in it.
+@test "report-drive-failure (drift: the marker directory is created 0700)" {
+    mkdir -p "$other/.git"
+    run_report_failure "$other"
+    [ "$status" -eq 0 ]
+    [ "$(python3 -c 'import os, sys; print(oct(os.stat(sys.argv[1]).st_mode & 0o777))' "$HANDOFF_POINTER_DIR")" = "0o700" ]
+    [ -e "$HANDOFF_POINTER_DIR/handoff-drift-$SESSION_ID" ]
+}
+
+# This user's, but writable by others: anyone could replace the marker. It is
+# not used, and the drift is reported every turn.
+@test "report-drive-failure (drift: a group- or world-writable marker directory is not used)" {
+    mkdir -p "$other/.git" "$HANDOFF_POINTER_DIR"
+    chmod 777 "$HANDOFF_POINTER_DIR"
+    run_report_failure "$other"
+    [ "$status" -eq 0 ]
+    [ -z "$(ls -A "$HANDOFF_POINTER_DIR")" ]
     run_report_failure "$other"
     echo "$output" | jq -e --arg c "$other" '.systemMessage | test($c)' >/dev/null
 }

@@ -39,7 +39,7 @@ if [[ "$HANDOFF_ROOT_BRANCH" == "unresolved" ]]; then
 fi
 [[ -n "$cwd" ]] || exit 0
 { IFS= read -r -d '' target; IFS= read -r -d '' expected; IFS= read -r -d '' lexical; } < <(
-    python3 -c 'import os, sys
+    python3 -I -c 'import os, sys
 given, sentinel = sys.argv[1:]
 for p in (os.path.realpath(given), os.path.realpath(sentinel),
           os.path.normpath(os.path.abspath(given))):
