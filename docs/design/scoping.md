@@ -31,8 +31,12 @@ announces that: the environment block, `gitStatus` and the project
 `CLAUDE.md` all follow cwd. `report-drive-failure.sh` reports it at
 `UserPromptSubmit`, where the root is resolved every turn anyway, because
 drift can be transient and a later gate would see nothing while the split
-was live for the whole blip. One report per episode: a marker holds the
-destination last announced, and returning clears it.
+was live for the whole blip. The cwd is the hook input's, any string, and the
+note is harness text the agent reads, so both paths are shown `%q`-quoted: a
+newline, an escape sequence or a backtick in a directory name arrives as data
+rather than as a line, a terminal restyle or the end of a code span. One report
+per episode: a marker holds the destination last announced, whole, and
+returning clears it.
 
 The agent's own Bash cannot do any of this — `CLAUDE_PROJECT_DIR` is unset
 there, and a `$PWD` fallback is wrong in exactly the drift case. So a

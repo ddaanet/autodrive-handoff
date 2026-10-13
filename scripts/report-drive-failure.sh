@@ -78,8 +78,15 @@ case "$HANDOFF_ROOT_BRANCH" in
         if [[ "$last" != "$hook_cwd" ]]; then
             mkdir -p "$HANDOFF_POINTER_DIR"
             printf '%s\0' "$hook_cwd" > "$marker"
-            msgs+=("session cwd left the launch repo — now $hook_cwd, handoff root stays $cwd")
-            notes+=("The session cwd is $hook_cwd, outside the launch repo $cwd. Everything derived from cwd describes $hook_cwd — the environment block's working directory, the gitStatus block, the project CLAUDE.md. The transcript, the scratchpad, CLAUDE_PROJECT_DIR and every handoff file are under $cwd.")
+            # Both paths enter harness text the agent reads, so each is shown
+            # as quoted data: `%q` puts a newline, an escape byte or any other
+            # control character in $'…' form and escapes a backtick, so a
+            # directory name cannot start a line, restyle the terminal or close
+            # a code span. A plain path prints unchanged.
+            printf -v shown_cwd '%q' "$hook_cwd"
+            printf -v shown_root '%q' "$cwd"
+            msgs+=("session cwd left the launch repo — now $shown_cwd, handoff root stays $shown_root")
+            notes+=("The session cwd is $shown_cwd, outside the launch repo $shown_root. Everything derived from cwd describes $shown_cwd — the environment block's working directory, the gitStatus block, the project CLAUDE.md. The transcript, the scratchpad, CLAUDE_PROJECT_DIR and every handoff file are under $shown_root.")
         fi
         ;;
     *)

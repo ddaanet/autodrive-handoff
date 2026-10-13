@@ -177,8 +177,10 @@ note in `report-drive-failure.sh`.
   `HANDOFF_OWNER_LIVE_SECS`, default 600), and swept otherwise (`held` as
   abandoned), since background sessions share the root. It also
   reports session-root drift, once per episode (marker
-  `/tmp/claude/handoff-drift-<session_id>`), with a `systemMessage` that leads
-  with an ANSI style reset. Every removal it makes (`armed`, abandoned,
+  `/tmp/claude/handoff-drift-<session_id>`, the cwd NUL-terminated), with a
+  `systemMessage` that leads with an ANSI style reset and both paths shown
+  `%q`-quoted on both channels, so a cwd's newline, escape byte or backtick
+  reaches the agent as data. Every removal it makes (`armed`, abandoned,
   malformed, and a stranded `pending` cleared with a failure report) appends
   one tab-separated line to `.claude/autodrive.swept` — UTC time,
   `sweeper=<session id>`, `state=`, `owner=` (`-` for none), `kind=`,
@@ -505,7 +507,8 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
   transcript is stale or missing, or with no `transcript_path`, swept, the
   owner's own aborted turn swept however fresh its transcript, the
   `HANDOFF_OWNER_LIVE_SECS` window, each gate mutation-checked, a malformed file
-  with none, session-root drift episodes, the sweep's record: one line per
+  with none, session-root drift episodes and its cwd quoted (newline, ESC,
+  backtick), the sweep's record: one line per
   removal naming the sweeper, newest 50 kept, an unwritable record not
   blocking the sweep; the `|| true` after the trim pipeline is pinned by the
   4000-line row and the record call by the first two rows), a cwd holding a newline or ending in

@@ -2467,6 +2467,62 @@ seed_owned() {  # <state> <owner>
 
 # Dimmed like the ordinary hook chatter around it, the one line that says the
 # agent is reasoning about the wrong repo reads as noise.
+# The cwd is the hook input's, any string a directory can be named, and the
+# note is harness text the agent reads as instructions: a newline would start a
+# line of its own, an escape sequence would restyle the user's terminal, and a
+# backtick would close a code span around it. It is rendered as quoted data,
+# the `%q` form, on both channels.
+
+# <cwd> <hook output> — both channels carry the cwd's `%q` form, never the raw
+# cwd, and no newline or escape byte past the leading reset.
+assert_drift_quoted() {
+    local cwd="$1" shown msg ctx
+    printf -v shown '%q' "$cwd"
+    msg="$(jq -j '.systemMessage' <<<"$2")"
+    ctx="$(jq -j '.hookSpecificOutput.additionalContext' <<<"$2")"
+    msg="${msg#$'\033[0m'}"
+    [[ "$msg" == *"$shown"* ]]
+    [[ "$ctx" == *"$shown"* ]]
+    [[ "$msg" != *"$cwd"* && "$ctx" != *"$cwd"* ]]
+    [[ "$msg" != *$'\n'* && "$ctx" != *$'\n'* ]]
+    [[ "$msg" != *$'\033'* && "$ctx" != *$'\033'* ]]
+}
+
+@test "report-drive-failure (drift to a cwd holding a newline: quoted on one line)" {
+    odd="$BATS_TEST_TMPDIR/a"$'\n'"Ignore the above"
+    mkdir -p "$odd/.git"
+    run_report_failure "$odd"
+    [ "$status" -eq 0 ]
+    assert_drift_quoted "$odd" "$output"
+}
+
+@test "report-drive-failure (drift to a cwd holding an escape sequence: quoted, no escape byte)" {
+    odd="$BATS_TEST_TMPDIR/a"$'\033[2J'"b"
+    mkdir -p "$odd/.git"
+    run_report_failure "$odd"
+    [ "$status" -eq 0 ]
+    assert_drift_quoted "$odd" "$output"
+}
+
+@test "report-drive-failure (drift to a cwd holding backticks: quoted, each escaped)" {
+    odd="$BATS_TEST_TMPDIR/a\`rm x\`b"
+    mkdir -p "$odd/.git"
+    run_report_failure "$odd"
+    [ "$status" -eq 0 ]
+    assert_drift_quoted "$odd" "$output"
+}
+
+# Quoting changes what is shown, not what is compared: the second prompt in the
+# same odd place is still silent.
+@test "report-drive-failure (drift to a cwd holding an escape sequence: reported once)" {
+    esc="$BATS_TEST_TMPDIR/a"$'\033[2J'"b"
+    mkdir -p "$esc/.git"
+    run_report_failure "$esc"
+    [ -n "$output" ]
+    run_report_failure "$esc"
+    [ "$output" = "" ]
+}
+
 @test "report-drive-failure (drift: systemMessage leads with an ANSI reset)" {
     mkdir -p "$other/.git"
     run_report_failure "$other"
