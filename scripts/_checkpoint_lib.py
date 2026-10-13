@@ -6,7 +6,7 @@ directive function returns its directive text, or "" when silent
 (`memory_directive` wraps its text in a `MemoryPart`); the caller decides
 whether to print it. `err` is the one exit for a schema or write-time error,
 shared by both callers. The emptiness rule is also reachable from bash through
-the --is-empty-body CLI.
+the --has-body CLI.
 """
 
 from __future__ import annotations
@@ -329,13 +329,17 @@ def todo_boundary(root: str) -> str:
 
 
 def _cli(argv: list[str]) -> int:
-    """Run `checkpoint_lib.py --is-empty-body`.
+    """Run `checkpoint_lib.py --has-body`.
 
-    Reads content on stdin, exits 0 if empty, 1 otherwise.
+    Reads content on stdin, exits 0 if it has a body, 1 if it is empty, 2 on an
+    unknown invocation. Success is the body because 0 is the one status no crash
+    can produce: an uncaught exception, at import as much as here, exits 1, and
+    a library python3 cannot open exits 2, so a broken check reads as "no body"
+    and the loader injects nothing on its account.
     """
-    if len(argv) == 2 and argv[1] == "--is-empty-body":
+    if len(argv) == 2 and argv[1] == "--has-body":
         content = sys.stdin.read()
-        return 0 if is_empty_body(content) else 1
+        return 1 if is_empty_body(content) else 0
     print("checkpoint_lib.py: unknown invocation", file=sys.stderr)
     return 2
 

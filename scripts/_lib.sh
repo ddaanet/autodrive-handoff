@@ -58,9 +58,10 @@ HANDOFF_POINTER_DIR="${HANDOFF_POINTER_DIR:-/tmp/claude}"
 # ($2): a timestamp header plus each half that counts inlined verbatim, task
 # first. $3 and $4 are the legacy task and todo paths, optional; an absent or
 # empty one is a path that does not exist. Per half, the root file counts when
-# it has a body (`is_empty_body` in _checkpoint_lib.py, through its CLI), and
-# otherwise the legacy file does when it has a body. A missing, zero-byte,
-# whitespace-only or headings-only file has none. Either half alone is enough.
+# it has a body (`is_empty_body` in _checkpoint_lib.py, through its
+# `--has-body` CLI), and otherwise the legacy file does when it has a body. A
+# missing, zero-byte, whitespace-only or headings-only file has none, and
+# neither has one the check fails to run on. Either half alone is enough.
 # Shared by load-handoff.sh (startup|clear) and load-compact.sh (compact) — one
 # frame shape for both transitions.
 #
@@ -113,13 +114,12 @@ handoff_frame() {
 }
 
 # <is_empty_body library> <path>. True when the path is a file with a body.
+# The CLI answers a body with exit 0, the one status no crash can produce (an
+# uncaught exception exits 1, a library python3 cannot open exits 2), so a
+# check that failed to run is never read as a body.
 _handoff_has_body() {
-    local rc=0
     [[ -n "$2" && -f "$2" && -r "$2" ]] || return 1
-    python3 "$1" --is-empty-body <"$2" || rc=$?
-    # Exit 1 is "has a body"; 0 is empty and anything else (a crash, an
-    # unknown invocation) is not evidence of a body.
-    (( rc == 1 ))
+    python3 "$1" --has-body <"$2"
 }
 
 # The notes for the legacy flags `handoff_frame` just set, in the order both

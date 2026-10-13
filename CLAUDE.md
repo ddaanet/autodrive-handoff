@@ -201,8 +201,9 @@ note in `report-drive-failure.sh`.
   `FRAME_TASK_SHADOWED`/`FRAME_TODO_SHADOWED` (the half came from the root file
   and a legacy file exists beside it, whatever it holds); prints nothing, rc 1
   when `FRAME` is empty, and never puts a note in `FRAME`; "has a body" is
-  `_checkpoint_lib.py --is-empty-body`, so a headings-only file is not
-  injected); `handoff_frame_notes` (turns the flags into `FRAME_NOTES_CTX` for
+  `_checkpoint_lib.py --has-body` exiting 0, the one status no crash produces,
+  so a headings-only file is not injected and neither is one the check fails
+  on); `handoff_frame_notes` (turns the flags into `FRAME_NOTES_CTX` for
   the agent and `FRAME_NOTES_MSG` for the user, one producer for both loaders
   and both channels);
   `handoff_deny()` (PreToolUse deny emitter, `exit 0`s);
@@ -304,7 +305,7 @@ note in `report-drive-failure.sh`.
 - `scripts/_checkpoint_lib.py` — `err` (the one exit for a schema or write-time
   error: names the field, exits 2; shared by `checkpoint.py`,
   `_checkpoint_payload.py` and `_checkpoint_plan.py`), `is_empty_body` (markdown's own heading
-  test; read by `handoff_frame` through the `--is-empty-body` CLI, and its
+  test; read by `handoff_frame` through the `--has-body` CLI, and its
   `ATX_HEADING` by the task-shape check), `memory_directive` (gated on the
   `gitlore-memory` submodule and a dirty worktree, FR12; couples only to the two
   IPC filenames and `gitlore.memoryApprovalClauseFile`; the `with-commit` text
@@ -483,7 +484,7 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
   answers in variables: which file counts, headings-only and whitespace-only
   ones not, `#tag` and a shebang yes, the reset between calls, nothing
   printed; an unreadable root or legacy file is no body, nor is a library that
-  exits 2 or is missing, the latter two through a copy of `_lib.sh` sourced
+  exits 1 or 2, raises or is missing, each through a copy of `_lib.sh` sourced
   beside a stub library), the `handoff_drive_read` shape matrix, `load-handoff.sh` and
   `load-compact.sh` (consume only their own kind in state `pending`, leave
   `armed` for the sweep, spawn nothing; the four frame states of

@@ -339,14 +339,15 @@ def test_is_empty_body(content: str, *, empty: bool) -> None:
 @pytest.mark.parametrize(
     ("argv", "stdin", "code"),
     [
-        (["--is-empty-body"], "## Remaining\n", 0),
-        (["--is-empty-body"], "## Remaining\n\n- an item\n", 1),
+        (["--has-body"], "## Remaining\n", 1),
+        (["--has-body"], "## Remaining\n\n- an item\n", 0),
+        (["--is-empty-body"], "## Remaining\n\n- an item\n", 2),
         (["--bogus"], "", 2),
         ([], "", 2),
     ],
-    ids=["empty", "has_a_body", "unknown_flag", "no_flag"],
+    ids=["empty", "has_a_body", "retired_flag", "unknown_flag", "no_flag"],
 )
-def test_is_empty_body_cli_exit_code(argv: list[str], stdin: str, code: int) -> None:
+def test_has_body_cli_exit_code(argv: list[str], stdin: str, code: int) -> None:
     result = subprocess.run(
         [sys.executable, str(REPO_ROOT / "scripts" / "_checkpoint_lib.py"), *argv],
         input=stdin,

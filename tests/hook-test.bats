@@ -496,9 +496,10 @@ assert_framed() {
 
 # --- _lib.sh: handoff_frame, what counts as a body ---
 # A half counts only when the file is readable and the library answers with its
-# "has a body" status, exit 1. An unreadable file is no body, and neither is an
-# answer that is not that status (a crash, a missing library): the loader must
-# not inject a frame because a check failed to run.
+# "has a body" status, exit 0, the one status no crash produces. An unreadable
+# file is no body, and neither is an answer that is not that status (a crash, a
+# missing library): the loader must not inject a frame because a check failed
+# to run.
 
 # <path> — skip when mode 000 does not deny this user's read (running as root).
 require_read_denied() {
@@ -558,24 +559,29 @@ require_read_denied() {
 # <exit status> — a stubbed library answering that status; a task file with a
 # body is then handed to handoff_frame.
 frame_with_stub_status() {
+    frame_with_stub_lib "$1" "$(printf 'import sys\nsys.exit(%s)\n' "$1")"
+}
+
+# <name> <library source> — the same, with the stub library's whole source.
+frame_with_stub_lib() {
     stub="$BATS_TEST_TMPDIR/stub-lib-$1"; mkdir -p "$stub"
     cp "$repo_root/scripts/_lib.sh" "$stub/_lib.sh"
-    printf 'import sys\nsys.exit(%s)\n' "$1" > "$stub/_checkpoint_lib.py"
+    printf '%s\n' "$2" > "$stub/_checkpoint_lib.py"
     # shellcheck source-path=SCRIPTDIR source=../scripts/_lib.sh disable=SC1090,SC1091
     source "$stub/_lib.sh"
     fr="$BATS_TEST_TMPDIR/frame-stub-$1"; mkdir -p "$fr"
     printf '## Current task\n\ntask body\n' > "$fr/task.md"
-    rc=0; handoff_frame "$fr/task.md" "$fr/todo.md" || rc=$?
+    rc=0; handoff_frame "$fr/task.md" "$fr/todo.md" 2>/dev/null || rc=$?
 }
 
-@test "handoff_frame (library exits 1, the has-a-body status): the task counts" {
-    frame_with_stub_status 1
+@test "handoff_frame (library exits 0, the has-a-body status): the task counts" {
+    frame_with_stub_status 0
     [ "$rc" -eq 0 ]
     [ "${FRAME_TASK:-unset}" = "1" ]
 }
 
-@test "handoff_frame (library exits 0, the empty status): the task does not count" {
-    frame_with_stub_status 0
+@test "handoff_frame (library exits 1, the empty status): the task does not count" {
+    frame_with_stub_status 1
     [ "$rc" -eq 1 ]
     [ "${FRAME-unset}" = "" ]
     [ "${FRAME_TASK:-unset}" = "0" ]
@@ -588,8 +594,17 @@ frame_with_stub_status() {
     [ "${FRAME_TASK:-unset}" = "0" ]
 }
 
+# A library that crashes exits 1 through Python's own uncaught-exception path,
+# whatever the CLI's contract says, so the crash must land on a "no body" status.
+@test "handoff_frame (library crashes with an uncaught exception): not evidence of a body" {
+    frame_with_stub_lib crash 'raise RuntimeError("boom")'
+    [ "$rc" -eq 1 ]
+    [ "${FRAME-unset}" = "" ]
+    [ "${FRAME_TASK:-unset}" = "0" ]
+}
+
 @test "handoff_frame (library missing, so python3 cannot open it): not evidence of a body" {
-    frame_with_stub_status 1
+    frame_with_stub_status 0
     rm "$stub/_checkpoint_lib.py"
     rc=0; handoff_frame "$fr/task.md" "$fr/todo.md" || rc=$?
     [ "$rc" -eq 1 ]

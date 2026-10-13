@@ -32,7 +32,9 @@ blank lines and ATX headings are taken out, a heading being markdown's own —
 so a shebang, a `#tag`, or a `# comment` inside an indented code block are all
 content, and a line of spaces is not. The rule is `is_empty_body` in
 `_checkpoint_lib.py`, reached from `handoff_frame()` through its
-`--is-empty-body` CLI. `load-handoff.sh` says what it found on both channels —
+`--has-body` CLI, which answers a body with exit 0: an uncaught exception exits
+1 and a library `python3` cannot open exits 2, so a check that crashes or never
+ran counts as no body rather than injecting a file on its account. `load-handoff.sh` says what it found on both channels —
 `No task frame`, `No todo`, or `No task frame or todo.` — because a loader
 that stays silent on an empty frame cannot be told apart from one that never
 ran.
