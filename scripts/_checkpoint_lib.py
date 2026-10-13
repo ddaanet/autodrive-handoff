@@ -212,10 +212,10 @@ def legacy_unstage_directive(root: str, paths: Sequence[str]) -> str:
     `.claude/handoff-task.md` and `.claude/handoff-todo.md`, which hold no glob
     or magic character, so nothing needs git told to read them literally. Every
     argument is shell-quoted. A root holding a backtick or a character that is
-    not printable (a control character, a Unicode line or paragraph separator,
-    a bidirectional override) cannot sit in a code span on one line, so the act
-    is replaced by one sentence that carries no part of the root and names the
-    same command with the fixed relative paths, to run where they resolve.
+    not printable (a control character, a Unicode line or paragraph separator, a
+    bidirectional override) cannot sit in a code span on one line, so the act is
+    replaced by one sentence that carries no part of the root and names the same
+    command with the fixed relative paths, to run where they resolve.
     """
     if not paths:
         return ""
