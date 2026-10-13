@@ -211,14 +211,27 @@ def legacy_unstage_directive(root: str, paths: Sequence[str]) -> str:
     directory change and never a pathspec. The paths are the fixed names
     `.claude/handoff-task.md` and `.claude/handoff-todo.md`, which hold no glob
     or magic character, so nothing needs git told to read them literally. Every
-    argument is shell-quoted. A newline in the root still splits the line.
+    argument is shell-quoted. A root holding a backtick or a control character
+    (newline, carriage return, escape, DEL) cannot sit in a code span on one
+    line, so the act is replaced by one sentence that carries no part of the
+    path and asks for the unstaging by hand.
     """
     if not paths:
         return ""
+    if _UNPRINTABLE.search(root):
+        return _printf_lines(
+            "The project path holds a character that cannot be printed safely; "
+            "unstage the legacy files by hand with `git rm --cached` from the "
+            "project root."
+        )
     words = ["git", "-C", root]
     words += ["rm", "--cached", "--ignore-unmatch", "-q", "--", *paths]
     command = " ".join(shlex.quote(word) for word in words)
     return _printf_lines(f"Before committing, run `{command}`.")
+
+
+# A character that ends a backtick span, or splits or rewrites the line.
+_UNPRINTABLE = re.compile(r"[`\x00-\x1f\x7f]")
 
 
 def arming_directive() -> str:

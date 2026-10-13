@@ -997,6 +997,63 @@ def test_printed_git_act_unstages_only_the_roots_own_legacy_file(
     assert in_index() == set(tracked) - {own}
 
 
+# A root whose name would end the code span or split the line the act sits in.
+# Each carries INJECTED, the text an agent would read as a further instruction.
+UNPRINTABLE_ROOTS = {
+    "backtick": "a`INJECTED`b",
+    "newline": "a\nINJECTED",
+    "carriage_return": "a\rINJECTED",
+    "escape": "a\x1bINJECTED",
+    "delete": "a\x7fINJECTED",
+}
+UNPRINTABLE_SENTENCE = (
+    "The project path holds a character that cannot be printed safely; "
+    "unstage the legacy files by hand with `git rm --cached` from the project root."
+)
+
+
+@pytest.mark.parametrize("name", UNPRINTABLE_ROOTS)
+def test_a_root_that_cannot_be_printed_is_refused_not_interpolated(
+    tmp_path: Path, name: str
+) -> None:
+    """A backtick or control character in the root never reaches stdout.
+
+    The act is replaced by one plain sentence that echoes nothing of the path,
+    and the closing line stays last. Letting the root through unchanged reds
+    every row on the marker, which the root's name carries.
+    """
+    repo = make_repo(tmp_path)
+    root = repo / UNPRINTABLE_ROOTS[name]
+    (root / LEGACY_TODO_REL).parent.mkdir(parents=True)
+    put(root, LEGACY_TODO_REL, TODO_LEGACY_BODY)
+    result = run_checkpoint(
+        repo, migration_payload(task_clear(), todo_keep(), "with-commit"), root
+    )
+    ok(result)
+    out = result.stdout
+    assert read(root / "TODO.md") == TODO_LEGACY_BODY
+    assert "INJECTED" not in out, out
+    assert str(root) not in out
+    assert UNPRINTABLE_SENTENCE in out
+    assert UNSTAGE_MARK not in out
+    assert "\x1b" not in out
+    assert out.count(UNPRINTABLE_SENTENCE) == 1
+    assert out.endswith(lib.closing_directive("handoff", typed=False)), out
+
+
+def test_a_printable_root_keeps_the_act_and_no_refusal(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    root = repo / "pkg dir"
+    (root / LEGACY_TODO_REL).parent.mkdir(parents=True)
+    put(root, LEGACY_TODO_REL, TODO_LEGACY_BODY)
+    result = run_checkpoint(
+        repo, migration_payload(task_clear(), todo_keep(), "with-commit"), root
+    )
+    ok(result)
+    assert git_act(root, LEGACY_TODO_REL) in result.stdout
+    assert UNPRINTABLE_SENTENCE not in result.stdout
+
+
 def test_git_rm_act_names_only_the_files_that_moved_or_went(tmp_path: Path) -> None:
     """The task's legacy file is ignored (root wins): it is not a target."""
     repo = make_gitlore_repo(tmp_path)
