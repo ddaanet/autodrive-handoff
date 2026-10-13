@@ -144,6 +144,13 @@ directories, and the deletion is the one pass above.
 
 ## No git work, and the act that stands in for it
 
+> **Superseded 2026-10-13** (see [The unstage line runs from the
+> root](2026-10-13-the-unstage-line-runs-from-the-root.md)): the line is no
+> longer in the `:/` form. It is `git --literal-pathspecs -C <root> rm --cached
+> --ignore-unmatch -q -- <path> …`, each path relative to the root, and the
+> "Why `:/`" paragraph's rejection of `git -C <root>` no longer stands. The
+> rest of this section, what the act does and where it prints, is unchanged.
+
 The checkpoint renames and removes on the filesystem and does no git work
 (NFR1). The 0.15 files were gitignored and force-added, so in most repositories
 they are tracked, and a rename that git has not been told about is a deleted

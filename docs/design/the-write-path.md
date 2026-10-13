@@ -156,18 +156,17 @@ runs in the agent's sandboxed Bash, where `git add` can leave
 wrap-up is the user's `/commit`). Nothing else stages on its behalf. Moving or
 removing a legacy file is a filesystem act and stays inside that line. Under
 `with-commit` the commit act the checkpoint prints names the two files, and
-leads with one line for the legacy paths this call moved or removed, `git rm
---cached --ignore-unmatch -q -- :/<path> …`, so git records a rename once the
-files are added. `:/` anchors each pathspec at the top of the repository,
-because the agent's working directory can be anywhere under the root and a
-bare relative one matched nothing from a subdirectory, silently. The root is
-not always the top: when it lies below it, the path after `:/` is the root's
-path below the top (`git rev-parse --show-prefix`, a read-only query made only
-when the line is owed) followed by the legacy path, each pathspec shell-quoted.
-A root that is the top of its repository, a submodule included, has no prefix
-and the line is as shown. A newline in the prefix still splits the line. The
-reports name the same paths relative to the root. The line is
-owed only by the call that moved or removed the file: under `without-commit`
+leads with one line for the legacy paths this call moved or removed, `git
+-C <root> rm --cached --ignore-unmatch -q -- <path> …`, so
+git records a rename once the files are added. The agent's working directory can
+be anywhere, and a bare relative path matched nothing from a subdirectory,
+silently, so `-C` names the root and each `<path>` is relative to it, as the
+reports name them. The line needs no query of where the root lies in its
+repository, which a top-anchored form (`:/`) does, with failure modes git leaves
+silent, and the root's name, a glob character or a leading `!` included, is a
+directory change and never a pathspec; the legacy paths are fixed names with no
+magic character, so no literal-pathspec option is printed. Every argument is shell-quoted; a newline in the root still splits the line. The
+line is owed only by the call that moved or removed the file: under `without-commit`
 nothing is printed and the files are left modified in the tree like any edited
 file, and a `with-commit` call after it has no legacy file left to report, so
 the deletion shows as unstaged in `git status`.

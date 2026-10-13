@@ -24,11 +24,11 @@ condition:
    for the commit: the request may be an amend or a fresh commit, and the
    checkpoint cannot tell which. It names the two files because nothing has
    staged them. When the call moved or removed a legacy file it leads with the
-   one git line the checkpoint does name, `git rm --cached --ignore-unmatch -q
-   -- :/<path> …`, over those paths alone and never an ignored one, so git
-   records a rename once the files are added. Each path is named from the top
-   of the repository, so it carries the root's path below the top when the
-   root is not the top;
+   one git line the checkpoint does name, `git -C <root> rm --cached
+   --ignore-unmatch -q -- <path> …`, over those paths alone and
+   never an ignored one, so git records a rename once the files are added.
+   Each path is relative to the root, which `-C` names, so the line runs from
+   any directory;
 5. the arming instruction, when the sentinel is held — run
    `handoff-approved`;
 6. the closing line, when it is not — an instruction to end the reply on one

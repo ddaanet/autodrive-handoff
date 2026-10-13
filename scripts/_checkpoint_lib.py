@@ -184,55 +184,41 @@ class MemoryPart(NamedTuple):
     refusal: bool
 
 
-def commit_directive(legacy_paths: Sequence[str] = ()) -> str:
+def commit_directive(root: str = "", legacy_paths: Sequence[str] = ()) -> str:
     """Return the commit act, printed under "with-commit".
 
     Names no git verb for the commit itself: the request may call for an amend
     or a fresh commit, and the checkpoint does not know which. Names the two
     files because nothing has staged what this call did to them. Legacy paths
-    this call moved or removed lead it, as `legacy_unstage_directive`.
+    this call moved or removed lead it, as `legacy_unstage_directive`, which
+    needs the root they are relative to.
     """
     commit = _printf_lines(
         "Once everything above is done, make the commit the request called for, "
         "including any change to `TASK.md` and `TODO.md`."
     )
-    unstage = legacy_unstage_directive(legacy_paths)
+    unstage = legacy_unstage_directive(root, legacy_paths)
     return f"{unstage}\n{commit}" if unstage else commit
 
 
-def legacy_unstage_directive(paths: Sequence[str]) -> str:
+def legacy_unstage_directive(root: str, paths: Sequence[str]) -> str:
     """Return the act that stages legacy paths as deleted, or "" for none.
 
     One line, the paths on it: the legacy files this call moved or removed,
     never one it left in place. The line does not ask which are tracked. Each
-    path is relative to the top of the repository, the root's `repo_prefix`
-    ahead of it, and takes git's top-level form (`:/`), so the line runs from
-    any directory of the repository, the agent's own working directory included.
-    Each pathspec is shell-quoted, which leaves one under a root that is the top
-    of its repository as it is. A newline in the prefix still splits the line.
+    path is relative to the root, which `-C` names, so the line runs from any
+    directory, and the root's own name, whatever characters it holds, is a
+    directory change and never a pathspec. The paths are the fixed names
+    `.claude/handoff-task.md` and `.claude/handoff-todo.md`, which hold no glob
+    or magic character, so nothing needs git told to read them literally. Every
+    argument is shell-quoted. A newline in the root still splits the line.
     """
     if not paths:
         return ""
-    pathspecs = " ".join(shlex.quote(f":/{path}") for path in paths)
-    return _printf_lines(
-        f"Before committing, run `git rm --cached --ignore-unmatch -q -- {pathspecs}`."
-    )
-
-
-def repo_prefix(root: str) -> str:
-    """Return root's path below the top of its repository, "" at the top.
-
-    Ends in `/` when not empty. A read-only query; "" too when root is in no
-    repository or git cannot say, which leaves the paths as the root has them. A
-    root that is a submodule is the top of its own repository.
-    """
-    result = subprocess.run(
-        ["git", "-C", root, "rev-parse", "--show-prefix"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    return result.stdout.removesuffix("\n") if result.returncode == 0 else ""
+    words = ["git", "-C", root]
+    words += ["rm", "--cached", "--ignore-unmatch", "-q", "--", *paths]
+    command = " ".join(shlex.quote(word) for word in words)
+    return _printf_lines(f"Before committing, run `{command}`.")
 
 
 def arming_directive() -> str:

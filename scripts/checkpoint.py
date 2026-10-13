@@ -582,10 +582,9 @@ def compose_directives(
     nudge, then the commit act (present only under "with-commit"), then either
     the arming instruction (held) or the closing line (not held) — always last,
     and mutually exclusive. [] under autoname. The act that stages the legacy
-    paths names them from the top of the repository, the reports from the root.
-    The clause-file refusal
-    (`memory.refusal`) suppresses every other part but the legacy reports and
-    the act that stages the legacy paths: it prints last.
+    paths and the reports both name them relative to the root. The clause-file
+    refusal (`memory.refusal`) suppresses every other part but the legacy
+    reports and the act that stages the legacy paths: it prints last.
     """
     skill, root, commit_mode = boundary
     if skill not in ("handoff", "precompact"):
@@ -597,18 +596,15 @@ def compose_directives(
         if plan.legacy is not None and plan.legacy.fate != "ignored"
     ]
     with_commit = commit_mode == "with-commit"
-    if gone and with_commit:
-        prefix = lib.repo_prefix(str(root))
-        gone = [prefix + rel for rel in gone]
-    if memory.refusal:
-        unstage = lib.legacy_unstage_directive(gone) if with_commit else ""
-        return [part for part in (reports, unstage, memory.text) if part]
     root_s = str(root)
+    if memory.refusal:
+        unstage = lib.legacy_unstage_directive(root_s, gone) if with_commit else ""
+        return [part for part in (reports, unstage, memory.text) if part]
     if skill == "handoff":
         second = lib.todo_boundary(root_s)
     else:
         second = lib.sdd_directive(root_s)
-    commit = lib.commit_directive(gone) if with_commit else ""
+    commit = lib.commit_directive(root_s, gone) if with_commit else ""
     parts = [part for part in (reports, memory.text, second, commit) if part]
     if ending.held:
         parts.append(lib.arming_directive())

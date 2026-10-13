@@ -112,16 +112,26 @@ tracked and was injected at session start, so the write is informed and
 recoverable, and the collision is the point: it is the same list.
 [TASK.md and TODO.md move to the root](../changelog/2026-10-11-task-and-todo-move-to-the-root.md)
 
-**A bare relative path in the printed `git rm --cached` line**, and **`git -C
-<root>`** in its place. The bare form is relative to the agent's Bash working
-directory, which persists across calls and can be any directory under the root;
-from a subdirectory it matched nothing, and `--ignore-unmatch -q` kept the miss
-silent. `-C` puts the whole absolute root on the line, where a newline in it
-splits the line. `:/` runs from anywhere and carries only the root's path below
-the top of the repository, shell-quoted, which is nothing in the common case
-where the root is the top.
+**A bare relative path in the printed `git rm --cached` line**, and a
+**top-anchored pathspec**, `:/<prefix><path>` or `:(top,literal)<prefix><path>`,
+in place of `git -C <root>`. The bare form is relative to the agent's Bash
+working directory, which persists across calls and can be any directory under
+the root; from a subdirectory it matched nothing, and `--ignore-unmatch -q`
+kept the miss silent. A top-anchored form needs the root's path below the top
+of its repository, a query (`git rev-parse --show-prefix`) whose failures are
+silent: a missing git raised and exit 128 yielded an empty prefix and a wrong
+pathspec. Unliteral, `:/` also reads the root's own name as a pathspec, so a
+root named `a*b` unstaged a sibling's file and one named `!x` was magic, quoting
+that the shell sees and git does not. `:(top,literal)` closes that hazard and
+keeps the query. Also rejected: **`--literal-pathspecs`** ahead of `-C`. Probed,
+it changes nothing the line can print: `-C` already keeps the root's name out of
+every pathspec, and the two paths left are fixed names with no magic character,
+so the rows over `!x`, `^x`, `a*b`, `a?b` and `a[1]` roots pass without it. `git -C <root>` was first rejected for putting the root on the
+line, where a newline in it splits the line; the prefix form had the same
+residual, so the objection never separated them. It is now the form in use.
 [Legacy paths are read, and the checkpoint moves them](../changelog/2026-10-11-legacy-paths-are-read-and-moved.md)
 [The git line names paths from the top](../changelog/2026-10-12-the-git-line-names-paths-from-the-top.md)
+[The unstage line runs from the root](../changelog/2026-10-13-the-unstage-line-runs-from-the-root.md)
 
 **A parallel pipeline per transition** — the driven clear's first draft:
 `.claude/autoclear` beside `autocompact`, its own validator, `Stop` arm,

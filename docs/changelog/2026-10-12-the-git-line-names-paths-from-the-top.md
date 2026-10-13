@@ -1,5 +1,12 @@
 # The git line names paths from the top (2026-10-12)
 
+> **Superseded 2026-10-13** (see [The unstage line runs from the
+> root](2026-10-13-the-unstage-line-runs-from-the-root.md)): `repo_prefix`, the
+> `:/<prefix><path>` form and the rejection of `git -C <root>` are gone. The
+> line runs `git --literal-pathspecs -C <root> rm …` over paths relative to the
+> root, with no query of where the root lies in its repository. What this entry
+> found, that a top-anchored pathspec missed a root below the top, was right.
+
 [Legacy paths are read, and the checkpoint moves them](2026-10-11-legacy-paths-are-read-and-moved.md)
 made the checkpoint print, under `with-commit`, one line for the legacy files it
 moved or removed: ``git rm --cached --ignore-unmatch -q -- :/<path> …``. It

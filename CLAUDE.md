@@ -249,9 +249,8 @@ note in `report-drive-failure.sh`.
   (driven ∧ with-commit)`, else `armed` (`hold_decision`, one value that also
   picks the arming instruction or the closing line). NFR1: no git work; the git
   line for a moved or removed legacy file is printed, never run, and names the
-  paths from the top of the repository, the root's `repo_prefix` ahead of each,
-  queried only when that line is owed (the reports keep them relative to the
-  root).
+  paths relative to the root, which it hands to `git -C` (the reports name the
+  same relative paths).
 - `scripts/_checkpoint_plan.py` — the plan layer, which `checkpoint.py`
   imports as `planning`. Resolves each half into a
   `FilePlan` before anything is written (`plan_task`, `plan_todo`, `edited_body`
@@ -281,12 +280,12 @@ note in `report-drive-failure.sh`.
   and the git line, and suppresses every other part), `commit_directive`
   (names `TASK.md` and `TODO.md`, since nothing has staged them, and takes the
   legacy paths this call moved or removed, to lead with
-  `legacy_unstage_directive`: `git rm --cached --ignore-unmatch -q -- :/<path>
-  …`, `:/` so it runs from any directory of the repository, each pathspec
-  `shlex.quote`d), `repo_prefix(root)` (`git rev-parse --show-prefix`, a
-  read-only query: the root's path below the top of its repository, ending in
-  `/`, or `""` at the top, in no repository or when git fails; a submodule root
-  is the top of its own repository),
+  `legacy_unstage_directive(root, paths)`: `git -C <root> rm --cached
+  --ignore-unmatch -q -- <path> …`, each path relative to the root, every
+  argument `shlex.quote`d. `-C` makes it run from any directory with no query
+  of where the root lies in its repository, and the root's name, a glob or `!x`
+  included, is a directory change and never a pathspec; the paths are fixed
+  names with no magic, so no literal-pathspec option is printed),
   `arming_directive`, `closing_directive(skill, typed=…)` (literal text that
   `bin/handoff-approved` repeats), `ledger_path` (liveness of a workflow-owned
   ledger — SDD identity first line, newest mtime wins), `sdd_directive` and
@@ -560,15 +559,16 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
     `git rm --cached` line only under `with-commit`, naming only what moved or
     went, run from a subdirectory over a tracked legacy file to the staged
     deletion and, once the new file is added, a rename, and a silent no-op over
-    an untracked one, and, for a root that is a subdirectory of its repository
-    (`pkg` and `pkg dir`), the command run through a shell exactly as printed
-    from another directory taking the file out of the index; `autoname`
-    touching nothing. Mutation-checked: root-wins dropped, migrating before
-    validation, the reports after the closing line, the legacy file unlinked
-    ahead of the root write, a bare pathspec in place of `:/`, the prefix
-    dropped (both subdirectory rows red), the quoting dropped (the spaced row
-    alone reds), a root file read on `keep` with no legacy file, the symlink
-    check disabled, and the rename replaced by a copy and an unlink.
+    an untracked one, and, for a root at the top of its repository, below it
+    (`pkg`, `pkg dir`) or named `!x`, `^x`, `a*b`, `a?b` or `a[1]` beside
+    tracked sibling legacy files, the command run through a shell exactly as
+    printed from a directory of the repository and from one outside it, taking
+    the root's own file out of the index and no sibling's; `autoname` touching
+    nothing. Mutation-checked: root-wins dropped, migrating before validation,
+    the reports after the closing line, the legacy file unlinked ahead of the
+    root write, `-C` dropped (every one of those rows red), the quoting dropped
+    (the spaced and the glob roots red), a root file read on `keep` with no legacy file, the symlink check disabled, and the rename
+    replaced by a copy and an unlink.
 
   The load-bearing rows are mutation-checked, as listed under each file, and
   with them `handoff-approved`'s bare-name row in `tests/checkpoint.bats`.

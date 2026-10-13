@@ -10,6 +10,7 @@ tests/conftest.py.
 import errno
 import os
 import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -63,22 +64,26 @@ MOVED = re.compile(r"\bmoved\b", re.IGNORECASE)
 REMOVED = re.compile(r"\bremoved\b", re.IGNORECASE)
 IGNORED = re.compile(r"\bignored\b", re.IGNORECASE)
 
-# The with-commit act that stages a tracked legacy path as deleted. Paths follow
-# it space-separated, each as git's top-level pathspec (`:/<rel>`) so the act
-# runs from any directory of the repository, task before todo.
+# The with-commit act that stages a tracked legacy path as deleted:
+# `git -C <root> rm --cached --ignore-unmatch -q -- <rel> …`, each argument
+# shell-quoted, each rel relative to the root and in the order given, task
+# before todo. `-C` makes it run from any directory and keeps the root's name
+# out of every pathspec, so a glob or `!x` root is a directory change.
 #
 # Two constraints on the implementation that these rows make:
 # - `lib.commit_directive`'s legacy-paths parameter must be optional: the rows
 #   that expect today's text call it with no argument.
-# - A legacy path named on any line other than a `git rm` line counts as a
-#   report (`report_lines`), so an act split over two lines with a path on the
-#   second one reads as a duplicate report and fails the one-report rows.
-GIT_RM = "git rm --cached --ignore-unmatch -q --"
+# - A legacy path named on any line other than the act's counts as a report
+#   (`report_lines`), so an act split over two lines with a path on the second
+#   one reads as a duplicate report and fails the one-report rows.
+UNSTAGE_MARK = "--ignore-unmatch"
 
 
-def git_act(*rels: str) -> str:
+def git_act(root: Path, *rels: str) -> str:
     """Return the printed act for these legacy paths, in the order given."""
-    return " ".join([GIT_RM, *(f":/{rel}" for rel in rels)])
+    words = ["git", "-C", str(root)]
+    words += ["rm", "--cached", "--ignore-unmatch", "-q", "--", *rels]
+    return " ".join(shlex.quote(word) for word in words)
 
 
 TASK_LEGACY_BODY = "## Current task\n\nlegacy task prose\n"
@@ -163,7 +168,7 @@ def migration_payload(
 
 def report_lines(out: str, rel: str) -> list[str]:
     """Return the stdout lines that name rel, the git act's line aside."""
-    return [ln for ln in out.splitlines() if rel in ln and "git rm" not in ln]
+    return [ln for ln in out.splitlines() if rel in ln and UNSTAGE_MARK not in ln]
 
 
 def assert_reported(out: str, rel: str, kind: str) -> None:
@@ -753,10 +758,10 @@ def test_reports_and_the_git_rm_act_print_ahead_of_the_clause_file_refusal(
     assert out.count(refusal.text) == 1
     report_at = out.index(report_lines(out, LEGACY_TODO_REL)[0])
     if commit == "with-commit":
-        act = git_act(LEGACY_TODO_REL)
+        act = git_act(repo, LEGACY_TODO_REL)
         assert report_at < out.index(act) < out.index(refusal.text)
     else:
-        assert "git rm" not in out
+        assert UNSTAGE_MARK not in out
         assert report_at < out.index(refusal.text)
 
 
@@ -809,12 +814,11 @@ def test_git_rm_act_is_owed_only_to_with_commit_over_a_legacy_file(
     ok(result)
     out = result.stdout
     if with_legacy and commit == "with-commit":
-        act = git_act(LEGACY_TASK_REL, LEGACY_TODO_REL)
+        act = git_act(repo, LEGACY_TASK_REL, LEGACY_TODO_REL)
         assert act in out
         assert out.index(act) < out.rindex("Once everything above is done")
     else:
-        assert "git rm" not in out
-        assert "--ignore-unmatch" not in out
+        assert UNSTAGE_MARK not in out
 
 
 def git_status_lines(repo: Path) -> list[str]:
@@ -829,22 +833,41 @@ def git_status_lines(repo: Path) -> list[str]:
     return result.stdout.splitlines()
 
 
-def run_printed_git_rm(repo: Path, out: str) -> None:
-    """Run the git act stdout prints, from a subdirectory of the repository.
+def printed_git_act(out: str) -> str:
+    """Return the command the act line holds between its backticks.
 
-    The agent's Bash cwd persists across calls and is anywhere under the root,
-    so the act must work from there: a pathspec relative to the cwd matches
-    nothing and `--ignore-unmatch -q` hides it. The wording around the act is
-    free; the command is what the line holds between backticks, and it is run
-    through a shell exactly as printed, quoting included.
+    The wording around it is free. The command is the text after `run `` up to
+    the line's last backtick, which a root without a backtick never contains.
     """
-    line = next(ln for ln in out.splitlines() if GIT_RM in ln)
-    command = line[line.index(GIT_RM) :]
-    command = command[: command.index("`")]
-    assert command.removeprefix(GIT_RM).strip(), line
-    sub = repo / "sub"
-    sub.mkdir(exist_ok=True)
-    subprocess.run(["bash", "-c", command], cwd=sub, check=True)
+    line = next(ln for ln in out.splitlines() if UNSTAGE_MARK in ln)
+    command = line[line.index("run `") + len("run `") : line.rindex("`")]
+    assert command.startswith("git "), line
+    return command
+
+
+def run_printed_git_rm(
+    repo: Path, out: str, cwd: Path | None = None
+) -> subprocess.CompletedProcess[str]:
+    """Run the git act stdout prints, from `cwd` (default a subdirectory).
+
+    The agent's Bash cwd persists across calls and is anywhere, so the act must
+    work from there: `-C <root>` is what makes it, and a pathspec relative to
+    the cwd would match nothing, which `--ignore-unmatch -q` hides. It is run
+    through a shell exactly as printed, quoting included, and not checked: the
+    caller asserts on the exit status and on the index, so a refusal is a failed
+    assertion with git's own message.
+    """
+    command = printed_git_act(out)
+    if cwd is None:
+        cwd = repo / "sub"
+        cwd.mkdir(exist_ok=True)
+    return subprocess.run(
+        ["bash", "-c", command],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
 
 
 @pytest.mark.parametrize("commit", ["without-commit", "with-commit"])
@@ -870,7 +893,8 @@ def test_checkpoint_leaves_a_tracked_legacy_file_to_the_printed_git_act(
     assert f" D {LEGACY_TODO_REL}" in status, status
     assert "?? TODO.md" in status, status
     if commit == "with-commit":
-        run_printed_git_rm(repo, result.stdout)
+        ran = run_printed_git_rm(repo, result.stdout)
+        assert ran.returncode == 0, ran.stderr
         status = git_status_lines(repo)
         assert f"D  {LEGACY_TODO_REL}" in status, status
         subprocess.run(["git", "add", "TODO.md"], cwd=repo, check=True)
@@ -894,28 +918,61 @@ def test_printed_git_act_over_an_untracked_legacy_file_is_a_silent_no_op(
     ok(result)
     assert read(repo / "TODO.md") == TODO_LEGACY_BODY
     before = git_status_lines(repo)
-    run_printed_git_rm(repo, result.stdout)
+    ran = run_printed_git_rm(repo, result.stdout)
+    assert ran.returncode == 0, ran.stderr
     assert git_status_lines(repo) == before
 
 
-@pytest.mark.parametrize("below", ["pkg", "pkg dir"], ids=["plain", "spaced"])
-def test_printed_git_act_reaches_a_root_below_the_top_of_its_repository(
-    tmp_path: Path, below: str
-) -> None:
-    """The root is a subdirectory of a larger repository, not its toplevel.
+# A root, the directories beside it whose legacy files must stay tracked, and
+# where the root is. Each name is a pathspec hazard for a line that spells the
+# root into a pathspec: a glob that reaches a sibling (`a*b` and `a?b` over
+# `a b` and `aXb`, which sort on either side of it; `a[1]` over `a1`), or a
+# leading `!` or `^` that `:/` would fold into its own magic (over `other` and
+# `x`).
+UNSTAGE_ROOTS = {
+    "top": (".", ["sub", "other"]),
+    "plain": ("pkg", ["other"]),
+    "spaced": ("pkg dir", ["other"]),
+    "bang": ("!x", ["other", "x"]),
+    "caret": ("^x", ["other", "x"]),
+    "star": ("a*b", ["a b", "aXb"]),
+    "question": ("a?b", ["a b", "aXb"]),
+    "bracket": ("a[1]", ["a1"]),
+}
 
-    `:/` anchors at the top of the repository, so each pathspec carries the
-    root's own prefix: without it the act names a path beside the root's, which
-    `--ignore-unmatch -q` passes over in silence, and the legacy file stays in
-    the index. The spaced row is the prefix reaching the line quoted.
+
+@pytest.mark.parametrize("cwd", ["inside", "outside"])
+@pytest.mark.parametrize("name", UNSTAGE_ROOTS)
+def test_printed_git_act_unstages_only_the_roots_own_legacy_file(
+    tmp_path: Path, name: str, cwd: str
+) -> None:
+    """The act stages the root's legacy file as deleted and nothing beside it.
+
+    The root is the top of its repository or a directory below it, named plain,
+    with a space or with a character git reads as pathspec magic, and every
+    directory beside it holds a tracked legacy file of its own. The printed
+    command is run through a shell from a directory of the repository that is
+    not the root, and from one outside the repository. `-C` carries the
+    location, so the root's name is a directory change and never a pathspec:
+    dropping it reds every row, from outside for want of a repository and from
+    inside for want of a root. Dropping the quoting reds the spaced root and the
+    globs, which the shell would otherwise expand or split. The magic-named roots
+    are the proof that git needs no literal-pathspec option: the legacy paths
+    are fixed names and the root's name never reaches a pathspec.
     """
+    below, siblings = UNSTAGE_ROOTS[name]
     repo = make_repo(tmp_path)
-    root = repo / below
-    (root / ".claude").mkdir(parents=True)
-    put(root, LEGACY_TODO_REL, TODO_LEGACY_BODY)
-    tracked = f"{below}/{LEGACY_TODO_REL}"
-    git = ["git", "-c", "user.email=t@t", "-c", "user.name=t"]
-    subprocess.run([*git, "add", "-f", tracked], cwd=repo, check=True)
+    root = repo if below == "." else repo / below
+    tracked = [] if below == "." else [f"{below}/{LEGACY_TODO_REL}"]
+    tracked += [f"{sibling}/{LEGACY_TODO_REL}" for sibling in siblings]
+    own = LEGACY_TODO_REL if below == "." else f"{below}/{LEGACY_TODO_REL}"
+    tracked.append(own)
+    for rel in tracked:
+        (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+        put(repo, rel, TODO_LEGACY_BODY)
+    # Setup only: the tracked names hold pathspec magic, which `add` would read.
+    git = ["git", "--literal-pathspecs", "-c", "user.email=t@t", "-c", "user.name=t"]
+    subprocess.run([*git, "add", "-f", "--", *tracked], cwd=repo, check=True)
     subprocess.run([*git, "commit", "-qm", "seed"], cwd=repo, check=True)
     payload = migration_payload(task_clear(), todo_keep(), "with-commit")
     result = run_checkpoint(repo, payload, root)
@@ -923,15 +980,21 @@ def test_printed_git_act_reaches_a_root_below_the_top_of_its_repository(
     assert read(root / "TODO.md") == TODO_LEGACY_BODY
     assert_reported(result.stdout, LEGACY_TODO_REL, "moved")
 
-    def in_index() -> str:
-        listing = ["git", "ls-files", "-z", "--", tracked]
-        return subprocess.run(
+    def in_index() -> set[str]:
+        listing = ["git", "ls-files", "-z"]
+        out = subprocess.run(
             listing, cwd=repo, capture_output=True, text=True, check=True
         ).stdout
+        return {path for path in out.split("\0") if path}
 
-    assert in_index() == f"{tracked}\0"
-    run_printed_git_rm(repo, result.stdout)
-    assert in_index() == ""
+    assert in_index() == set(tracked)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    ran = run_printed_git_rm(
+        repo, result.stdout, elsewhere if cwd == "outside" else None
+    )
+    assert ran.returncode == 0, ran.stderr
+    assert in_index() == set(tracked) - {own}
 
 
 def test_git_rm_act_names_only_the_files_that_moved_or_went(tmp_path: Path) -> None:
@@ -945,9 +1008,9 @@ def test_git_rm_act_names_only_the_files_that_moved_or_went(tmp_path: Path) -> N
     ok(result)
     assert_reported(result.stdout, LEGACY_TASK_REL, "ignored")
     assert_reported(result.stdout, LEGACY_TODO_REL, "moved")
-    lines = [ln for ln in result.stdout.splitlines() if "git rm" in ln]
+    lines = [ln for ln in result.stdout.splitlines() if UNSTAGE_MARK in ln]
     assert len(lines) == 1, result.stdout
-    assert git_act(LEGACY_TODO_REL) in lines[0]
+    assert git_act(repo, LEGACY_TODO_REL) in lines[0]
     assert LEGACY_TASK_REL not in lines[0]
 
 
@@ -966,7 +1029,7 @@ def test_git_rm_act_is_not_owed_to_a_legacy_file_that_is_only_ignored(
     ok(result)
     assert_reported(result.stdout, LEGACY_TASK_REL, "ignored")
     assert_reported(result.stdout, LEGACY_TODO_REL, "ignored")
-    assert "git rm" not in result.stdout
+    assert UNSTAGE_MARK not in result.stdout
 
 
 # --- 9. what is not a legacy file, and what cannot be written to ---
@@ -1091,7 +1154,7 @@ def test_a_second_identical_call_changes_and_reports_nothing(tmp_path: Path) -> 
     ok(second)
     assert snapshot(repo) == settled
     assert_not_reported(second.stdout, LEGACY_TODO_REL)
-    assert "git rm" not in second.stdout
+    assert UNSTAGE_MARK not in second.stdout
 
 
 # --- 11. autoname is a rename only: it never touches the frame files ---
