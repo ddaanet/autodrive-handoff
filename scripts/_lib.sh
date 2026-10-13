@@ -281,18 +281,33 @@ handoff_drive_read() {
     # into place, which replaces a link rather than writing through it — and a
     # repository can commit one to anything readable: followed, its target
     # would be parsed, its first line quoted into a report, and a rewrite would
-    # land on it. Every caller takes its malformed path, whose `rm -f` removes
-    # the link and not what it names. The check is on the last component only:
-    # a symlinked `.claude/` is read and written where it points, as the root
-    # and legacy files are.
-    if [[ -L "$file" ]]; then
-        DRIVE_ERR="the file is a symbolic link, which no checkpoint writes"
-        return 1
-    fi
-
-    while IFS= read -r line || [ -n "$line" ]; do
-        lines+=("$line")
-    done < "$file"
+    # land on it. The test and the read are one O_NOFOLLOW open
+    # (handoff_read_regular), so a link put at the name after a caller looked
+    # at it is refused too. Every caller takes its malformed path, whose
+    # `rm -f` removes the link and not what it names. The check is on the last
+    # component only: a symlinked `.claude/` is read and written where it
+    # points, as the root and legacy files are.
+    local read_status=""
+    {
+        IFS= read -r read_status || true
+        if [[ "$read_status" == ok ]]; then
+            while IFS= read -r line || [ -n "$line" ]; do
+                lines+=("$line")
+            done
+        fi
+    } < <(handoff_read_regular "$file")
+    case "$read_status" in
+        ok) ;;
+        link)
+            DRIVE_ERR="the file is a symbolic link, which no checkpoint writes"
+            return 1 ;;
+        absent)
+            DRIVE_ERR="the file does not exist"
+            return 1 ;;
+        *)
+            DRIVE_ERR="the file is not a regular file that can be read"
+            return 1 ;;
+    esac
 
     n=${#lines[@]}
     if [ "$n" -eq 0 ]; then
@@ -462,10 +477,15 @@ if not stat.S_ISREG(st.st_mode):
 elif sys.argv[2] == "own" and st.st_uid != os.geteuid():
     print("foreign")
 else:
-    sys.stdout.write("ok\n")
-    sys.stdout.flush()
-    with os.fdopen(fd, "rb") as f:
-        sys.stdout.buffer.write(f.read())
+    try:
+        sys.stdout.write("ok\n")
+        sys.stdout.flush()
+        with os.fdopen(fd, "rb") as f:
+            sys.stdout.buffer.write(f.read())
+            sys.stdout.flush()
+    except BrokenPipeError:
+        # A caller that stops reading early, as the record trim does.
+        os._exit(0)
 ' "$1" "${2:-any}"
 }
 

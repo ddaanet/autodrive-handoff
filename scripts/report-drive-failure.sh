@@ -149,32 +149,41 @@ swept="$cwd/$HANDOFF_REL_DRIVE_SWEPT"
 # the sweep's failure, so every step is guarded: this runs under `set -e`.
 #
 # .claude/ is a directory the agent writes freely, so the record may be a
-# symlink: reading through one would copy what it names into the record, and
-# the rename would replace the link. A record that is a symlink, or anything
-# but a regular file, is left alone and nothing is recorded. The new record is built in a temporary file mktemp
-# creates beside it (never a fixed name, which could be a planted link to write
-# through) under the `autodrive.` prefix the `.claude/autodrive*` ignore
-# covers, and renamed over the record.
+# symlink: reading through one would copy what it names into the record. A
+# record that is a symlink, or anything but a regular file, is left alone and
+# nothing is recorded; the test and the read are one O_NOFOLLOW open
+# (handoff_read_regular), so a link put there after a look at the name is
+# never read. The new record is built in a temporary file mktemp creates beside
+# it (never a fixed name, which could be a planted link to write through) under
+# the `autodrive.` prefix the `.claude/autodrive*` ignore covers, and renamed
+# over the record by rename(2) (handoff_replace), which replaces a link put at
+# the name meanwhile where `mv` would move the file into a directory it names.
 record_sweep() {
-    local mtime now age tmp_record
-    [[ -L "$swept" ]] && return 0
-    [[ -e "$swept" && ! -f "$swept" ]] && return 0
+    local mtime now age tmp_record record_status=""
     tmp_record="$(mktemp "$swept.XXXXXX" 2>/dev/null)" || return 0
-    now="$(date +%s)"
-    mtime="$(stat -c %Y "$drive" 2>/dev/null || stat -f %m "$drive" 2>/dev/null || true)"
-    age="?"
-    if [[ "$mtime" =~ ^[0-9]+$ ]]; then
-        age=$(( now - mtime ))
-    fi
     {
-        printf '%s\tsweeper=%s\tstate=%s\towner=%s\tkind=%s\tage=%ss\tcwd=%q\n' \
-            "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${session_id:-?}" "$drive_state" \
-            "${drive_owner:--}" "${drive_kind:--}" "$age" "$hook_cwd"
-        if [[ -f "$swept" ]]; then
-            cat "$swept"
+        IFS= read -r record_status || true
+        case "$record_status" in
+            ok | absent) ;;
+            *) rm -f "$tmp_record"; return 0 ;;
+        esac
+        now="$(date +%s)"
+        mtime="$(stat -c %Y "$drive" 2>/dev/null || stat -f %m "$drive" 2>/dev/null || true)"
+        age="?"
+        if [[ "$mtime" =~ ^[0-9]+$ ]]; then
+            age=$(( now - mtime ))
         fi
-    } 2>/dev/null | head -n 50 > "$tmp_record" 2>/dev/null || true
-    mv -f "$tmp_record" "$swept" 2>/dev/null || rm -f "$tmp_record" || true
+        {
+            printf '%s\tsweeper=%s\tstate=%s\towner=%s\tkind=%s\tage=%ss\tcwd=%q\n' \
+                "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${session_id:-?}" "$drive_state" \
+                "${drive_owner:--}" "${drive_kind:--}" "$age" "$hook_cwd"
+            # The old record is the rest of this stream.
+            if [[ "$record_status" == ok ]]; then
+                cat
+            fi
+        } 2>/dev/null | head -n 50 > "$tmp_record" 2>/dev/null || true
+    } < <(handoff_read_regular "$swept")
+    handoff_replace "$tmp_record" "$swept" 2>/dev/null || rm -f "$tmp_record" || true
 }
 
 # Parse once: the failure branch and the sweep want different states of the same
@@ -221,12 +230,23 @@ fi
 # a link there, dangling or not, is no evidence of one, and following it would
 # quote another file's first line onto both channels. It is removed unread and
 # said so, and a pending transition is not cleared on its account.
-if [[ -L "$failed" ]]; then
+#
+# The look and the read are one O_NOFOLLOW open (handoff_read_regular): a link
+# put at the name at any moment is reported, never read. The `-e`/`-L` test
+# before it only keeps the no-file path free of a python3 spawn.
+failed_status="" reason=""
+if [[ -L "$failed" || -e "$failed" ]]; then
+    { IFS= read -r failed_status || true
+      if [[ "$failed_status" == ok ]]; then
+          IFS= read -r reason || true
+      fi
+    } < <(handoff_read_regular "$failed")
+fi
+if [[ "$failed_status" == link ]]; then
     rm -f "$failed"
     msgs+=("a symbolic link at $HANDOFF_REL_DRIVE_FAILED was removed unread")
     notes+=("A symbolic link sat where the handoff drive mod records a rejected line ($HANDOFF_REL_DRIVE_FAILED). The mod never writes one, so it was removed without reading what it points at; it says nothing about whether a transition ran.")
-elif [[ -f "$failed" ]]; then
-    reason="$(head -n1 "$failed")"
+elif [[ "$failed_status" == ok ]]; then
     rm -f "$failed"
     # A failure part-way through a sequence strands the transition in `pending`:
     # nothing will consume it (its SessionStart never fires) and drive-take.sh

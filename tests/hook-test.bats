@@ -2451,6 +2451,20 @@ run_report_failure() {
     [[ "$MSG" != *"LINKED-FAILURE-LINE"* && "$CTX" != *"LINKED-FAILURE-LINE"* ]]
 }
 
+# A link put at the failure record between the hook's look at the name and
+# its read is not followed either: here `head`, the old reader, plants it.
+@test "report-drive-failure (the failure record becomes a symlink before the read: its target is not quoted)" {
+    printf '%s\n' "the real reason" > "$tmp/.claude/autodrive.failed"
+    printf '%s\n' "LINKED-FAILURE-LINE" > "$other/linked-failed"
+    swap_on_first head "$tmp/.claude/autodrive.failed" "$other/linked-failed"
+    run_report_failure "$tmp"
+    [ "$status" -eq 0 ]
+    split_output "$output"
+    [[ "$MSG" != *"LINKED-FAILURE-LINE"* && "$CTX" != *"LINKED-FAILURE-LINE"* ]]
+    [[ "$MSG" == *"the real reason"* ]]
+    [ "$(cat "$other/linked-failed")" = "LINKED-FAILURE-LINE" ]
+}
+
 @test "report-drive-failure (the failure record is a dangling symlink: removed, said so)" {
     ln -s "$other/nowhere" "$tmp/.claude/autodrive.failed"
     run_report_failure "$tmp"
@@ -2607,6 +2621,54 @@ run_report_failure() {
     echo "$output" | jq -e '.systemMessage | test("stale")' >/dev/null
     [ -L "$tmp/.claude/autodrive.swept" ]
     [ "$(cat "$other/decoy")" = "decoy bytes" ]
+}
+
+# <command> <path> <link target> — put a stub <command> first on PATH that, the
+# first time it runs, replaces <path> with a link to <link target> and then
+# runs the real command: a link planted between a hook's check of the name and
+# its use of it, at the one moment a test can reach.
+swap_on_first() {
+    local bin="$BATS_TEST_TMPDIR/swapbin" real
+    real="$(command -v "$1")"
+    mkdir -p "$bin"
+    : > "$BATS_TEST_TMPDIR/swap-once"
+    cat > "$bin/$1" <<STUB
+#!/usr/bin/env bash
+if [ -e "$BATS_TEST_TMPDIR/swap-once" ]; then
+    rm -f "$BATS_TEST_TMPDIR/swap-once"
+    rm -rf "$2"
+    ln -s "$3" "$2"
+fi
+exec "$real" "\$@"
+STUB
+    chmod +x "$bin/$1"
+    export PATH="$bin:$PATH"
+}
+
+# The check and the read are one open: a link put at the record after the hook
+# looked at it is not read into the record.
+@test "report-drive-failure (the record becomes a symlink after the check: its target is not copied in)" {
+    printf 'old line\n' > "$tmp/.claude/autodrive.swept"
+    printf 'DECOY-RECORD-BYTES\n' > "$other/decoy"
+    seed_drive "$tmp" "compact" "/compact" "continue"
+    swap_on_first date "$tmp/.claude/autodrive.swept" "$other/decoy"
+    run_report_failure "$tmp"
+    [ "$status" -eq 0 ]
+    [ "$(cat "$other/decoy")" = "DECOY-RECORD-BYTES" ]
+    [ ! -L "$tmp/.claude/autodrive.swept" ]
+    [[ "$(cat "$tmp/.claude/autodrive.swept")" != *"DECOY-RECORD-BYTES"* ]]
+}
+
+# The rename replaces a link at the record; `mv` would move the new record
+# into the directory the link names.
+@test "report-drive-failure (the record becomes a symlink to a directory: nothing lands in it)" {
+    mkdir -p "$other/dir"
+    seed_drive "$tmp" "compact" "/compact" "continue"
+    swap_on_first date "$tmp/.claude/autodrive.swept" "$other/dir"
+    run_report_failure "$tmp"
+    [ "$status" -eq 0 ]
+    [ -z "$(ls -A "$other/dir")" ]
+    [ ! -L "$tmp/.claude/autodrive.swept" ]
 }
 
 @test "report-drive-failure (a symlink at the old temporary name: not written through, the record still lands)" {

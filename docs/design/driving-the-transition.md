@@ -47,8 +47,9 @@ file cannot be made to run something else. One fact per line throughout.
 A symbolic link at the sentinel is never followed. No writer makes one, and a
 repository can commit one to any readable file, whose bytes a reader would
 then parse, quote into a report, offer as lines to type or rewrite on arming.
-`handoff_drive_read` refuses a link, dangling or not, before reading a byte,
-and every caller gates on the name existing as a link or a file, so a dangling
+`handoff_drive_read` refuses a link, dangling or not, before reading a byte:
+the test and the read are one `O_NOFOLLOW` open (`handoff_read_regular`), so a
+link put at the name after a caller looked at it is refused too. Every caller gates on the name existing as a link or a file, so a dangling
 one is refused too rather than read as no file and left for ever. Each takes
 its malformed path: the loaders and `drive-take.sh` remove the link and report
 it, the sweep removes it as its own `link` state, and `handoff-approved`
@@ -197,7 +198,8 @@ same hook clears it with the report. Nothing is inferred from a file merely
 being `pending`, which is the legitimate state for the whole window between
 the take and the transition. A symbolic link at `autodrive.failed`, dangling
 or not, is no record the mod wrote: it is removed unread and named on both
-channels, and a `pending` sentinel is left where it is.
+channels, and a `pending` sentinel is left where it is. The record is read
+through the same single `O_NOFOLLOW` open, never a test followed by a read.
 
 The hook also sweeps a sentinel still `armed`. `drive-take.sh` leaves it
 `pending` or removes it at the end of the turn that wrote it, so one still
@@ -235,9 +237,12 @@ sharing the root (the commit review) run this hook too; without the record a
 vanished sentinel names no remover. It is newest first, trimmed to 50 lines,
 never consumed, and a failed write never blocks the sweep. `.claude/` is the
 agent's to write, so the record is never followed through a symlink: one that
-is a link, or not a regular file, is left alone and nothing is recorded, and
-the rewrite goes through a `mktemp` file beside it rather than a fixed name a
-planted link could redirect. It says who took the file and how old it was; it
+is a link, or not a regular file, is left alone and nothing is recorded, the
+old record is read through one `O_NOFOLLOW` open rather than a test and a
+read, and the rewrite goes through a `mktemp` file beside it rather than a
+fixed name a planted link could redirect, renamed over the record by
+`os.replace`, which replaces a link put there meanwhile where `mv` would move
+the file into a directory it names. It says who took the file and how old it was; it
 does not decide whether the sweep was right.
 
 ## Verification
