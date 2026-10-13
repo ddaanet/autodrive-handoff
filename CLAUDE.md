@@ -506,16 +506,18 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
   What each file covers:
   - `tests/test_checkpoint_schema.py` — the session root (the `HANDOFF_ROOT`
     refusals with the negative that a drifted cwd gets nothing written) and the
-    schema validation: each required field missing, each literal with an unknown
-    value, a superfluous top-level key under each of the three skills — spelled
-    `bogus`, not a plausible field — `null` and an absent key on `task` and
-    `todo`, an action outside the field's own vocabulary, an object carrying a
-    key its action does not take, an `edit` with a missing or mistyped string,
-    malformed JSON, each asserting a non-zero exit and that the message names the
-    field; the `skill` enum (`autoname` accepted, the retired names rejected,
-    `rename` rejected under `precompact`, required under `handoff` and
-    `autoname`); `precompact` rejecting `task` by key presence and removing the
-    task file.
+    schema validation of the envelope: each required field missing, each literal
+    with an unknown value, the `skill` enum (`autoname` accepted, the retired
+    names rejected), `rename` rejected under `precompact`, required under
+    `handoff` and `autoname` and refused when not a string; `precompact`
+    rejecting `task` by key presence and removing the task file; each asserting
+    a non-zero exit and that the message names the field.
+  - `tests/test_checkpoint_fields.py` — the `task` and `todo` fields and the
+    closed key set: an action outside the field's own vocabulary, an object
+    carrying a key its action does not take, an `edit` with a missing or
+    mistyped string, malformed JSON, `null` and an absent key on `task` and
+    `todo`, a superfluous top-level key under each of the three skills — spelled
+    `bogus`, not a plausible field.
   - `tests/test_checkpoint_writes.py` — the write semantics: a content string
     written as given on both halves, a headings-only, whitespace-only or empty
     one included; `clear` leaving no file whether or not there was one; `keep`
@@ -531,28 +533,31 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
     list marker named by its line and only the first, `**bold**`, a mid-line
     hyphen, a year and a decimal accepted, both facts in one error, nothing
     written on a rejection.
-  - `tests/test_checkpoint_transition.py` — `rename` and the transition: a root
-    with no `.claude/` getting one for the sentinel; the transition matrix (each
-    of `clear`/`compact`/`continue` missing, mistyped, the other boundary's field
-    present, an empty or multi-line `compact`, a `continue` that is multi-line,
-    whitespace-only, starts with `/` or stands against a non-driven transition);
-    the six legal combinations pinning the sentinel's exact bytes, read back
-    through `handoff_drive_read`; the held state and its owner; and `autoname`'s
-    rows (exact sentinel, both frame files left byte-identical, `rename`
-    missing, each boundary field rejected by name, and no directive against a
-    dirty memory submodule). Mutation-checked: the held/armed pair over one
-    fixture (never hold ⟹ the held row alone reds; hold whatever the sentinel
-    names ⟹ the names-nothing row alone reds).
-  - `tests/test_checkpoint_directives.py` — the directive composition (memory
-    then SDD under `precompact`, absent under `handoff`; the commit act present
-    under `with-commit` and absent without; stdout exactly the closing line
-    through one helper; part order pinned per skill, the closing line last; the
-    clause-file refusal printed last on a held and an armed fixture) and the
-    ledger-liveness matrix. Mutation-checked: `with-commit` output never
+  - `tests/test_checkpoint_rename.py` — `rename` and `autoname`: a root with no
+    `.claude/` getting one for the sentinel; `autoname`'s rows (exact sentinel,
+    both frame files left byte-identical, `rename` missing, each boundary field
+    rejected by name, and no directive against a dirty memory submodule).
+  - `tests/test_checkpoint_transition.py` — the transition fields: the
+    transition matrix (each of `clear`/`compact`/`continue` missing, mistyped,
+    the other boundary's field present, an empty or multi-line `compact`, a
+    `continue` that is multi-line, whitespace-only, starts with `/` or stands
+    against a non-driven transition); the six legal combinations pinning the
+    sentinel's exact bytes, read back through `handoff_drive_read`.
+  - `tests/test_checkpoint_directives.py` — the memory directive, the commit act
+    (present under `with-commit` and absent without), the order of the parts
+    and the ledger-liveness matrix. Mutation-checked: `with-commit` output never
     mentions the trigger file.
-  - `tests/test_checkpoint_hold.py` — the arming instruction, the hold rule and
-    the held path's check of `CLAUDE_CODE_SESSION_ID`. Mutation-checked: the
-    `(driven ∧ with-commit)` disjunct.
+  - `tests/test_checkpoint_composition.py` — the directive composition per skill
+    (memory then SDD under `precompact`, absent under `handoff`), stdout exactly
+    the closing line through one helper, part order pinned per skill with the
+    closing line last, and the clause-file refusal printed last on a held and an
+    armed fixture.
+  - `tests/test_checkpoint_hold.py` — the arming instruction, the hold rule, the
+    held state and its owner, and the held path's check of
+    `CLAUDE_CODE_SESSION_ID`. Mutation-checked: the held/armed pair over one
+    fixture (never hold ⟹ the held row alone reds; hold whatever the sentinel
+    names ⟹ the names-nothing row alone reds) and the `(driven ∧ with-commit)`
+    disjunct.
   - `tests/test_checkpoint_legacy.py` — the whole legacy migration, one file
     whatever its length, since it is deleted in one pass when the fallback is
     retired: a legacy todo moved on `keep` with its modification time, across

@@ -26,6 +26,7 @@ import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+import _checkpoint_lib as lib
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -172,6 +173,28 @@ def run_checkpoint(
         text=True,
         check=False,
     )
+
+
+def read_back_drive(drive_path: Path) -> bool:
+    """Mirror `handoff_drive_read` (bash, unmoved) reading back a sentinel."""
+    script = f'source "{LIB}"; handoff_drive_read "{drive_path}"'
+    result = subprocess.run(
+        ["bash", "-c", script], capture_output=True, text=True, check=False
+    )
+    return result.returncode == 0
+
+
+def assert_stdout_is_closing(
+    result: subprocess.CompletedProcess[str], skill: str, *, typed: bool
+) -> None:
+    """Assert stdout is exactly the closing line.
+
+    First asserts the line itself is non-empty, so this cannot pass against an
+    unwritten closing_directive.
+    """
+    closing = lib.closing_directive(skill, typed=typed)
+    assert closing != ""
+    assert result.stdout == closing
 
 
 def drive_state(drive_path: Path) -> tuple[str, str]:

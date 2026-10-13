@@ -1,6 +1,7 @@
 """Tests for scripts/checkpoint.py (handoff-checkpoint) — the arming
-instruction, the rule that picks the `held` or `armed` state of the sentinel,
-and the held path's validation of CLAUDE_CODE_SESSION_ID before any write.
+instruction, the rule that picks the `held` or `armed` state of the sentinel
+(and the held state with its owner), and the held path's validation of
+CLAUDE_CODE_SESSION_ID before any write.
 
 The helpers shared with the other tests/test_checkpoint_*.py files are in
 tests/conftest.py.
@@ -16,10 +17,13 @@ from conftest import (
     _run_checkpoint_no_session_id,
     add_sdd_ledger,
     dirty_memory,
+    drive_state,
     handoff_payload,
     make_gitlore_repo,
     precompact_payload,
     run_checkpoint,
+    task_clear,
+    todo_keep,
 )
 
 pytestmark = pytest.mark.usefixtures("_session_id")
@@ -221,6 +225,119 @@ def test_armed_cell_succeeds_with_session_id_unset(tmp_path: Path) -> None:
     repo = make_gitlore_repo(tmp_path)
     payload = handoff_payload("without-commit")
     result = _run_checkpoint_no_session_id(repo, payload)
+    assert result.returncode == 0
+    first_line = (repo / ".claude" / "autodrive").read_text().splitlines()[0]
+    assert first_line == "armed"
+
+
+# --- held versus armed ---
+
+
+def test_typed_transition_with_memory_gate_pending_held(tmp_path: Path) -> None:
+    repo = make_gitlore_repo(tmp_path)
+    dirty_memory(repo)
+    payload = {
+        "skill": "handoff",
+        "commit": "without-commit",
+        "rename": "A Title",
+        "clear": True,
+        "continue": "pick up per the task file",
+        "task": task_clear(),
+        "todo": todo_keep(),
+    }
+    result = run_checkpoint(repo, payload)
+    assert result.returncode == 0
+    first_line = (repo / ".claude" / "autodrive").read_text().splitlines()[0]
+    assert first_line == "held sess-checkpoint"
+    assert "handoff-approved" in result.stdout
+
+
+def test_held_sentinel_names_the_session_that_holds_it(tmp_path: Path) -> None:
+    repo = make_gitlore_repo(tmp_path)
+    dirty_memory(repo)
+    payload = {
+        "skill": "handoff",
+        "commit": "without-commit",
+        "rename": "A Title",
+        "clear": True,
+        "continue": None,
+        "task": task_clear(),
+        "todo": todo_keep(),
+    }
+    result = run_checkpoint(repo, payload)
+    assert result.returncode == 0
+    state, owner = drive_state(repo / ".claude" / "autodrive")
+    assert state == "held"
+    assert owner == "sess-checkpoint"
+
+
+def test_typed_transition_no_memory_gate_armed_no_arming_instruction(
+    tmp_path: Path,
+) -> None:
+    repo = make_gitlore_repo(tmp_path)
+    payload = {
+        "skill": "handoff",
+        "commit": "without-commit",
+        "rename": "A Title",
+        "clear": True,
+        "continue": "pick up per the task file",
+        "task": task_clear(),
+        "todo": todo_keep(),
+    }
+    result = run_checkpoint(repo, payload)
+    assert result.returncode == 0
+    first_line = (repo / ".claude" / "autodrive").read_text().splitlines()[0]
+    assert first_line == "armed"
+    assert "handoff-approved" not in result.stdout
+
+
+def test_untyped_handoff_still_types_rename_so_it_holds_too(tmp_path: Path) -> None:
+    repo = make_gitlore_repo(tmp_path)
+    dirty_memory(repo)
+    payload = {
+        "skill": "handoff",
+        "commit": "without-commit",
+        "rename": "A Title",
+        "clear": False,
+        "continue": None,
+        "task": task_clear(),
+        "todo": todo_keep(),
+    }
+    result = run_checkpoint(repo, payload)
+    assert result.returncode == 0
+    first_line = (repo / ".claude" / "autodrive").read_text().splitlines()[0]
+    assert first_line == "held sess-checkpoint"
+    assert "handoff-approved" in result.stdout
+
+
+@pytest.mark.parametrize("commit", ["without-commit", "with-commit"])
+def test_sentinel_typing_nothing_arms_even_with_memory_gate_pending(
+    tmp_path: Path,
+    commit: str,
+) -> None:
+    repo = make_gitlore_repo(tmp_path)
+    dirty_memory(repo)
+    payload = {
+        "skill": "precompact",
+        "commit": commit,
+        "compact": False,
+        "continue": None,
+        "todo": todo_keep(),
+    }
+    result = run_checkpoint(repo, payload)
+    assert result.returncode == 0
+    first_line = (repo / ".claude" / "autodrive").read_text().splitlines()[0]
+    assert first_line == "armed"
+    assert "handoff-approved" not in result.stdout
+
+
+def test_autoname_arms_against_dirty_memory_having_asked_nothing(
+    tmp_path: Path,
+) -> None:
+    repo = make_gitlore_repo(tmp_path)
+    dirty_memory(repo)
+    payload = {"skill": "autoname", "rename": "A Side Conversation"}
+    result = run_checkpoint(repo, payload)
     assert result.returncode == 0
     first_line = (repo / ".claude" / "autodrive").read_text().splitlines()[0]
     assert first_line == "armed"
