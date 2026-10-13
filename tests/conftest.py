@@ -76,6 +76,26 @@ def git_free_env() -> dict[str, str]:
     return env
 
 
+def run_git(
+    cwd: Path, *args: str, capture_output: bool = False
+) -> subprocess.CompletedProcess[str]:
+    """Run `git <args>` in cwd, checked, without git's repository-local
+    variables (`git_free_env`), so it acts on the repository under cwd."""
+    return subprocess.run(
+        ["git", *args],
+        cwd=cwd,
+        env=git_free_env(),
+        capture_output=capture_output,
+        text=True,
+        check=True,
+    )
+
+
+def unset_clause_file(repo: Path) -> None:
+    """Remove `gitlore.memoryApprovalClauseFile` from the repo's config."""
+    run_git(repo, "config", "--unset", "gitlore.memoryApprovalClauseFile")
+
+
 @functools.cache
 def _git_local_env_vars() -> tuple[str, ...]:
     result = subprocess.run(

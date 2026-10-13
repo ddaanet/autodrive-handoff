@@ -18,11 +18,14 @@ from conftest import (
     add_sdd_ledger,
     assert_stdout_is_closing,
     dirty_memory,
+    git_free_env,
     handoff_payload,
     make_gitlore_repo,
     make_repo,
     precompact_payload,
     run_checkpoint,
+    run_git,
+    unset_clause_file,
 )
 
 pytestmark = pytest.mark.usefixtures("_session_id")
@@ -79,11 +82,7 @@ def test_clause_resolved_content_is_its_own_block(tmp_path: Path) -> None:
 def test_clause_file_unset_names_key_and_restart(tmp_path: Path) -> None:
     repo = make_gitlore_repo(tmp_path)
     dirty_memory(repo)
-    subprocess.run(
-        ["git", "config", "--unset", "gitlore.memoryApprovalClauseFile"],
-        cwd=repo,
-        check=True,
-    )
+    unset_clause_file(repo)
     result = run_checkpoint(repo, handoff_payload("without-commit"))
     assert result.returncode == 0
     assert "gitlore.memoryapprovalclausefile" in result.stdout.lower()
@@ -100,15 +99,11 @@ def test_clause_file_unset_names_key_and_restart(tmp_path: Path) -> None:
 def test_clause_file_missing_same_key_and_restart_report(tmp_path: Path) -> None:
     repo = make_gitlore_repo(tmp_path)
     dirty_memory(repo)
-    subprocess.run(
-        [
-            "git",
-            "config",
-            "gitlore.memoryApprovalClauseFile",
-            str(repo / ".gitlore-memory-approval-clause-missing.txt"),
-        ],
-        cwd=repo,
-        check=True,
+    run_git(
+        repo,
+        "config",
+        "gitlore.memoryApprovalClauseFile",
+        str(repo / ".gitlore-memory-approval-clause-missing.txt"),
     )
     result = run_checkpoint(repo, handoff_payload("without-commit"))
     assert result.returncode == 0
@@ -122,24 +117,16 @@ def test_clause_file_missing_same_key_and_restart_report(tmp_path: Path) -> None
 def test_unset_and_missing_clause_reports_are_the_same(tmp_path: Path) -> None:
     repo_unset = make_gitlore_repo(tmp_path, "glrepo_unset")
     dirty_memory(repo_unset)
-    subprocess.run(
-        ["git", "config", "--unset", "gitlore.memoryApprovalClauseFile"],
-        cwd=repo_unset,
-        check=True,
-    )
+    unset_clause_file(repo_unset)
     unset_result = run_checkpoint(repo_unset, handoff_payload("without-commit"))
 
     repo_missing = make_gitlore_repo(tmp_path, "glrepo_missing")
     dirty_memory(repo_missing)
-    subprocess.run(
-        [
-            "git",
-            "config",
-            "gitlore.memoryApprovalClauseFile",
-            str(repo_missing / "gone.txt"),
-        ],
-        cwd=repo_missing,
-        check=True,
+    run_git(
+        repo_missing,
+        "config",
+        "gitlore.memoryApprovalClauseFile",
+        str(repo_missing / "gone.txt"),
     )
     missing_result = run_checkpoint(repo_missing, handoff_payload("without-commit"))
 
@@ -314,9 +301,9 @@ def test_closing_directive_raises_on_unknown_skill() -> None:
 def _decoy_git_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     decoy = tmp_path / "decoy"
     decoy.mkdir()
-    subprocess.run(["git", "init", "-q"], cwd=decoy, check=True)
+    run_git(decoy, "init", "-q")
     (decoy / "tracked.txt").write_text("decoy\n")
-    subprocess.run(["git", "add", "tracked.txt"], cwd=decoy, check=True)
+    run_git(decoy, "add", "tracked.txt")
     monkeypatch.setenv("GIT_DIR", str(decoy / ".git"))
     monkeypatch.setenv("GIT_WORK_TREE", str(decoy))
     monkeypatch.setenv("GIT_INDEX_FILE", str(decoy / ".git" / "index"))
@@ -353,3 +340,25 @@ def test_run_checkpoint_ignores_an_inherited_git_environment(
     assert result.returncode == 0
     assert "feedback_x.md" in result.stdout
     assert _git_bytes(decoy) == before
+
+
+def test_unset_clause_file_ignores_an_inherited_git_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The decoy holds the key too: a call that inherits GIT_DIR unsets it there
+    and leaves the built repository's."""
+    repo = make_gitlore_repo(tmp_path)
+    decoy = _decoy_git_env(tmp_path, monkeypatch)
+    run_git(decoy, "config", "gitlore.memoryApprovalClauseFile", "decoy.txt")
+    before = _git_bytes(decoy)
+    unset_clause_file(repo)
+    assert _git_bytes(decoy) == before
+    probe = subprocess.run(
+        ["git", "config", "--get", "gitlore.memoryApprovalClauseFile"],
+        cwd=repo,
+        env=git_free_env(),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert probe.returncode == 1, probe.stdout

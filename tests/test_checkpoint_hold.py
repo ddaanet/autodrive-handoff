@@ -7,7 +7,6 @@ The helpers shared with the other tests/test_checkpoint_*.py files are in
 tests/conftest.py.
 """
 
-import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
@@ -23,6 +22,7 @@ from conftest import (
     run_checkpoint,
     task_clear,
     todo_keep,
+    unset_clause_file,
 )
 
 pytestmark = pytest.mark.usefixtures("_session_id")
@@ -66,11 +66,7 @@ def test_arming_text_refers_to_everything_above() -> None:
 def test_clause_refusal_is_followed_by_no_commit_or_arming(tmp_path: Path) -> None:
     repo = make_gitlore_repo(tmp_path)
     dirty_memory(repo)
-    subprocess.run(
-        ["git", "config", "--unset", "gitlore.memoryApprovalClauseFile"],
-        cwd=repo,
-        check=True,
-    )
+    unset_clause_file(repo)
     add_sdd_ledger(repo)
     boundary = lib.todo_boundary(str(repo))
     commit_act = lib.commit_directive()

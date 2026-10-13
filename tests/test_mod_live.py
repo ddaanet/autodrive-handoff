@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from conftest import run_git
 
 pytestmark = pytest.mark.live
 
@@ -93,7 +94,7 @@ def smoke_repo(tmp_path: Path) -> Iterator[Path]:
 
 
 def git(repo: Path, *args: str) -> None:
-    subprocess.run(["git", "-C", str(repo), *args], check=True)
+    run_git(repo, *args)
 
 
 def arm_prompt(session: str, body: str) -> str:

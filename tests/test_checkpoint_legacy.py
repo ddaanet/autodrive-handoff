@@ -23,15 +23,18 @@ from conftest import (
     dirty_memory,
     drive_state,
     frame_payload,
+    git_free_env,
     handoff_payload,
     make_gitlore_repo,
     make_repo,
     precompact_payload,
     run_checkpoint,
+    run_git,
     task_clear,
     todo_clear,
     todo_edit,
     todo_keep,
+    unset_clause_file,
 )
 
 pytestmark = pytest.mark.usefixtures("_session_id")
@@ -736,11 +739,7 @@ def test_reports_and_the_git_rm_act_print_ahead_of_the_clause_file_refusal(
     """
     repo = make_gitlore_repo(tmp_path)
     dirty_memory(repo)
-    subprocess.run(
-        ["git", "config", "--unset", "gitlore.memoryApprovalClauseFile"],
-        cwd=repo,
-        check=True,
-    )
+    unset_clause_file(repo)
     put(repo, LEGACY_TODO_REL, TODO_LEGACY_BODY)
     refusal = lib.memory_directive(str(repo), commit)
     assert refusal.refusal
@@ -819,14 +818,9 @@ def test_git_rm_act_is_owed_only_to_with_commit_over_a_legacy_file(
 
 def git_status_lines(repo: Path) -> list[str]:
     """Return `git status --porcelain` as lines."""
-    result = subprocess.run(
-        ["git", "status", "--porcelain"],
-        cwd=repo,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return result.stdout.splitlines()
+    return run_git(
+        repo, "status", "--porcelain", capture_output=True
+    ).stdout.splitlines()
 
 
 def printed_git_act(out: str) -> str:
@@ -860,6 +854,7 @@ def run_printed_git_rm(
     return subprocess.run(
         ["bash", "-c", command],
         cwd=cwd,
+        env=git_free_env(),
         capture_output=True,
         text=True,
         check=False,
@@ -879,9 +874,9 @@ def test_checkpoint_leaves_a_tracked_legacy_file_to_the_printed_git_act(
     """
     repo = make_repo(tmp_path)
     put(repo, LEGACY_TODO_REL, TODO_LEGACY_BODY)
-    git = ["git", "-c", "user.email=t@t", "-c", "user.name=t"]
-    subprocess.run([*git, "add", "-f", LEGACY_TODO_REL], cwd=repo, check=True)
-    subprocess.run([*git, "commit", "-qm", "seed"], cwd=repo, check=True)
+    ident = ["-c", "user.email=t@t", "-c", "user.name=t"]
+    run_git(repo, *ident, "add", "-f", LEGACY_TODO_REL)
+    run_git(repo, *ident, "commit", "-qm", "seed")
     result = run_checkpoint(repo, migration_payload(task_clear(), todo_keep(), commit))
     ok(result)
     assert read(repo / "TODO.md") == TODO_LEGACY_BODY
@@ -893,7 +888,7 @@ def test_checkpoint_leaves_a_tracked_legacy_file_to_the_printed_git_act(
         assert ran.returncode == 0, ran.stderr
         status = git_status_lines(repo)
         assert f"D  {LEGACY_TODO_REL}" in status, status
-        subprocess.run(["git", "add", "TODO.md"], cwd=repo, check=True)
+        run_git(repo, "add", "TODO.md")
         status = git_status_lines(repo)
         assert f"R  {LEGACY_TODO_REL} -> TODO.md" in status, status
 
@@ -967,9 +962,9 @@ def test_printed_git_act_unstages_only_the_roots_own_legacy_file(
         (repo / rel).parent.mkdir(parents=True, exist_ok=True)
         put(repo, rel, TODO_LEGACY_BODY)
     # Setup only: the tracked names hold pathspec magic, which `add` would read.
-    git = ["git", "--literal-pathspecs", "-c", "user.email=t@t", "-c", "user.name=t"]
-    subprocess.run([*git, "add", "-f", "--", *tracked], cwd=repo, check=True)
-    subprocess.run([*git, "commit", "-qm", "seed"], cwd=repo, check=True)
+    opts = ["--literal-pathspecs", "-c", "user.email=t@t", "-c", "user.name=t"]
+    run_git(repo, *opts, "add", "-f", "--", *tracked)
+    run_git(repo, *opts, "commit", "-qm", "seed")
     payload = migration_payload(task_clear(), todo_keep(), "with-commit")
     result = run_checkpoint(repo, payload, root)
     ok(result)
@@ -977,10 +972,7 @@ def test_printed_git_act_unstages_only_the_roots_own_legacy_file(
     assert_reported(result.stdout, LEGACY_TODO_REL, "moved")
 
     def in_index() -> set[str]:
-        listing = ["git", "ls-files", "-z"]
-        out = subprocess.run(
-            listing, cwd=repo, capture_output=True, text=True, check=True
-        ).stdout
+        out = run_git(repo, "ls-files", "-z", capture_output=True).stdout
         return {path for path in out.split("\0") if path}
 
     assert in_index() == set(tracked)

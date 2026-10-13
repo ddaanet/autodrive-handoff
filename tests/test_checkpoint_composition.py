@@ -6,7 +6,6 @@ tests/conftest.py.
 """
 
 import os
-import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
@@ -22,8 +21,10 @@ from conftest import (
     make_gitlore_repo,
     precompact_payload,
     run_checkpoint,
+    run_git,
     task_clear,
     todo_keep,
+    unset_clause_file,
 )
 
 pytestmark = pytest.mark.usefixtures("_session_id")
@@ -159,7 +160,7 @@ def test_unidentified_workspace_does_not_suppress_todo_file(tmp_path: Path) -> N
 def test_flat_path_ledger_alone_precompact_closing_only(tmp_path: Path) -> None:
     repo = tmp_path / "sddflat"
     (repo / ".claude").mkdir(parents=True)
-    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    run_git(repo, "init", "-q")
     add_flat_sdd_ledger(repo)
     result = run_checkpoint(repo, precompact_payload("without-commit"))
     assert result.returncode == 0
@@ -171,7 +172,7 @@ def test_several_live_workspaces_most_recently_modified_wins(tmp_path: Path) -> 
         live, stale = pair
         repo = tmp_path / f"sddmulti{i}"
         (repo / ".claude").mkdir(parents=True)
-        subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+        run_git(repo, "init", "-q")
         add_sdd_ledger(repo, stale)
         add_sdd_ledger(repo, live)
         old_time = 1735689600  # 2025-01-01
@@ -248,11 +249,7 @@ def test_held_sentinel_prints_no_closing_line(
 def test_refusal_prints_alone_when_not_held(tmp_path: Path) -> None:
     repo = make_gitlore_repo(tmp_path)
     dirty_memory(repo)
-    subprocess.run(
-        ["git", "config", "--unset", "gitlore.memoryApprovalClauseFile"],
-        cwd=repo,
-        check=True,
-    )
+    unset_clause_file(repo)
     refusal = lib.memory_directive(str(repo), "with-commit")
     assert refusal.text != ""
     assert refusal.refusal
