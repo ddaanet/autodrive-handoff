@@ -13,6 +13,7 @@ from __future__ import annotations
 import errno
 import os
 import shutil
+import stat
 import tempfile
 from pathlib import Path
 from typing import Literal, NamedTuple
@@ -36,10 +37,10 @@ class FilePlan(NamedTuple):
     """What one half will do to its file, resolved before anything is written.
 
     A NamedTuple, like Transition beside it, so the record itself is frozen.
-    `none` leaves the list as it is: with no legacy file it neither reads nor
-    stats the root file (FR4). `move` carries the legacy file onto `path` with
-    its modification time; a `write` or a `remove` also takes its legacy file
-    away unless that one is `ignored`.
+    `none` leaves the list as it is: with no legacy file it does not read the
+    root file, only looks at what sits at its name (FR4). `move` carries the
+    legacy file onto `path` with its modification time; a `write` or a `remove`
+    also takes its legacy file away unless that one is `ignored`.
     """
 
     act: Literal["write", "remove", "move", "none"]
@@ -70,7 +71,7 @@ def edited_body(field: str, path: Path, old: str, new: str) -> str:
     rather than writing it, which is what lets both lib.err() sites run while a
     plan is still being resolved, ahead of any write (FR2).
     """
-    content = path.read_text(encoding="utf-8")
+    content = read_strict(field, path)
     count = content.count(old)
     if count == 0:
         lib.err(f"{field}.old_string", f"not found in {path}")
@@ -80,25 +81,48 @@ def edited_body(field: str, path: Path, old: str, new: str) -> str:
 
 
 def read_half(field: str, root: Path, rel: str, legacy_rel: str) -> Half:
-    """Return the half's paths, or error when its legacy file cannot be handled.
+    """Return the half's paths, or error when either name cannot be handled.
 
-    Errors when a directory sits on the root file, which leaves the legacy file
-    nowhere to go, and when the legacy path is a symlink to a file, whose
-    relative target would not resolve from the root. The root file is read only
-    when a legacy file exists.
+    Errors, whatever the action, when the root name is a symbolic link, which a
+    write would follow to a file the checkpoint does not own, or a directory,
+    which no write, removal or move can land on. Errors when the legacy path is
+    a symlink to a file, whose relative target would not resolve from the root.
+    The root file is read only when a legacy file exists, and a read that fails
+    errors naming the field.
     """
     path = root / rel
     legacy_path = root / legacy_rel
+    if path.is_symlink():
+        lib.err(field, f"{rel} is a symbolic link, not a file")
+    if path.is_dir():
+        lib.err(field, f"{rel} is a directory, not a file")
     if not legacy_path.is_file():
         return Half(path, legacy_path, legacy_rel, has_body=False)
     if legacy_path.is_symlink():
         lib.err(field, f"{legacy_rel} is a symbolic link, not a file")
-    if path.is_dir():
-        lib.err(field, f"{rel} is a directory, not a file")
-    counts = path.is_file() and not lib.is_empty_body(
-        path.read_text(encoding="utf-8", errors="replace")
-    )
+    counts = path.is_file() and not lib.is_empty_body(read_lenient(field, path))
     return Half(path, legacy_path, legacy_rel, counts)
+
+
+def read_strict(field: str, path: Path) -> str:
+    """Return path's text as UTF-8, or error naming field when it cannot."""
+    try:
+        return path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        lib.err(field, f"{path.name} is not valid UTF-8")
+    except OSError as exc:
+        lib.err(field, f"{path.name} cannot be read: {exc.strerror}")
+
+
+def read_lenient(field: str, path: Path) -> str:
+    """Return path's text for the body test, undecodable bytes replaced.
+
+    Only whether it has a body is asked, which a stray byte does not change.
+    """
+    try:
+        return path.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        lib.err(field, f"{path.name} cannot be read: {exc.strerror}")
 
 
 def legacy_fate(half: Half, *, after: bool, carried: bool) -> Legacy | None:
@@ -170,19 +194,55 @@ def apply_plan(plan: FilePlan) -> None:
     """Perform the write, unlink or move a plan names.
 
     Then take the legacy file off its path unless it is ignored, so the root
-    file is current before the legacy one goes. A failed move errors; the other
-    arms leave a filesystem failure to surface as it is, every payload failure
-    having been found while the plans were being resolved.
+    file is current before the legacy one goes. A write lands through a sibling
+    temporary file renamed onto the name, and the unlink removes the name
+    itself, so neither follows a symlink that appeared there after resolution
+    refused one. A failed move errors; the other arms leave a filesystem failure
+    to surface as it is, every payload failure having been found while the plans
+    were being resolved.
     """
     legacy = plan.legacy
     if plan.act == "write":
-        plan.path.write_text(plan.body, encoding="utf-8")
+        write_replacing(plan.path, plan.body)
     elif plan.act == "remove":
         plan.path.unlink(missing_ok=True)
     elif plan.act == "move" and legacy is not None:
         move_legacy(legacy, plan.path)
     if legacy is not None and legacy.fate != "ignored":
         legacy.path.unlink(missing_ok=True)
+
+
+def write_replacing(path: Path, body: str) -> None:
+    """Write body at path through a sibling temporary file and os.replace.
+
+    The rename swaps whatever is at the name, a link included, for the new file
+    rather than writing through it. The new file keeps the mode of the regular
+    file it replaces, else takes the one the umask gives a new file; the
+    temporary file is removed when anything fails.
+    """
+    mode = replaced_mode(path)
+    fd, name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as tmp:
+            tmp.write(body)
+        Path(name).chmod(mode)
+        Path(name).replace(path)
+    except BaseException:
+        Path(name).unlink(missing_ok=True)
+        raise
+
+
+def replaced_mode(path: Path) -> int:
+    """Return the regular file's permission bits, else 0o666 under the umask."""
+    try:
+        st = os.lstat(path)
+    except FileNotFoundError:
+        st = None
+    if st is not None and stat.S_ISREG(st.st_mode):
+        return stat.S_IMODE(st.st_mode)
+    umask = os.umask(0)
+    os.umask(umask)
+    return 0o666 & ~umask
 
 
 def move_legacy(legacy: Legacy, path: Path) -> None:

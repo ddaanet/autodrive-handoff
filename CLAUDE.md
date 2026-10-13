@@ -291,9 +291,13 @@ note in `report-drive-failure.sh`.
   (`move_legacy`, a rename that falls back to a copy across devices,
   `copy_across_devices`), a content write, `edit` result or `clear` removes the
   legacy file unless the root file has a body before and after, in which case it
-  is left and reported ignored; a directory at the root name and a symlink to a
-  file at the legacy path are refused naming the field, and the legacy file is
-  unlinked only after the root file is written. `legacy_reports` returns the
+  is left and reported ignored; a symlink or a directory at a root name (under
+  every action, with or without a legacy file), a root file that cannot be read
+  or, for `edit`, decoded, and a symlink to a file at the legacy path are
+  refused naming the field, and the legacy file is unlinked only after the root
+  file is written. A write goes through a sibling temporary file and
+  `os.replace` (`write_replacing`), which swaps a link at the name rather than
+  following it and keeps the replaced file's mode. `legacy_reports` returns the
   one-line reports. It holds `HANDOFF_REL_TASK`/`HANDOFF_REL_TODO` and
   `HANDOFF_LEGACY_REL_TASK`/`_TODO`, the Python side of the pairs in `_lib.sh`;
   errors go through `lib.err`.
@@ -557,6 +561,13 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
     its CLI's exit codes (whitespace-only, a `#!/bin/sh` body, `#tag`, seven
     `#`, the indent boundary from both sides), each predicate half
     mutation-checked.
+  - `tests/test_checkpoint_root_files.py` — what may sit at a root name, with
+    no legacy file: a symlink (relative, absolute, dangling) and a directory
+    refused under each action with the link's target byte-identical, a
+    non-UTF-8 and an unreadable todo refused under `edit`, a write keeping the
+    replaced file's mode and a new file taking the umask's. Mutation-checked:
+    the refusal dropped (exit-code red, target intact), then `write_text`
+    restored (target red), and the mode copy dropped.
   - `tests/test_checkpoint_task_shape.py` — the task shape: the 1000-character
     boundary from both sides, headings not counted, characters not bytes, each
     list marker named by its line and only the first, `**bold**`, a mid-line

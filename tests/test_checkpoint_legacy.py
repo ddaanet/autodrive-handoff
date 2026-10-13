@@ -1189,7 +1189,7 @@ NOT_ROOT = pytest.mark.skipif(
 )
 
 # Each case: the root file's name, its legacy rel and body, a headings-only
-# root file the write cannot open, and the task and todo that reach it.
+# root file the write cannot replace, and the task and todo that reach it.
 FAILING_WRITES = {
     "todo_edit": (
         "TODO.md",
@@ -1226,18 +1226,22 @@ def test_a_root_write_that_fails_leaves_the_legacy_file_as_it_was(
     """The legacy file goes only once the root file holds its bytes.
 
     The root file has no body, so the legacy file is the half's content, and
-    the write to the root name fails (mode 444, standing in for any failure).
-    Taking the legacy file off its path first would leave the content nowhere:
-    the loader would say `No todo`. Its positive is the rows that move or
-    replace the legacy file when the write succeeds.
+    the write to the root name fails (the root directory at mode 555, since
+    the write replaces the name rather than opening the file, standing in for
+    any failure). Taking the legacy file off its path first would leave the
+    content nowhere: the loader would say `No todo`. Its positive is the rows
+    that move or replace the legacy file when the write succeeds.
     """
     root_rel, legacy_rel, legacy_body, bodyless, task, todo = FAILING_WRITES[case]
     repo = make_repo(tmp_path)
     put(repo, legacy_rel, legacy_body)
     put(repo, root_rel, bodyless)
-    (repo / root_rel).chmod(0o444)
     before = snapshot(repo)
-    result = run_checkpoint(repo, migration_payload(task, todo))
+    repo.chmod(0o555)
+    try:
+        result = run_checkpoint(repo, migration_payload(task, todo))
+    finally:
+        repo.chmod(0o755)
     assert result.returncode != 0
     assert read(repo / legacy_rel) == legacy_body
     assert snapshot(repo) == before
@@ -1253,9 +1257,9 @@ def test_root_files_that_cannot_be_read_stay_unread_with_no_legacy_file(
 ) -> None:
     """No legacy file anywhere: the call behaves as it did before migration.
 
-    `keep` neither reads nor stats the list, and `clear` only unlinks, so a mode
-    000 file is no reason to fail either. Its positive is the same call over a
-    legacy file, where the root file is read to tell whether it has a body.
+    `keep` does not read the list, and `clear` only unlinks, so a mode 000 file
+    is no reason to fail either. Its positive is the same call over a legacy
+    file, where the root file is read to tell whether it has a body.
     """
     repo = make_repo(tmp_path)
     put(repo, "TASK.md", TASK_ROOT_BODY)
@@ -1338,6 +1342,60 @@ def test_task_symlinked_at_the_legacy_path_is_refused_and_nothing_moves(
     assert "Traceback" not in result.stderr
     assert LEGACY_TASK_REL in result.stderr
     assert snapshot(repo) == before
+
+
+@pytest.mark.parametrize("half", ["todo", "task"])
+def test_a_symlinked_root_file_beside_a_legacy_file_is_refused(
+    tmp_path: Path, half: str
+) -> None:
+    """The root-name refusal holds where the legacy file would be moved or
+    replaced through it.
+
+    The rows with no legacy file are in test_checkpoint_root_files.py.
+    """
+    root_rel, legacy_rel, legacy_body = {
+        "todo": ("TODO.md", LEGACY_TODO_REL, TODO_LEGACY_BODY),
+        "task": ("TASK.md", LEGACY_TASK_REL, TASK_LEGACY_BODY),
+    }[half]
+    repo = make_repo(tmp_path)
+    put(repo, legacy_rel, legacy_body)
+    target = repo / "notes" / "elsewhere.md"
+    target.parent.mkdir()
+    target.write_text(HEADINGS_ONLY)
+    (repo / root_rel).symlink_to(target)
+    before = snapshot(repo)
+    result = run_checkpoint(
+        repo, migration_payload(task_content(TASK_WRITTEN), todo_keep())
+    )
+    assert snapshot(repo) == before
+    assert result.returncode == 2
+    assert "Traceback" not in result.stderr
+    assert result.stderr.startswith(f"handoff-checkpoint: {half}: {root_rel}")
+
+
+@NOT_ROOT
+def test_a_root_todo_that_cannot_be_read_beside_a_legacy_file_is_refused(
+    tmp_path: Path,
+) -> None:
+    """With a legacy file the root file is read to tell whether it has a body; a
+    read that fails is refused naming the field, nothing moved.
+
+    Its positive is the same mode-000 root file with no legacy file,
+    `test_root_files_that_cannot_be_read_stay_unread_with_no_legacy_file`.
+    """
+    repo = make_repo(tmp_path)
+    put(repo, LEGACY_TODO_REL, TODO_LEGACY_BODY)
+    put(repo, "TODO.md", TODO_ROOT_BODY)
+    (repo / "TODO.md").chmod(0o000)
+    try:
+        result = run_checkpoint(repo, migration_payload(task_clear(), todo_keep()))
+        assert result.returncode == 2
+        assert "Traceback" not in result.stderr
+        assert result.stderr.startswith("handoff-checkpoint: todo: TODO.md")
+        assert read(repo / LEGACY_TODO_REL) == TODO_LEGACY_BODY
+    finally:
+        (repo / "TODO.md").chmod(0o644)
+    assert read(repo / "TODO.md") == TODO_ROOT_BODY
 
 
 # --- 15. a move survives a rename across devices ---

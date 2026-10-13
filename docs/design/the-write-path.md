@@ -142,13 +142,27 @@ case the legacy file goes, because it would otherwise come back as the frame:
 root name); `edit` applies to the effective content and writes the result;
 a content string replaces it; `clear` removes both files. The task file is
 never moved, only replaced or removed, since the checkpoint always authors it
-whole or clears it. The root file is read only when a legacy file exists. Two
-cases are refused during resolution, naming the field: a directory at the root
-name, which leaves the legacy file nowhere to go, and a legacy path that is a
-symlink to a file, whose relative target would dangle once moved. A dangling
+whole or clears it. The root file is read only when a legacy file exists. A
+legacy path that is a symlink to a file is refused during resolution, naming
+the field, since its relative target would dangle once moved. A dangling
 symlink is no legacy file. The legacy file is taken off its path after the root
 file is written, never before, so a failed write loses nothing.
 [Legacy paths are read, and the checkpoint moves them](../changelog/2026-10-11-legacy-paths-are-read-and-moved.md)
+
+What sits at a root name is checked during resolution, under every action,
+`keep` included, and with or without a legacy file: a symbolic link there is
+refused, since a write would follow it to a file the checkpoint does not own,
+and so is a directory, which no write, removal or move can land on. A root file
+the call has to read and cannot, unreadable or, for an `edit`, not valid UTF-8,
+is refused the same way. Each refusal names the field and exits 2 with nothing
+written. A write then lands through a sibling temporary file renamed onto the
+root name, which replaces whatever is there, a link included, rather than
+writing through it, and keeps the mode of the regular file it replaces; a
+removal unlinks the name itself. So a link put at the name between resolution
+and the write is replaced, not followed. The bound is the last component: a
+root reached through a symlinked directory is written where that directory
+lies, and the legacy paths are read through a symlinked `.claude/`.
+[Root files are not followed through symlinks](../changelog/2026-10-13-root-files-are-not-followed-through-symlinks.md)
 
 It **changes no git state** — it queries git read-only and stops there: it
 runs in the agent's sandboxed Bash, where `git add` can leave
