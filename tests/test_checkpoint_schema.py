@@ -1,5 +1,5 @@
-"""Tests for scripts/checkpoint.py (handoff-checkpoint) — the session root
-checkpoint.py takes from HANDOFF_ROOT, and the schema validation (FR2) of the
+"""Tests for scripts/checkpoint.py (handoff-checkpoint) — the session root the
+checkpoint takes from HANDOFF_ROOT, and the schema validation (FR2) of the
 envelope: each required field, each literal, the `skill` enum and `rename`.
 
 The helpers shared with the other tests/test_checkpoint_*.py files are in

@@ -1,12 +1,12 @@
 """Helpers shared by the tests/test_checkpoint_*.py files.
 
 Those files test scripts/checkpoint.py (handoff-checkpoint), whose logic lives
-in checkpoint.py, _checkpoint_plan.py and _checkpoint_lib.py. They are the port
-of the checkpoint.sh-specific rows of tests/checkpoint.bats — see
-docs/changelog/2026-08-10-python-split.md. inject-checkpoint-root.sh,
-bin/handoff-approved and the bin/handoff-checkpoint shim stay bash and stay
-tested in tests/checkpoint.bats; the Python files cover only checkpoint.py's own
-behavior.
+in checkpoint.py, _checkpoint_payload.py, _checkpoint_plan.py and
+_checkpoint_lib.py. They are the port of the checkpoint.sh-specific rows of
+tests/checkpoint.bats — see docs/changelog/2026-08-10-python-split.md. inject-
+checkpoint-root.sh, bin/handoff-approved and the bin/handoff-checkpoint shim
+stay bash and stay tested in tests/checkpoint.bats; the Python files cover only
+checkpoint.py's own behavior.
 
 What is here is what two or more of those files use: the repository builders,
 the payload builders, the `run_checkpoint` runner. A helper only one file uses
