@@ -282,7 +282,9 @@ handoff_drive_read() {
     # repository can commit one to anything readable: followed, its target
     # would be parsed, its first line quoted into a report, and a rewrite would
     # land on it. Every caller takes its malformed path, whose `rm -f` removes
-    # the link and not what it names.
+    # the link and not what it names. The check is on the last component only:
+    # a symlinked `.claude/` is read and written where it points, as the root
+    # and legacy files are.
     if [[ -L "$file" ]]; then
         DRIVE_ERR="the file is a symbolic link, which no checkpoint writes"
         return 1
@@ -414,15 +416,24 @@ handoff_drive_has_source() {
 # exist — both loaders, drive-take.sh and the sweep parse this file — so a
 # partially written file must never be observable under the real name. The temp
 # lands in the same directory because rename(2) is only atomic within one
-# filesystem, and .claude/autodrive* is gitignored, so a temp orphaned by a kill
-# is never committed.
+# filesystem, under the `autodrive.` prefix the `.claude/autodrive*` ignore
+# covers, so a temp orphaned by a kill is never committed.
+#
+# The temp is mktemp's, created exclusively under an unpredictable name: a
+# fixed or PID-derived one is a name a repository can commit a link at, and
+# the state line would be written through it. The rename is os.replace, not
+# `mv`, which stats its destination and would move the temp *into* a directory
+# a link put at the sentinel since it was read points at; rename(2) replaces
+# the link itself. The lines below line 1 are still read through whatever is
+# at the name when `tail` opens it; the reader refused a link a moment before.
 handoff_drive_arm() {
-    local file="$1" state="$2" tmp="$1.arming.$$"
-    if ! printf '%s\n' "$state" > "$tmp" || ! tail -n +2 "$file" >> "$tmp"; then
+    local file="$1" state="$2" tmp
+    tmp="$(mktemp "$file.XXXXXX")" || return 1
+    if ! printf '%s\n' "$state" > "$tmp" || ! tail -n +2 "$file" >> "$tmp" \
+        || ! python3 -c 'import os, sys; os.replace(sys.argv[1], sys.argv[2])' "$tmp" "$file"; then
         rm -f "$tmp"
         return 1
     fi
-    mv -f "$tmp" "$file"
 }
 
 # Effective project root for the handoff files of THIS session, into the

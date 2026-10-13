@@ -1043,6 +1043,36 @@ compact" ]
     [ "$(find "$BATS_TEST_TMPDIR" -maxdepth 1 -name 'sentinel*' | wc -l)" -eq 1 ]
 }
 
+# The temporary file is mktemp's, never a fixed or PID-derived name: a
+# repository can commit links at as many such names as it likes, and the arm
+# would write the state line through one and rename the link over the
+# sentinel. `$$` here is the PID the helper sees, the name it used to take.
+@test "handoff_drive_arm (a link at the old temporary name: not written through, the sentinel stays a file)" {
+    printf '%s\n' "armed sess-42" "compact" "/compact" > "$BATS_TEST_TMPDIR/sentinel"
+    ln -s "$other/planted" "$BATS_TEST_TMPDIR/sentinel.arming.$$"
+    handoff_drive_arm "$BATS_TEST_TMPDIR/sentinel" pending
+    [ ! -e "$other/planted" ]
+    [ ! -L "$BATS_TEST_TMPDIR/sentinel" ]
+    [ "$(cat "$BATS_TEST_TMPDIR/sentinel")" = "pending
+compact
+/compact" ]
+}
+
+# A link to a directory put at the sentinel after it was read: mv would move
+# the temporary file into that directory. The rename replaces the link.
+@test "handoff_drive_arm (the sentinel became a link to a directory: replaced, nothing moved into it)" {
+    printf '%s\n' "armed sess-42" "compact" "/compact" > "$BATS_TEST_TMPDIR/sentinel"
+    mkdir -p "$other/dir"
+    # The swap lands between the arm's copy of the lines below line 1 and its
+    # rename: a `tail` that plants the link as it returns.
+    tail() { command tail "$@"; rm -f "$BATS_TEST_TMPDIR/sentinel"; ln -s "$other/dir" "$BATS_TEST_TMPDIR/sentinel"; }
+    handoff_drive_arm "$BATS_TEST_TMPDIR/sentinel" pending
+    unset -f tail
+    [ -z "$(ls -A "$other/dir")" ]
+    [ ! -L "$BATS_TEST_TMPDIR/sentinel" ]
+    [ "$(head -n1 "$BATS_TEST_TMPDIR/sentinel")" = "pending" ]
+}
+
 # --- write-guard ---
 # The autodrive sentinel is checkpoint-only: a direct agent Write/Edit to a file
 # of that name is denied, in this project or outside it. Nothing else is

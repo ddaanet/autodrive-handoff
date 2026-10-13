@@ -52,7 +52,13 @@ and every caller gates on the name existing as a link or a file, so a dangling
 one is refused too rather than read as no file and left for ever. Each takes
 its malformed path: the loaders and `drive-take.sh` remove the link and report
 it, the sweep removes it as its own `link` state, and `handoff-approved`
-refuses to arm.
+refuses to arm. Both writers rename a file into place: the checkpoint, and
+`handoff_drive_arm`, whose temporary file is `mktemp`'s rather than a name a
+repository could commit a link at, and whose rename is `os.replace`, which
+replaces a link put at the sentinel since it was read where `mv` would move
+the file into the directory it points at. The bound is the last component, as
+for the root files: a symlinked `.claude/` is read and written where it
+points.
 
 `held` is the checkpoint's, released by `handoff-approved`
 ([The checkpoint directive](the-checkpoint-directive.md)). Everything after it
