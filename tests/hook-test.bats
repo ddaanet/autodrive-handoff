@@ -1394,6 +1394,97 @@ assert_notes() {
     [ "$CTX" = $'No task frame or todo.\n' ]
 }
 
+# A root TASK.md or TODO.md that is a symlink is no body: a repository can
+# commit `TASK.md -> /any/readable/file`, and following it would inject that
+# file at SessionStart. The checkpoint already refuses a root symlink.
+
+# <root name> <link target> — the root file replaced by a link to the target.
+link_root() {
+    rm -f "$tmp/$1"
+    ln -s "$2" "$tmp/$1"
+}
+
+@test "load-handoff (TASK.md is a symlink to a body): not injected" {
+    printf '## Current task\n\nlinked task body\n' > "$other/task.md"
+    link_root TASK.md "$other/task.md"
+    run_load_handoff "$tmp" startup
+    [ "$status" -eq 0 ]
+    split_output "$output"
+    [ "$MSG" = "handoff: No task frame or todo." ]
+    [[ "$CTX" != *"linked task body"* ]]
+}
+
+@test "load-handoff (TODO.md is a symlink to a body): not injected" {
+    rm -f "$tmp/TASK.md"
+    printf '## Remaining\n\n- linked item\n' > "$other/todo.md"
+    link_root TODO.md "$other/todo.md"
+    run_load_handoff "$tmp" startup
+    [ "$status" -eq 0 ]
+    split_output "$output"
+    [ "$MSG" = "handoff: No task frame or todo." ]
+    [[ "$CTX" != *"linked item"* ]]
+}
+
+@test "load-handoff (TASK.md and TODO.md are dangling symlinks): the neither state" {
+    link_root TASK.md "$other/nowhere-task.md"
+    link_root TODO.md "$other/nowhere-todo.md"
+    run_load_handoff "$tmp" startup
+    [ "$status" -eq 0 ]
+    split_output "$output"
+    [ "$MSG" = "handoff: No task frame or todo." ]
+}
+
+# A symlinked root file has no body, so it shadows nothing: the legacy file's
+# body is loaded as for any root file without one.
+@test "load-handoff (TODO.md is a symlink beside a legacy todo body): the legacy todo is loaded, nothing ignored" {
+    rm -f "$tmp/TASK.md"
+    printf '## Remaining\n\n- linked item\n' > "$other/todo.md"
+    link_root TODO.md "$other/todo.md"
+    printf '## Remaining\n\n- legacy item\n' > "$tmp/.claude/handoff-todo.md"
+    run_load_handoff "$tmp" startup
+    [ "$status" -eq 0 ]
+    split_output "$output"
+    [[ "$CTX" == *"legacy item"* ]]
+    [[ "$CTX" != *"linked item"* ]]
+    [[ "$MSG" == *"$legacy_todo_msg"* ]]
+    [[ "$MSG" != *"ignored"* ]]
+}
+
+@test "load-compact (TODO.md is a symlink to a body): consumed, No todo, nothing injected" {
+    rm -f "$tmp/TASK.md"
+    printf '## Remaining\n\n- linked item\n' > "$other/todo.md"
+    link_root TODO.md "$other/todo.md"
+    seed_pending "$tmp" "compact" "/compact" "continue with task 3"
+    run_load_compact "$tmp"
+    [ "$status" -eq 0 ]
+    [ ! -e "$tmp/.claude/autodrive" ]
+    split_output "$output"
+    [ "$MSG" = "handoff: compacted — No todo." ]
+    [ "$CTX" = "" ]
+}
+
+@test "load-compact (TASK.md is a symlink to a body): not injected" {
+    printf '## Current task\n\nlinked task body\n' > "$other/task.md"
+    link_root TASK.md "$other/task.md"
+    seed_pending "$tmp" "compact" "/compact" "continue with task 3"
+    run_load_compact "$tmp"
+    [ "$status" -eq 0 ]
+    split_output "$output"
+    [ "$MSG" = "handoff: compacted — No todo." ]
+    [ "$CTX" = "" ]
+}
+
+@test "load-compact (TASK.md and TODO.md are dangling symlinks): consumed, No todo" {
+    link_root TASK.md "$other/nowhere-task.md"
+    link_root TODO.md "$other/nowhere-todo.md"
+    seed_pending "$tmp" "compact" "/compact" "continue with task 3"
+    run_load_compact "$tmp"
+    [ "$status" -eq 0 ]
+    split_output "$output"
+    [ "$MSG" = "handoff: compacted — No todo." ]
+    [ "$CTX" = "" ]
+}
+
 @test "load-handoff (legacy todo alone): loaded from the old path, noted on both channels, No task frame last" {
     rm -f "$tmp/TASK.md"
     printf '## Remaining\n\n- legacy item\n' > "$tmp/.claude/handoff-todo.md"

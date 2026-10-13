@@ -57,7 +57,8 @@ HANDOFF_POINTER_DIR="${HANDOFF_POINTER_DIR:-/tmp/claude}"
 # Assemble the injectable frame from the task file ($1) and the todo file
 # ($2): a timestamp header plus each half that counts inlined verbatim, task
 # first. $3 and $4 are the legacy task and todo paths, optional; an absent or
-# empty one, or a symlink, is a path that does not exist. Per half, the root file counts when
+# empty one is a path that does not exist, and so is any of the four that is a
+# symlink. Per half, the root file counts when
 # it has a body (`is_empty_body` in _checkpoint_lib.py, through its
 # `--has-body` CLI), and otherwise the legacy file does when it has a body. A
 # missing, zero-byte, whitespace-only or headings-only file has none, and
@@ -84,14 +85,21 @@ HANDOFF_POINTER_DIR="${HANDOFF_POINTER_DIR:-/tmp/claude}"
 # shellcheck disable=SC2034  # assigned for the caller's scope
 handoff_frame() {
     local task="$1" todo="$2" legacy_task="${3:-}" legacy_todo="${4:-}" lib
-    local task_src="$task" todo_src="$todo"
+    local task_src todo_src
     lib="$(dirname "${BASH_SOURCE[0]}")/_checkpoint_lib.py"
-    # A legacy path that is a symlink, dangling or not, is treated as absent:
-    # never tested, read or counted as shadowed. The checkpoint refuses one
-    # naming the field, so the next checkpoint is what reports it; following it
-    # here would inject whatever file it names.
+    # Any of the four paths that is a symlink, dangling or not, is treated as
+    # absent: never tested, read or counted as shadowing or shadowed. The
+    # checkpoint refuses a symlink at each, naming the field (a dangling
+    # legacy one it reads as no file), so the next checkpoint is what reports
+    # it; following one here would inject whatever
+    # file it names, and a repository can commit a link to anything readable.
+    # A symlinked root file is a root file with no body, so the legacy file
+    # beside it is loaded as it would be beside any such file.
+    [[ -n "$task" && -L "$task" ]] && task=""
+    [[ -n "$todo" && -L "$todo" ]] && todo=""
     [[ -n "$legacy_task" && -L "$legacy_task" ]] && legacy_task=""
     [[ -n "$legacy_todo" && -L "$legacy_todo" ]] && legacy_todo=""
+    task_src="$task" todo_src="$todo"
     FRAME="" FRAME_TASK=0 FRAME_TODO=0
     FRAME_TASK_LEGACY=0 FRAME_TODO_LEGACY=0
     FRAME_TASK_SHADOWED=0 FRAME_TODO_SHADOWED=0

@@ -205,8 +205,9 @@ note in `report-drive-failure.sh`.
   `FRAME_TASK`/`FRAME_TODO` and four more flags, `FRAME_TASK_LEGACY`/
   `FRAME_TODO_LEGACY` (the half came from its legacy path) and
   `FRAME_TASK_SHADOWED`/`FRAME_TODO_SHADOWED` (the half came from the root file
-  and a legacy file exists beside it, whatever it holds; a legacy path that is
-  a symlink, dangling or not, is treated as absent); prints nothing, rc 1
+  and a legacy file exists beside it, whatever it holds; any of the four
+  paths that is a symlink, dangling or not, is treated as absent, so a
+  symlinked root file has no body and shadows nothing); prints nothing, rc 1
   when `FRAME` is empty, and never puts a note in `FRAME`; "has a body" is
   `_checkpoint_lib.py --has-body` exiting 0, the one status no crash produces,
   so a headings-only file is not injected and neither is one the check fails
@@ -541,7 +542,10 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
   dropped task-shadowed note in `load-compact.sh`, the legacy files read
   from `$CLAUDE_PROJECT_DIR` instead of the worktree, and either half's
   symlink refusal dropped (a legacy path that is a valid or dangling symlink
-  is neither read nor shadowing, in `handoff_frame` and both loaders).
+  is neither read nor shadowing, in `handoff_frame` and both loaders), and
+  either root file's symlink refusal dropped (a `TASK.md` or `TODO.md` that is
+  a valid or dangling symlink is not injected by either loader, and a
+  symlinked `TODO.md` lets the legacy todo load with no ignored note).
   `tests/checkpoint.bats` covers what stayed bash around the checkpoint:
   `inject-checkpoint-root.sh` (a root holding whitespace or ending in a newline
   round-trips), `bin/handoff-approved` (output pinned whole, one

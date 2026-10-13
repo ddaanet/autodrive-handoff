@@ -49,7 +49,10 @@ body. The root file wins, and a legacy file that exists beside a root file with
 a body, whatever it holds, is left as it is and reported ignored. A legacy
 path that is a symlink is treated as absent by the loaders, neither read nor
 reported ignored: the checkpoint refuses one naming the field, which is where
-it is reported. The loader
+it is reported. So is a root `TASK.md` or `TODO.md` that is a symlink: it has
+no body, so the legacy file beside it loads as beside any root file without
+one, and a repository cannot commit a link that has some other readable file
+injected as its frame. The loader
 names a half read from a legacy path and a legacy file left ignored on both
 channels, from one producer, `handoff_frame_notes`, so the two channels and the
 two loaders word them alike; the note carries a fact, and no advice to delete.
