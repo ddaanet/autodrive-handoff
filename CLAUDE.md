@@ -239,26 +239,35 @@ note in `report-drive-failure.sh`.
   and rewrites it to `export HANDOFF_ROOT=<quoted>; <original>` via
   `updatedInput`, since neither entry point can resolve the root itself. NFR2:
   the negative path is one jq parse and a substring test.
-- `scripts/checkpoint.py` — the one write path (FR1). Takes its root from
-  `HANDOFF_ROOT` (refuses when unset or not a directory), validates the JSON
-  payload (FR2; the key set is closed, `validate_top_level_keys`), hands the
-  `task`/`todo` tagged union (content, or `clear`; `keep` and `edit` on `todo`
-  alone) to `_checkpoint_plan.py` to be resolved into `FilePlan`s and applied,
-  composes `.claude/autodrive` (creating `.claude/` when absent) and reads it
-  back, then prints the directive parts for a boundary skill. The legacy
-  reports (`legacy_reports`, from the plan module) print ahead of the directive
-  parts, which `compose_directives(boundary, memory, ending, plans)` orders; the
-  closing line stays last. `task` is required under `handoff`, where
-  `validate_task_shape` holds it to 1000 characters of body and no list item
-  (FR13), and forbidden under `precompact`, which removes `TASK.md`. `rename` is
-  required under `handoff` and `autoname` (a string) and forbidden under
-  `precompact`; `autoname` takes only `skill` and `rename`. The state is `held
+- `scripts/checkpoint.py` — the one write path (FR1). Has
+  `_checkpoint_payload.py` take its root from `HANDOFF_ROOT` and validate the
+  JSON payload, hands the `task`/`todo` tagged union (content, or `clear`;
+  `keep` and `edit` on `todo` alone) to `_checkpoint_plan.py` to be resolved
+  into `FilePlan`s and applied, composes `.claude/autodrive` (creating
+  `.claude/` when absent) and reads it back, then prints the directive parts
+  for a boundary skill. The legacy reports (`legacy_reports`, from the plan
+  module) print ahead of the directive parts, which
+  `compose_directives(boundary, memory, ending, plans)` orders; the closing
+  line stays last. The state is `held
   <session>` iff `(sentinel names a command ∧ memory directive emitted) ∨
   (driven ∧ with-commit)`, else `armed` (`hold_decision`, one value that also
   picks the arming instruction or the closing line). NFR1: no git work; the git
   line for a moved or removed legacy file is printed, never run, and names the
   paths relative to the root, which it hands to `git -C` (the reports name the
   same relative paths).
+- `scripts/_checkpoint_payload.py` — the payload validation (FR2), which
+  `checkpoint.py` imports as `validation`. `read_payload` parses stdin,
+  `validate_root` refuses `HANDOFF_ROOT` when unset or not a directory, and one
+  `validate_*` per field narrows it or exits through `lib.err` naming it; the
+  key set is closed (`validate_top_level_keys`). `build_transition` turns the
+  boundary fields into the `Transition` the sentinel is composed from, and
+  `require_session_id` reads `CLAUDE_CODE_SESSION_ID` for a held one.
+  `validate_task` and `validate_todo` return the tagged union as tuples for the
+  plan layer. `task` is required under `handoff`, where `validate_task_shape`
+  holds it to 1000 characters of body and no list item (FR13), and forbidden
+  under `precompact`, which removes `TASK.md`. `rename` is required under
+  `handoff` and `autoname` (a string) and forbidden under `precompact`;
+  `autoname` takes only `skill` and `rename`. It writes nothing.
 - `scripts/_checkpoint_plan.py` — the plan layer, which `checkpoint.py`
   imports as `planning`. Resolves each half into a
   `FilePlan` before anything is written (`plan_task`, `plan_todo`, `edited_body`
@@ -277,8 +286,8 @@ note in `report-drive-failure.sh`.
   `HANDOFF_LEGACY_REL_TASK`/`_TODO`, the Python side of the pairs in `_lib.sh`;
   errors go through `lib.err`.
 - `scripts/_checkpoint_lib.py` — `err` (the one exit for a schema or write-time
-  error: names the field, exits 2; shared by `checkpoint.py` and
-  `_checkpoint_plan.py`), `is_empty_body` (markdown's own heading
+  error: names the field, exits 2; shared by `checkpoint.py`,
+  `_checkpoint_payload.py` and `_checkpoint_plan.py`), `is_empty_body` (markdown's own heading
   test; read by `handoff_frame` through the `--is-empty-body` CLI, and its
   `ATX_HEADING` by the task-shape check), `memory_directive` (gated on the
   `gitlore-memory` submodule and a dirty worktree, FR12; couples only to the two
@@ -326,8 +335,8 @@ note in `report-drive-failure.sh`.
   routing table, one index line per decision and per rejected alternative,
   Non-goals); `docs/design/` holds one node per mechanism, read before making a
   claim about it. What you are touching → what to read first:
-  - `checkpoint.py`, `_checkpoint_plan.py`, `_checkpoint_lib.py`,
-    `write-guard.sh`, `handoff_frame`,
+  - `checkpoint.py`, `_checkpoint_payload.py`, `_checkpoint_plan.py`,
+    `_checkpoint_lib.py`, `write-guard.sh`, `handoff_frame`,
     the two files, FR1–FR8, FR13, NFR1–NFR3 → `the-write-path.md`
   - any `skills/*/SKILL.md`, a `skill` value, the `clear`/`compact`/`continue`/
     `commit` fields → `the-skills.md`
@@ -383,8 +392,9 @@ note in `report-drive-failure.sh`.
   `# shellcheck source-path=SCRIPTDIR source=_lib.sh` above the
   `source` line so `shellcheck -x` follows it. Add
   `# shellcheck disable=SC2034` to vars consumed only by sourcing
-  scripts. `_checkpoint_lib.py` and `_checkpoint_plan.py` are
-  imported, not sourced, so this convention does not apply to them.
+  scripts. `_checkpoint_lib.py`, `_checkpoint_payload.py` and
+  `_checkpoint_plan.py` are imported, not sourced, so this convention does not
+  apply to them.
 
 ## Testing
 
