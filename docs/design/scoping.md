@@ -47,7 +47,13 @@ note is harness text the agent reads, so both paths are shown `%q`-quoted: a
 newline, an escape sequence or a backtick in a directory name arrives as data
 rather than as a line, a terminal restyle or the end of a code span. One report
 per episode: a marker holds the destination last announced, whole, and
-returning clears it.
+returning clears it. The marker's directory is shared by every local user, so
+any name in it may be a link someone else planted: the marker is used only in
+a directory that is no link and is this user's, read only through an
+`O_NOFOLLOW` open of a regular file this user owns (`handoff_read_regular`),
+and written as a `mktemp` file renamed over the name, which replaces a link
+rather than following it. Where the directory fails that test there is no
+marker, and drift is reported every turn rather than never.
 
 The agent's own Bash cannot do any of this — `CLAUDE_PROJECT_DIR` is unset
 there, and a `$PWD` fallback is wrong in exactly the drift case. So a

@@ -78,17 +78,48 @@ notes=()
 # swallowed. It is cleared on the way back in, so a re-drift is a new episode
 # rather than a repeat.
 marker="$HANDOFF_POINTER_DIR/handoff-drift-$session_id"
+
+# The directory is shared by every local user, so it and every name in it may
+# be a link someone else planted. The marker is used only in a directory that
+# is no link and is this user's; it is read only when it is a regular file of
+# this user's, opened without following a link (handoff_read_regular, so no
+# link put there between a check and the read is followed), and written through a mktemp file renamed over the
+# name (handoff_replace), which replaces a link rather than following it. The
+# temporary name matches `handoff-drift-*`, so session-pointer.sh sweeps an
+# orphan. Where the directory fails the test there is no marker, and drift is
+# reported every turn instead of once.
+marker_dir_ok() {
+    [[ -d "$HANDOFF_POINTER_DIR" && ! -L "$HANDOFF_POINTER_DIR" && -O "$HANDOFF_POINTER_DIR" ]]
+}
+
+# Record $hook_cwd, NUL-terminated, as the marker.
+write_marker() {
+    local tmp_marker
+    tmp_marker="$(mktemp "$marker.XXXXXX" 2>/dev/null)" || return 1
+    if ! printf '%s\0' "$hook_cwd" > "$tmp_marker" \
+        || ! handoff_replace "$tmp_marker" "$marker"; then
+        rm -f "$tmp_marker"
+        return 1
+    fi
+}
+
 case "$HANDOFF_ROOT_BRANCH" in
     foreign | unrelated)
         # NUL-terminated and read whole: a cwd holding a newline compared by
         # its first line would never match, and re-announce every turn.
-        last=""
-        if [[ -f "$marker" ]]; then
-            IFS= read -r -d '' last < "$marker" || true
+        last="" marker_status=""
+        mkdir -p "$HANDOFF_POINTER_DIR" 2>/dev/null || true
+        if marker_dir_ok; then
+            { IFS= read -r marker_status || true
+              if [[ "$marker_status" == ok ]]; then
+                  IFS= read -r -d '' last || true
+              fi
+            } < <(handoff_read_regular "$marker" own)
         fi
         if [[ "$last" != "$hook_cwd" ]]; then
-            mkdir -p "$HANDOFF_POINTER_DIR"
-            printf '%s\0' "$hook_cwd" > "$marker"
+            if marker_dir_ok; then
+                write_marker || true
+            fi
             # Both paths enter harness text the agent reads, so each is shown
             # as quoted data: `%q` puts a newline, an escape byte or any other
             # control character in $'…' form and escapes a backtick, so a
@@ -101,7 +132,9 @@ case "$HANDOFF_ROOT_BRANCH" in
         fi
         ;;
     *)
-        rm -f "$marker"
+        if marker_dir_ok; then
+            rm -f "$marker"
+        fi
         ;;
 esac
 

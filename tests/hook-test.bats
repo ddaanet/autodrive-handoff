@@ -988,6 +988,48 @@ read_drive() {
     [[ "$DRIVE_ERR" == *"symbolic link"* ]]
 }
 
+# --- _lib.sh: handoff_read_regular ---
+#
+# The check and the read are one open(2) with O_NOFOLLOW, so a link put at the
+# name is never followed, whenever it was put there.
+
+@test "handoff_read_regular (a regular file): ok, then its bytes" {
+    printf 'a\nb' > "$BATS_TEST_TMPDIR/f"
+    run handoff_read_regular "$BATS_TEST_TMPDIR/f"
+    [ "$output" = $'ok\na\nb' ]
+}
+
+@test "handoff_read_regular (a link to a regular file): link, and nothing of the target" {
+    printf 'TARGET-BYTES\n' > "$other/target"
+    ln -s "$other/target" "$BATS_TEST_TMPDIR/f"
+    run handoff_read_regular "$BATS_TEST_TMPDIR/f"
+    [ "$output" = "link" ]
+}
+
+@test "handoff_read_regular (a dangling link): link" {
+    ln -s "$other/nowhere" "$BATS_TEST_TMPDIR/f"
+    run handoff_read_regular "$BATS_TEST_TMPDIR/f"
+    [ "$output" = "link" ]
+}
+
+@test "handoff_read_regular (absent, a directory, a fifo): absent, other, other — no hang" {
+    run handoff_read_regular "$BATS_TEST_TMPDIR/none"
+    [ "$output" = "absent" ]
+    mkdir "$BATS_TEST_TMPDIR/d"
+    run handoff_read_regular "$BATS_TEST_TMPDIR/d"
+    [ "$output" = "other" ]
+    mkfifo "$BATS_TEST_TMPDIR/p"
+    # shellcheck disable=SC2016   # $1/$2 are the inner bash -c's own positional params
+    run timeout 5 bash -c 'source "$1"; handoff_read_regular "$2"' _ "$repo_root/scripts/_lib.sh" "$BATS_TEST_TMPDIR/p"
+    [ "$output" = "other" ]
+}
+
+@test "handoff_read_regular (own, this user's file): ok" {
+    printf 'x' > "$BATS_TEST_TMPDIR/f"
+    run handoff_read_regular "$BATS_TEST_TMPDIR/f" own
+    [ "$output" = $'ok\nx' ]
+}
+
 # --- _lib.sh: handoff_drive_arm ---
 
 # Everything below line 1 is copied through untouched: the arm never has to know
@@ -3029,6 +3071,44 @@ assert_drift_quoted() {
     run_report_failure "$tmp"
     [ "$output" = "" ]
 
+    run_report_failure "$other"
+    echo "$output" | jq -e --arg c "$other" '.systemMessage | test($c)' >/dev/null
+}
+
+# The marker sits in a directory shared by every local user, so a name in it
+# may be a link someone else planted. A link at the marker is neither read nor
+# written through: one holding this very cwd must not silence the report, and
+# one naming a file must not have the marker written into it.
+@test "report-drive-failure (drift: a symlinked marker holding the cwd does not silence it)" {
+    mkdir -p "$other/.git" "$HANDOFF_POINTER_DIR"
+    printf '%s\0' "$other" > "$BATS_TEST_TMPDIR/planted-marker"
+    ln -s "$BATS_TEST_TMPDIR/planted-marker" "$HANDOFF_POINTER_DIR/handoff-drift-$SESSION_ID"
+    run_report_failure "$other"
+    [ "$status" -eq 0 ]
+    echo "$output" | jq -e --arg c "$other" '.systemMessage | test($c)' >/dev/null
+}
+
+@test "report-drive-failure (drift: a symlinked marker is replaced, its target untouched)" {
+    mkdir -p "$other/.git" "$HANDOFF_POINTER_DIR"
+    ln -s "$BATS_TEST_TMPDIR/planted-target" "$HANDOFF_POINTER_DIR/handoff-drift-$SESSION_ID"
+    run_report_failure "$other"
+    [ "$status" -eq 0 ]
+    [ ! -e "$BATS_TEST_TMPDIR/planted-target" ]
+    [ ! -L "$HANDOFF_POINTER_DIR/handoff-drift-$SESSION_ID" ]
+    # The marker it wrote instead still keeps the episode to one report.
+    run_report_failure "$other"
+    [ "$output" = "" ]
+}
+
+# The directory itself may be a link another user planted: nothing is written
+# through it, and the drift is still reported, every turn rather than never.
+@test "report-drive-failure (drift: a symlinked marker directory is not written through)" {
+    mkdir -p "$other/.git" "$BATS_TEST_TMPDIR/planted-dir"
+    ln -s "$BATS_TEST_TMPDIR/planted-dir" "$HANDOFF_POINTER_DIR"
+    run_report_failure "$other"
+    [ "$status" -eq 0 ]
+    echo "$output" | jq -e --arg c "$other" '.systemMessage | test($c)' >/dev/null
+    [ -z "$(ls -A "$BATS_TEST_TMPDIR/planted-dir")" ]
     run_report_failure "$other"
     echo "$output" | jq -e --arg c "$other" '.systemMessage | test($c)' >/dev/null
 }

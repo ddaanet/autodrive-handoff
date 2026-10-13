@@ -424,16 +424,56 @@ handoff_drive_has_source() {
 # the state line would be written through it. The rename is os.replace, not
 # `mv`, which stats its destination and would move the temp *into* a directory
 # a link put at the sentinel since it was read points at; rename(2) replaces
-# the link itself. The lines below line 1 are still read through whatever is
-# at the name when `tail` opens it; the reader refused a link a moment before.
+# the link itself (handoff_replace). The lines below line 1 are still read
+# through whatever is at the name when `tail` opens it; the reader refused a
+# link a moment before.
 handoff_drive_arm() {
     local file="$1" state="$2" tmp
     tmp="$(mktemp "$file.XXXXXX")" || return 1
     if ! printf '%s\n' "$state" > "$tmp" || ! tail -n +2 "$file" >> "$tmp" \
-        || ! python3 -c 'import os, sys; os.replace(sys.argv[1], sys.argv[2])' "$tmp" "$file"; then
+        || ! handoff_replace "$tmp" "$file"; then
         rm -f "$tmp"
         return 1
     fi
+}
+
+# <path> [own]. Print a status line, then on `ok` the file's bytes, opened with
+# O_NOFOLLOW so the check and the read are one step: no link put at the name
+# at any moment is followed. The status is `ok`, `absent`, `link` (the last
+# component is a link, dangling or not), `other` (not a regular file, or
+# unreadable) or, with `own`, `foreign` (a regular file another user owns).
+# Nothing printed means python3 failed; callers read that as `other`. Read it
+# as `{ IFS= read -r status; …; } < <(handoff_read_regular …)`, so the bytes
+# follow on the same stream and a NUL in them survives a `read -d ''`.
+handoff_read_regular() {
+    python3 -c '
+import errno, os, stat, sys
+try:
+    fd = os.open(sys.argv[1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+except FileNotFoundError:
+    print("absent")
+    sys.exit(0)
+except OSError as e:
+    print("link" if e.errno == errno.ELOOP else "other")
+    sys.exit(0)
+st = os.fstat(fd)
+if not stat.S_ISREG(st.st_mode):
+    print("other")
+elif sys.argv[2] == "own" and st.st_uid != os.geteuid():
+    print("foreign")
+else:
+    sys.stdout.write("ok\n")
+    sys.stdout.flush()
+    with os.fdopen(fd, "rb") as f:
+        sys.stdout.buffer.write(f.read())
+' "$1" "${2:-any}"
+}
+
+# <source> <destination>. rename(2) through os.replace: a link at the
+# destination is replaced, never followed. `mv` stats the destination, and a
+# link to a directory there would receive the file inside it.
+handoff_replace() {
+    python3 -c 'import os, sys; os.replace(sys.argv[1], sys.argv[2])' "$1" "$2"
 }
 
 # Effective project root for the handoff files of THIS session, into the
