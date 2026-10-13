@@ -137,8 +137,11 @@ _handoff_has_body() {
 handoff_frame_notes() {
     FRAME_NOTES_CTX=() FRAME_NOTES_MSG=()
     if (( FRAME_TASK_LEGACY )); then
-        FRAME_NOTES_CTX+=("Task loaded from legacy $HANDOFF_LEGACY_REL_TASK; the next checkpoint moves it to $HANDOFF_REL_TASK.")
-        FRAME_NOTES_MSG+=("task from $HANDOFF_LEGACY_REL_TASK, next checkpoint moves it")
+        # Removed, never moved: `task` is required content or `clear` under
+        # handoff, and precompact removes the task, so no checkpoint carries a
+        # legacy task's bytes to the root the way `keep` carries a todo's.
+        FRAME_NOTES_CTX+=("Task loaded from legacy $HANDOFF_LEGACY_REL_TASK; the next checkpoint removes it, and the task a handoff checkpoint is given goes to $HANDOFF_REL_TASK.")
+        FRAME_NOTES_MSG+=("task from $HANDOFF_LEGACY_REL_TASK, next checkpoint removes it")
     fi
     if (( FRAME_TODO_LEGACY )); then
         FRAME_NOTES_CTX+=("Todo loaded from legacy $HANDOFF_LEGACY_REL_TODO; edit it there until the next checkpoint moves it to $HANDOFF_REL_TODO.")

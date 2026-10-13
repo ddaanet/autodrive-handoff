@@ -611,7 +611,9 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
     transition matrix (each of `clear`/`compact`/`continue` missing, mistyped,
     the other boundary's field present, an empty or multi-line `compact`, a
     `continue` that is multi-line, whitespace-only, starts with `/` or stands
-    against a non-driven transition); the six legal combinations pinning the
+    against a non-driven transition; both fields refused on each of the line
+    breaks `str.splitlines` knows, CR, VT, FF, FS, GS, RS, NEL, LS and PS as
+    well as LF, with no sentinel written); the six legal combinations pinning the
     sentinel's exact bytes, read back through `handoff_drive_read`.
   - `tests/test_checkpoint_directives.py` — the memory directive, the commit act
     (present under `with-commit` and absent without), the order of the parts

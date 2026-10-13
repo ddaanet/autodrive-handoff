@@ -241,11 +241,21 @@ def validate_continuation(payload: JSONDict, skill: str, *, typed: bool) -> str:
 
 
 def require_one_line(field: str, value: str) -> None:
-    """Error unless value is non-blank and holds no embedded newline."""
+    """Error unless value is non-blank and holds no line break.
+
+    A line break is any character `str.splitlines` breaks on (LF, CR, VT, FF,
+    FS, GS, RS, NEL, LS, PS), not LF alone: each line of the sentinel is
+    submitted with one Enter, and a CR or a Unicode separator is a break to the
+    TUI or to a line-wise read of the file as much as LF is.
+    """
     if not re.sub(r"\s", "", value):
         lib.err(field, "must not be empty or whitespace only")
-    if "\n" in value:
-        lib.err(field, "must be a single line")
+    if value.splitlines() != [value]:
+        lib.err(
+            field,
+            "must be a single line, with no line break (LF, CR, VT, FF, FS, GS, "
+            "RS, NEL, LS or PS)",
+        )
 
 
 def require_session_id(field: str, reason: str) -> str:

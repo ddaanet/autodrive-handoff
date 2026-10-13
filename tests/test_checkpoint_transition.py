@@ -352,3 +352,54 @@ def test_precompact_focus_directive_and_continuation_both_carried(
         "continue with task 3\n"
     )
     assert read_back_drive(repo / ".claude" / "autodrive")
+
+
+# Every character Python's `str.splitlines` breaks on: what the TUI or the
+# sentinel's line-wise read could take for the end of a line, submitting the
+# rest early or shifting the lines below it. `\n` alone was rejected before.
+LINE_BREAKS = {
+    "lf": "\n",
+    "cr": "\r",
+    "vt": "\x0b",
+    "ff": "\x0c",
+    "fs": "\x1c",
+    "gs": "\x1d",
+    "rs": "\x1e",
+    "nel": "\x85",
+    "ls": " ",
+    "ps": " ",
+}
+
+
+@pytest.mark.parametrize("brk", LINE_BREAKS.values(), ids=LINE_BREAKS.keys())
+def test_continuation_with_any_line_break_errors(tmp_path: Path, brk: str) -> None:
+    repo = make_repo(tmp_path)
+    payload = {
+        "skill": "handoff",
+        "commit": "with-commit",
+        "rename": "T",
+        "clear": True,
+        "continue": f"first line{brk}second line",
+        "task": task_clear(),
+        "todo": todo_keep(),
+    }
+    result = run_checkpoint(repo, payload)
+    assert result.returncode == 2
+    assert "continue" in result.stderr
+    assert not (repo / ".claude" / "autodrive").exists()
+
+
+@pytest.mark.parametrize("brk", LINE_BREAKS.values(), ids=LINE_BREAKS.keys())
+def test_compact_directive_with_any_line_break_errors(tmp_path: Path, brk: str) -> None:
+    repo = make_repo(tmp_path)
+    payload = {
+        "skill": "precompact",
+        "commit": "with-commit",
+        "compact": f"keep the parser{brk}and the tests",
+        "continue": None,
+        "todo": todo_keep(),
+    }
+    result = run_checkpoint(repo, payload)
+    assert result.returncode == 2
+    assert "compact" in result.stderr
+    assert not (repo / ".claude" / "autodrive").exists()
