@@ -184,7 +184,15 @@ if [[ ( "$drive_state" == "armed" || "$drive_state" == "held" ) \
     fi
 fi
 
-if [[ -f "$failed" ]]; then
+# The mod writes the record only on a rejection it observed, and never a link:
+# a link there, dangling or not, is no evidence of one, and following it would
+# quote another file's first line onto both channels. It is removed unread and
+# said so, and a pending transition is not cleared on its account.
+if [[ -L "$failed" ]]; then
+    rm -f "$failed"
+    msgs+=("a symbolic link at $HANDOFF_REL_DRIVE_FAILED was removed unread")
+    notes+=("A symbolic link sat where the handoff drive mod records a rejected line ($HANDOFF_REL_DRIVE_FAILED). The mod never writes one, so it was removed without reading what it points at; it says nothing about whether a transition ran.")
+elif [[ -f "$failed" ]]; then
     reason="$(head -n1 "$failed")"
     rm -f "$failed"
     # A failure part-way through a sequence strands the transition in `pending`:

@@ -195,7 +195,9 @@ reports on both channels. A failure part-way through a sequence strands the
 sentinel in `pending`, because the confirming `SessionStart` never fires; the
 same hook clears it with the report. Nothing is inferred from a file merely
 being `pending`, which is the legitimate state for the whole window between
-the take and the transition.
+the take and the transition. A symbolic link at `autodrive.failed`, dangling
+or not, is no record the mod wrote: it is removed unread and named on both
+channels, and a `pending` sentinel is left where it is.
 
 The hook also sweeps a sentinel still `armed`. `drive-take.sh` leaves it
 `pending` or removes it at the end of the turn that wrote it, so one still

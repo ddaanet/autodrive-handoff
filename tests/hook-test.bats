@@ -2391,6 +2391,33 @@ run_report_failure() {
         '.hookSpecificOutput.additionalContext | test("did not recognize")' >/dev/null
 }
 
+# The failure record is the mod's, and the mod observed a rejection only when
+# it wrote one: a link there is no such record, and its target's first line
+# would be quoted onto both channels. It is removed unread and said so, and a
+# pending transition is not cleared on its evidence.
+@test "report-drive-failure (the failure record is a symlink: removed unread, said so, pending kept)" {
+    printf '%s\n' "LINKED-FAILURE-LINE" > "$other/linked-failed"
+    ln -s "$other/linked-failed" "$tmp/.claude/autodrive.failed"
+    seed_pending "$tmp" "compact" "/compact" "continue"
+    run_report_failure "$tmp"
+    [ "$status" -eq 0 ]
+    [ ! -L "$tmp/.claude/autodrive.failed" ]
+    [ "$(cat "$other/linked-failed")" = "LINKED-FAILURE-LINE" ]
+    [ "$(head -n1 "$tmp/.claude/autodrive")" = "pending" ]
+    split_output "$output"
+    [[ "$MSG" == *"symbolic link"* && "$CTX" == *"symbolic link"* ]]
+    [[ "$MSG" != *"LINKED-FAILURE-LINE"* && "$CTX" != *"LINKED-FAILURE-LINE"* ]]
+}
+
+@test "report-drive-failure (the failure record is a dangling symlink: removed, said so)" {
+    ln -s "$other/nowhere" "$tmp/.claude/autodrive.failed"
+    run_report_failure "$tmp"
+    [ "$status" -eq 0 ]
+    [ ! -L "$tmp/.claude/autodrive.failed" ]
+    split_output "$output"
+    [[ "$MSG" == *"symbolic link"* ]]
+}
+
 @test "report-drive-failure (consumes the file: reports once, not every prompt)" {
     printf '%s\n' "rejected before it ran" > "$tmp/.claude/autodrive.failed"
     run_report_failure "$tmp"
