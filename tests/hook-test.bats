@@ -617,7 +617,7 @@ read_drive() {
 }
 
 @test "handoff_drive_read (rename): one before-line, no after-line" {
-    read_drive "armed" "rename" "/rename Driven Transitions"
+    read_drive "armed sess-42" "rename" "/rename Driven Transitions"
     [ "$DRIVE_STATE" = armed ]
     [ "$DRIVE_KIND" = rename ]
     [ "${#DRIVE_BEFORE[@]}" -eq 1 ]
@@ -626,28 +626,28 @@ read_drive() {
 }
 
 @test "handoff_drive_read (compact): command before, prose after" {
-    read_drive "armed" "compact" "/compact focus on the parser" "continue with task 3"
+    read_drive "armed sess-42" "compact" "/compact focus on the parser" "continue with task 3"
     [ "$DRIVE_KIND" = compact ]
     [ "${DRIVE_BEFORE[0]}" = "/compact focus on the parser" ]
     [ "${DRIVE_AFTER[0]}" = "continue with task 3" ]
 }
 
 @test "handoff_drive_read (compact, bare command): accepted, /compact takes no argument" {
-    read_drive "armed" "compact" "/compact" "continue with task 3"
+    read_drive "armed sess-42" "compact" "/compact" "continue with task 3"
     [ "${DRIVE_BEFORE[0]}" = "/compact" ]
 }
 
 # FR-G: the kind line alone. Nothing is run, but the transition is expected,
 # and that expectation is what the frame's re-injection is gated on.
 @test "handoff_drive_read (compact, kind line alone): legal, both sequences empty" {
-    read_drive "armed" "compact"
+    read_drive "armed sess-42" "compact"
     [ "$DRIVE_KIND" = compact ]
     [ "${#DRIVE_BEFORE[@]}" -eq 0 ]
     [ "${#DRIVE_AFTER[@]}" -eq 0 ]
 }
 
 @test "handoff_drive_read (clear): two before-lines in order, prose after" {
-    read_drive "armed" "clear" "/rename A Title" "/clear" "pick up per the task file"
+    read_drive "armed sess-42" "clear" "/rename A Title" "/clear" "pick up per the task file"
     [ "$DRIVE_KIND" = clear ]
     [ "${#DRIVE_BEFORE[@]}" -eq 2 ]
     [ "${DRIVE_BEFORE[0]}" = "/rename A Title" ]
@@ -659,7 +659,7 @@ read_drive() {
 # submitting a prompt into what it opens are separate decisions, and the cross
 # product is what the two payload fields express.
 @test "handoff_drive_read (clear, no continuation): nothing submitted after" {
-    read_drive "armed" "clear" "/rename A Title" "/clear"
+    read_drive "armed sess-42" "clear" "/rename A Title" "/clear"
     [ "$DRIVE_KIND" = clear ]
     [ "${#DRIVE_BEFORE[@]}" -eq 2 ]
     [ "${DRIVE_BEFORE[1]}" = "/clear" ]
@@ -667,7 +667,7 @@ read_drive() {
 }
 
 @test "handoff_drive_read (compact, no continuation): nothing submitted after" {
-    read_drive "armed" "compact" "/compact focus on the parser"
+    read_drive "armed sess-42" "compact" "/compact focus on the parser"
     [ "$DRIVE_KIND" = compact ]
     [ "${DRIVE_BEFORE[0]}" = "/compact focus on the parser" ]
     [ "${#DRIVE_AFTER[@]}" -eq 0 ]
@@ -683,18 +683,14 @@ read_drive() {
 }
 
 @test "handoff_drive_read (unknown kind): rejected, naming the kinds" {
-    run read_drive "armed" "reboot" "/reboot"
+    run read_drive "armed sess-42" "reboot" "/reboot"
     [ "$status" -ne 0 ]
     [[ "$output" == *"transition kind"* ]]
 }
 
 # The state a memory approval holds a typing transition in, so the keystrokes
 # do not reach a pane whose turn is about to end on the approval question.
-#
-# Alone among the states it names its owner: the session whose approval it waits
-# on. Every other state is this turn's or the mod's, and both are reached
-# from the session that wrote them; `held` is the one that outlives a turn
-# boundary on purpose, so it is the one that has to say whose boundary.
+# It names its owner: the session whose approval it waits on.
 @test "handoff_drive_read (held): parsed like any other state, and names its owner" {
     read_drive "held sess-42" "clear" "/rename A Title" "/clear" "pick up per the task file"
     [ "$DRIVE_STATE" = held ]
@@ -712,23 +708,46 @@ read_drive() {
     [[ "$output" == *"session"* ]]
 }
 
-# Rejected as an owned state, not as an unknown one: `armed` is a state this
+# `armed` names its owner too: the session whose turn end takes it. Every
+# session sharing the root runs the UserPromptSubmit sweep, and only the owner
+# tells another session's prompt from the owner's own next one.
+@test "handoff_drive_read (armed): names its owner" {
+    read_drive "armed sess-42" "clear" "/rename A Title" "/clear" "resume"
+    [ "$DRIVE_STATE" = armed ]
+    [ "$DRIVE_OWNER" = sess-42 ]
+}
+
+@test "handoff_drive_read (armed with no owner): rejected, naming the owner" {
+    run read_drive "armed" "clear" "/rename A Title" "/clear" "resume"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"must name the session"* ]]
+}
+
+@test "handoff_drive_read (armed with two words for an owner): rejected" {
+    run read_drive "armed sess-42 extra" "clear" "/rename A Title" "/clear" "resume"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"one session id"* ]]
+}
+
+# Rejected as an owned state, not as an unknown one: `pending` is a state this
 # parser knows, and the reason has to name what is actually wrong with the line,
-# or the same message covers a typo and this.
-@test "handoff_drive_read (owner on a state that takes none): rejected" {
-    run read_drive "armed sess-42" "clear" "/rename A Title" "/clear" "resume"
+# or the same message covers a typo and this. Past the take nothing is the
+# owner's to decide: the confirming SessionStart consumes it in whichever
+# session the transition opened.
+@test "handoff_drive_read (owner on pending): rejected" {
+    run read_drive "pending sess-42" "clear" "/rename A Title" "/clear" "resume"
     [ "$status" -ne 0 ]
     [[ "$output" == *"no session"* ]]
 }
 
-# The other states carry no owner. Read a held file first: the owner must be
-# cleared by the next read, or a caller comparing it acts on the previous file's
-# session — which is the whole discriminator.
-@test "handoff_drive_read (armed after held): no owner carried over" {
+# Read an owned file first: the owner must be cleared by the next read, or a
+# caller comparing it acts on the previous file's session — which is the whole
+# discriminator.
+@test "handoff_drive_read (pending after held): no owner carried over" {
     read_drive "held sess-42" "clear" "/rename A Title" "/clear"
     [ "$DRIVE_OWNER" = sess-42 ]
-    read_drive "armed" "clear" "/rename A Title" "/clear"
-    [ "$DRIVE_STATE" = armed ]
+    read_drive "pending" "clear" "/rename A Title" "/clear"
+    [ "$DRIVE_STATE" = pending ]
     [ "$DRIVE_OWNER" = "" ]
 }
 
@@ -742,7 +761,7 @@ read_drive() {
 # The state line alone. It says which state, but there is no transition for it
 # to be the state of.
 @test "handoff_drive_read (state line alone): rejected, naming the missing kind" {
-    run read_drive "armed"
+    run read_drive "armed sess-42"
     [ "$status" -ne 0 ]
     [[ "$output" == *"transition kind"* ]]
 }
@@ -767,46 +786,46 @@ read_drive() {
 }
 
 @test "handoff_drive_read (wrong line count for the kind): rejected, naming the count" {
-    run read_drive "armed" "rename" "/rename A Title" "extra line"
+    run read_drive "armed sess-42" "rename" "/rename A Title" "extra line"
     [ "$status" -ne 0 ]
     [[ "$output" == *"exactly 3 lines"* ]]
 
-    run read_drive "armed" "clear" "/rename A Title"
+    run read_drive "armed sess-42" "clear" "/rename A Title"
     [ "$status" -ne 0 ]
     [[ "$output" == *"4 or 5 lines"* ]]
 
-    run read_drive "armed" "compact" "/compact" "continue" "extra"
+    run read_drive "armed sess-42" "compact" "/compact" "continue" "extra"
     [ "$status" -ne 0 ]
     [[ "$output" == *"2, 3 or 4 lines"* ]]
 }
 
 @test "handoff_drive_read (command literal not in the kind's slot): rejected" {
-    run read_drive "armed" "clear" "/clear" "/rename A Title" "resume"
+    run read_drive "armed sess-42" "clear" "/clear" "/rename A Title" "resume"
     [ "$status" -ne 0 ]
     [[ "$output" == *"line 3"* ]]
 
-    run read_drive "armed" "compact" "compact now" "continue"
+    run read_drive "armed sess-42" "compact" "compact now" "continue"
     [ "$status" -ne 0 ]
     [[ "$output" == *"/compact"* ]]
 }
 
 @test "handoff_drive_read (/rename with no argument): rejected" {
-    run read_drive "armed" "rename" "/rename"
+    run read_drive "armed sess-42" "rename" "/rename"
     [ "$status" -ne 0 ]
     [[ "$output" == *"non-empty argument"* ]]
 
-    run read_drive "armed" "rename" "/rename    "
+    run read_drive "armed sess-42" "rename" "/rename    "
     [ "$status" -ne 0 ]
 }
 
 @test "handoff_drive_read (/clear with an argument): rejected" {
-    run read_drive "armed" "clear" "/rename A Title" "/clear now" "resume"
+    run read_drive "armed sess-42" "clear" "/rename A Title" "/clear now" "resume"
     [ "$status" -ne 0 ]
     [[ "$output" == *"exactly"* ]]
 }
 
 @test "handoff_drive_read (empty continuation prompt): rejected" {
-    run read_drive "armed" "compact" "/compact" ""
+    run read_drive "armed sess-42" "compact" "/compact" ""
     [ "$status" -ne 0 ]
     [[ "$output" == *"must not be empty"* ]]
 }
@@ -815,7 +834,7 @@ read_drive() {
 # prose is submitted as a prompt. A prose line that looks like a command would
 # run as the wrong one.
 @test "handoff_drive_read (continuation prompt beginning with /): rejected" {
-    run read_drive "armed" "clear" "/rename A Title" "/clear" "/resume the work"
+    run read_drive "armed sess-42" "clear" "/rename A Title" "/clear" "/resume the work"
     [ "$status" -ne 0 ]
     [[ "$output" == *"must not begin"* ]]
 }
@@ -826,7 +845,7 @@ read_drive() {
 # the kind's shape, which is what lets one helper serve drive-take.sh and
 # handoff-approved.
 @test "handoff_drive_arm (rewrites line 1, preserves every line below)" {
-    printf '%s\n' "armed" "clear" "/rename A Title" "/clear" "pick up per the task file" \
+    printf '%s\n' "armed sess-42" "clear" "/rename A Title" "/clear" "pick up per the task file" \
         > "$BATS_TEST_TMPDIR/sentinel"
     handoff_drive_arm "$BATS_TEST_TMPDIR/sentinel" pending
     [ "$(cat "$BATS_TEST_TMPDIR/sentinel")" = "pending
@@ -838,22 +857,31 @@ pick up per the task file" ]
 
 # The FR-G marker is two lines, so the tail below line 1 is a single line.
 @test "handoff_drive_arm (two-line file: still just the state line)" {
-    printf '%s\n' "armed" "compact" > "$BATS_TEST_TMPDIR/sentinel"
+    printf '%s\n' "armed sess-42" "compact" > "$BATS_TEST_TMPDIR/sentinel"
     handoff_drive_arm "$BATS_TEST_TMPDIR/sentinel" pending
     [ "$(cat "$BATS_TEST_TMPDIR/sentinel")" = "pending
 compact" ]
 }
 
-# Leaving `held` drops the owner with it: the owner answers "whose approval is
-# outstanding", and past the approval there is none. Every state below `held`
-# takes no owner, so carrying it through would compose a file the parser rejects.
-@test "handoff_drive_arm (leaving held: the owner goes with the state)" {
+# The helper writes line 1 as given, so the owner is the caller's to carry or
+# drop: handoff-approved keeps it across held -> armed, drive-take.sh drops it
+# on armed -> pending.
+@test "handoff_drive_arm (held -> armed with its owner: still parses, owner kept)" {
     printf '%s\n' "held sess-42" "clear" "/rename A Title" "/clear" \
         > "$BATS_TEST_TMPDIR/sentinel"
-    handoff_drive_arm "$BATS_TEST_TMPDIR/sentinel" armed
-    [ "$(head -n1 "$BATS_TEST_TMPDIR/sentinel")" = "armed" ]
+    handoff_drive_arm "$BATS_TEST_TMPDIR/sentinel" "armed sess-42"
     handoff_drive_read "$BATS_TEST_TMPDIR/sentinel"
     [ "$DRIVE_STATE" = armed ]
+    [ "$DRIVE_OWNER" = sess-42 ]
+}
+
+@test "handoff_drive_arm (armed -> pending: the owner goes with the state)" {
+    printf '%s\n' "armed sess-42" "clear" "/rename A Title" "/clear" \
+        > "$BATS_TEST_TMPDIR/sentinel"
+    handoff_drive_arm "$BATS_TEST_TMPDIR/sentinel" pending
+    [ "$(head -n1 "$BATS_TEST_TMPDIR/sentinel")" = "pending" ]
+    handoff_drive_read "$BATS_TEST_TMPDIR/sentinel"
+    [ "$DRIVE_STATE" = pending ]
     [ "$DRIVE_OWNER" = "" ]
 }
 
@@ -861,7 +889,7 @@ compact" ]
 # file — so a half-written file must never be observable under the
 # real name. The temp lands beside it and is renamed over it.
 @test "handoff_drive_arm (leaves no temp file behind)" {
-    printf '%s\n' "armed" "compact" "/compact" "continue" > "$BATS_TEST_TMPDIR/sentinel"
+    printf '%s\n' "armed sess-42" "compact" "/compact" "continue" > "$BATS_TEST_TMPDIR/sentinel"
     handoff_drive_arm "$BATS_TEST_TMPDIR/sentinel" pending
     [ "$(find "$BATS_TEST_TMPDIR" -maxdepth 1 -name 'sentinel*' | wc -l)" -eq 1 ]
 }
@@ -1616,15 +1644,16 @@ run_load_handoff() {
     seed_drive "$tmp" "clear" "/rename A Title" "/clear" "pick up per the task file"
     run_load_handoff "$tmp" clear
     [ "$status" -eq 0 ]
-    [ "$(head -n1 "$tmp/.claude/autodrive")" = "armed" ]
+    [ "$(head -n1 "$tmp/.claude/autodrive")" = "armed $SESSION_ID" ]
     echo "$output" | jq -e '.systemMessage | test("pick up") | not' >/dev/null
 }
 
-# Seed .claude/autodrive under $1 in state `armed` — what the checkpoint, the
-# file's one writer, leaves behind — with the remaining args as the lines below.
+# Seed .claude/autodrive under $1 in state `armed`, owned by this suite's
+# session — what the checkpoint, the file's one writer, leaves behind — with the
+# remaining args as the lines below.
 seed_drive() {
     local dir="$1"; shift
-    printf '%s\n' "armed" "$@" > "$dir/.claude/autodrive"
+    printf '%s\n' "armed $SESSION_ID" "$@" > "$dir/.claude/autodrive"
 }
 
 # --- load-compact (SessionStart(compact): consume, re-inject the frame) ---
@@ -1863,7 +1892,7 @@ run_load_compact() {
     run_load_compact "$tmp"
     [ "$status" -eq 0 ]
     [ "$output" = "" ]
-    [ "$(head -n1 "$tmp/.claude/autodrive")" = "armed" ]
+    [ "$(head -n1 "$tmp/.claude/autodrive")" = "armed $SESSION_ID" ]
 }
 
 # --- session-pointer (SessionStart, every source: sweep stale pointer files) ---
@@ -1958,12 +1987,18 @@ run_session_pointer() {
 # invisible once its turn is over. The mod drops a reason file; this hook is
 # what reads it. One channel, since the transition is a singleton.
 
+# $3, when given, is the hook input's transcript_path; without it the input
+# carries none, as a hook that was handed no transcript would see.
 run_report_failure() {
     run bash -c '
-        jq -nc --arg cwd "$1" --arg sid "$2" \
-          "{cwd:\$cwd, session_id:\$sid, prompt:\"anything\"}" \
-        | bash scripts/report-drive-failure.sh
-    ' _ "$1" "${2-$SESSION_ID}"
+        if [ "$#" -ge 3 ]; then
+            jq -nc --arg cwd "$1" --arg sid "$2" --arg tp "$3" \
+              "{cwd:\$cwd, session_id:\$sid, transcript_path:\$tp, prompt:\"anything\"}"
+        else
+            jq -nc --arg cwd "$1" --arg sid "$2" \
+              "{cwd:\$cwd, session_id:\$sid, prompt:\"anything\"}"
+        fi | bash scripts/report-drive-failure.sh
+    ' _ "$1" "${2-$SESSION_ID}" "${@:3}"
 }
 
 @test "report-drive-failure (no failure file: silent no-op)" {
@@ -2051,7 +2086,7 @@ run_report_failure() {
     [ ! -e "$tmp/.claude/autodrive" ]
     [ "$(wc -l < "$tmp/.claude/autodrive.swept")" -eq 1 ]
     line="$(cat "$tmp/.claude/autodrive.swept")"
-    [[ "$line" == *$'\tsweeper='"$SESSION_ID"$'\tstate=armed\towner=-\tkind=compact\tage='[0-9]*s$'\tcwd='* ]]
+    [[ "$line" == *$'\tsweeper='"$SESSION_ID"$'\tstate=armed\towner='"$SESSION_ID"$'\tkind=compact\tage='[0-9]*s$'\tcwd='* ]]
 }
 
 @test "report-drive-failure (a sweep records who removed what: held by another session)" {
@@ -2191,10 +2226,10 @@ pick up '"'"'task  3'"'"' per the *file*; then \ done'
 }
 
 # The exemption reaches exactly as far as its reason. A held file belongs to the
-# session whose approval it waits on; once *another* session is taking prompts in
-# this repo, that approval can never arrive — the session that would have given
-# it is gone. Left on disk it stays armable indefinitely, and handoff-approved
-# would arm a dead session's `/rename` + `/clear` into a live conversation.
+# session whose approval it waits on; once that session is gone the approval can
+# never arrive. Left on disk it stays armable indefinitely, and handoff-approved
+# would arm a dead session's `/rename` + `/clear` into a live conversation. With
+# no transcript_path nothing shows the owner alive, so it is swept.
 @test "report-drive-failure (held file owned by a dead session: discarded)" {
     printf '%s\n' "held sess-someone-else" "clear" "/rename A Title" "/clear" "resume" \
         > "$tmp/.claude/autodrive"
@@ -2202,6 +2237,123 @@ pick up '"'"'task  3'"'"' per the *file*; then \ done'
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
     echo "$output" | jq -e '.systemMessage | test("stale|discarded")' >/dev/null
+}
+
+# --- report-drive-failure: a sentinel owned by another live session ---
+#
+# Every session sharing the root runs this hook — the background session the
+# harness starts after a `git commit` among them — so another session's prompt
+# says nothing about whether the owner is gone. The owner is live when its
+# transcript, beside this session's, was written within HANDOFF_OWNER_LIVE_SECS.
+
+# Seed a transcript for session $1 in the shared transcript directory and print
+# this session's transcript path, which is what the hook input carries. $2, when
+# given, is the owner transcript's age in seconds.
+seed_transcript() {
+    local dir="$BATS_TEST_TMPDIR/transcripts"
+    mkdir -p "$dir"
+    printf '{}\n' > "$dir/$1.jsonl"
+    if [ -n "${2:-}" ]; then
+        python3 -c 'import os, sys, time; t = time.time() - int(sys.argv[2]); os.utime(sys.argv[1], (t, t))' \
+            "$dir/$1.jsonl" "$2"
+    fi
+    printf '%s\n' "$dir/$SESSION_ID.jsonl"
+}
+
+seed_owned() {  # <state> <owner>
+    printf '%s\n' "$1 $2" "clear" "/rename A Title" "/clear" "resume" > "$tmp/.claude/autodrive"
+}
+
+@test "report-drive-failure (armed by another live session: left untouched, nothing said)" {
+    seed_owned armed sess-owner
+    tp="$(seed_transcript sess-owner)"
+    run_report_failure "$tmp" "$SESSION_ID" "$tp"
+    [ "$status" -eq 0 ]
+    [ "$output" = "" ]
+    [ "$(head -n1 "$tmp/.claude/autodrive")" = "armed sess-owner" ]
+    [ ! -e "$tmp/.claude/autodrive.swept" ]
+}
+
+@test "report-drive-failure (armed by another session, its transcript stale: swept)" {
+    seed_owned armed sess-owner
+    tp="$(seed_transcript sess-owner 3600)"
+    run_report_failure "$tmp" "$SESSION_ID" "$tp"
+    [ "$status" -eq 0 ]
+    [ ! -e "$tmp/.claude/autodrive" ]
+    echo "$output" | jq -e '.systemMessage | test("stale autodrive discarded — the drive mod")' >/dev/null
+    [[ "$(cat "$tmp/.claude/autodrive.swept")" == *$'\tstate=armed\towner=sess-owner\t'* ]]
+    # Its lines are a dead session's: offering them for typing would replay them
+    # into this conversation, as for a dead session's held file.
+    echo "$output" | jq -e '.systemMessage | test("Type in order") | not' >/dev/null
+    echo "$output" | jq -e '.hookSpecificOutput.additionalContext | test("/rename A Title") | not' >/dev/null
+}
+
+@test "report-drive-failure (armed by another session with no transcript of its own: swept)" {
+    seed_owned armed sess-owner
+    tp="$(seed_transcript "$SESSION_ID")"
+    run_report_failure "$tmp" "$SESSION_ID" "$tp"
+    [ "$status" -eq 0 ]
+    [ ! -e "$tmp/.claude/autodrive" ]
+    echo "$output" | jq -e '.systemMessage | test("stale autodrive discarded")' >/dev/null
+}
+
+@test "report-drive-failure (armed by another session, no transcript_path in the input: swept)" {
+    seed_owned armed sess-owner
+    seed_transcript sess-owner >/dev/null
+    run_report_failure "$tmp"
+    [ "$status" -eq 0 ]
+    [ ! -e "$tmp/.claude/autodrive" ]
+    echo "$output" | jq -e '.systemMessage | test("stale autodrive discarded")' >/dev/null
+}
+
+# The owner's own next prompt is the exact discriminator for an aborted turn, and
+# its own transcript is always fresh: liveness must not exempt the owner itself.
+@test "report-drive-failure (armed by this session, its transcript fresh: swept as an aborted turn)" {
+    seed_owned armed "$SESSION_ID"
+    tp="$(seed_transcript "$SESSION_ID")"
+    run_report_failure "$tmp" "$SESSION_ID" "$tp"
+    [ "$status" -eq 0 ]
+    [ ! -e "$tmp/.claude/autodrive" ]
+    echo "$output" | jq -e '.systemMessage | test("the drive mod did not run it")' >/dev/null
+}
+
+@test "report-drive-failure (liveness window: HANDOFF_OWNER_LIVE_SECS sets it, 600 s by default)" {
+    seed_owned armed sess-owner
+    tp="$(seed_transcript sess-owner 120)"
+    run_report_failure "$tmp" "$SESSION_ID" "$tp"
+    [ "$output" = "" ]
+    [ -e "$tmp/.claude/autodrive" ]
+
+    HANDOFF_OWNER_LIVE_SECS=60 run_report_failure "$tmp" "$SESSION_ID" "$tp"
+    [ ! -e "$tmp/.claude/autodrive" ]
+}
+
+@test "report-drive-failure (held by another live session: left untouched, nothing said)" {
+    seed_owned held sess-owner
+    tp="$(seed_transcript sess-owner)"
+    run_report_failure "$tmp" "$SESSION_ID" "$tp"
+    [ "$status" -eq 0 ]
+    [ "$output" = "" ]
+    [ "$(head -n1 "$tmp/.claude/autodrive")" = "held sess-owner" ]
+    [ ! -e "$tmp/.claude/autodrive.swept" ]
+}
+
+@test "report-drive-failure (held by another session, its transcript stale: swept as abandoned)" {
+    seed_owned held sess-owner
+    tp="$(seed_transcript sess-owner 3600)"
+    run_report_failure "$tmp" "$SESSION_ID" "$tp"
+    [ "$status" -eq 0 ]
+    [ ! -e "$tmp/.claude/autodrive" ]
+    echo "$output" | jq -e '.systemMessage | test("held by a session that is gone")' >/dev/null
+}
+
+@test "report-drive-failure (held by another session with no transcript of its own: swept as abandoned)" {
+    seed_owned held sess-owner
+    tp="$(seed_transcript "$SESSION_ID")"
+    run_report_failure "$tmp" "$SESSION_ID" "$tp"
+    [ "$status" -eq 0 ]
+    [ ! -e "$tmp/.claude/autodrive" ]
+    echo "$output" | jq -e '.systemMessage | test("held by a session that is gone")' >/dev/null
 }
 
 @test "report-drive-failure (failure and stale file: one report covering both)" {

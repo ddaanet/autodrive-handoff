@@ -58,7 +58,10 @@ handoff_drive_read "$drive" || err "$HANDOFF_REL_DRIVE is malformed — $DRIVE_E
 [ "$DRIVE_OWNER" = "$session_id" ] \
     || err "the held transition belongs to session \`$DRIVE_OWNER\`, not this one; it is not this session's approval to give"
 
-handoff_drive_arm "$drive" armed \
+# The owner carries over: the session that approved is the one whose turn end
+# takes the transition, and the prompt-time sweep tells its file from another
+# session's by that name.
+handoff_drive_arm "$drive" "armed $DRIVE_OWNER" \
     || err "could not rewrite $HANDOFF_REL_DRIVE"
 
 printf 'handoff: %s armed; it runs at the end of this turn.\n\n' "$DRIVE_KIND"

@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 from conftest import (
+    _run_checkpoint_no_session_id,
     dirty_memory,
     drive_state,
     frame_payload,
@@ -45,7 +46,7 @@ def test_rename_only_sentinel_written_neither_file_created(tmp_path: Path) -> No
     assert result.returncode == 0
     assert (
         repo / ".claude" / "autodrive"
-    ).read_text() == "armed\nrename\n/rename Two Words Title\n"
+    ).read_text() == "armed sess-checkpoint\nrename\n/rename Two Words Title\n"
     assert read_back_drive(repo / ".claude" / "autodrive")
     assert not (repo / "TASK.md").exists()
     assert not (repo / "TODO.md").exists()
@@ -113,9 +114,22 @@ def test_autoname_rename_sentinel_armed_nothing_else(tmp_path: Path) -> None:
     assert result.returncode == 0
     assert (
         repo / ".claude" / "autodrive"
-    ).read_text() == "armed\nrename\n/rename A Side Conversation\n"
-    state, _ = drive_state(repo / ".claude" / "autodrive")
-    assert state == "armed"
+    ).read_text() == "armed sess-checkpoint\nrename\n/rename A Side Conversation\n"
+    state, owner = drive_state(repo / ".claude" / "autodrive")
+    assert (state, owner) == ("armed", "sess-checkpoint")
+
+
+def test_autoname_without_a_session_id_errors_and_composes_nothing(
+    tmp_path: Path,
+) -> None:
+    """The rename sentinel is armed, and an armed sentinel names its owner."""
+    repo = make_repo(tmp_path)
+    payload = {"skill": "autoname", "rename": "A Side Conversation"}
+    result = _run_checkpoint_no_session_id(repo, payload)
+    assert result.returncode != 0
+    assert "cannot read back" not in result.stderr
+    assert "CLAUDE_CODE_SESSION_ID" in result.stderr
+    assert not (repo / ".claude" / "autodrive").exists()
 
 
 def test_autoname_leaves_both_frame_files_byte_identical(tmp_path: Path) -> None:

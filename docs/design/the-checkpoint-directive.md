@@ -111,18 +111,22 @@ failed commit, and with clean memory there is no question for it to race
 (see "One hold predicate" under [Rejected
 alternatives](rejected-alternatives.md)).
 
-`held` is the one state that outlives the turn that wrote it: the approval
-is answered in a later turn, and a failed commit is retried in one. So it is
-the one that names its owner, the session whose release it waits on, carried
-on line 1 as `held <session-id>`. That release comes from that session or
-not at all: once another session is taking prompts in the repo, the file is
-abandoned, and `report-drive-failure.sh` sweeps it exactly as it sweeps a
-stale `armed` one. Without the name it would stay armable indefinitely, and
-`handoff-approved` — which otherwise verifies only the state and the kind —
-would run a dead session's `/rename` and `/clear` in a live conversation.
-`handoff_drive_arm` replaces line 1 whole, so leaving `held` drops the owner
-with it, which is right: past the release nothing is outstanding, and no
-state below `held` accepts an owner.
+`held` is the one state that outlives the turn that wrote it on purpose: the
+approval is answered in a later turn, and a failed commit is retried in one.
+It names its owner, the session whose release it waits on, carried on line 1
+as `held <session-id>` — and `armed` names its owner the same way, because
+other sessions sharing the root take prompts and end turns while it waits for
+its own (see [Driving the transition](driving-the-transition.md)). That
+release comes from that session or not at all: once the owner is no longer
+live, the file is abandoned, and `report-drive-failure.sh` sweeps it exactly
+as it sweeps a stale `armed` one; while the owner is live, another session's
+prompt leaves it alone. Without the name it would stay armable indefinitely,
+and `handoff-approved` — which otherwise verifies only the state and the kind
+— would run a dead session's `/rename` and `/clear` in a live conversation.
+`handoff_drive_arm` writes the line 1 it is given: `handoff-approved` passes
+`armed <owner>`, since the session that approved is the one whose turn end
+takes the transition, and `drive-take.sh` passes a bare `pending`, since past
+the take nothing is any one session's.
 
 ## The gitlore seam
 

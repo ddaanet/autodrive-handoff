@@ -211,7 +211,7 @@ def test_closing_line_names_what_the_boundary_is_ready_for(
     result = run_checkpoint(repo, payload)
     assert result.returncode == 0
     first_line = (repo / ".claude" / "autodrive").read_text().splitlines()[0]
-    assert first_line == "armed"
+    assert first_line == "armed sess-checkpoint"
     assert_stdout_is_closing(result, skill, typed=typed)
     out = result.stdout
     assert out.startswith("Once everything above is done, end on one line: `")
@@ -259,5 +259,5 @@ def test_refusal_prints_alone_when_not_held(tmp_path: Path) -> None:
     result = run_checkpoint(repo, precompact_payload("with-commit"))
     assert result.returncode == 0
     first_line = (repo / ".claude" / "autodrive").read_text().splitlines()[0]
-    assert first_line == "armed"
+    assert first_line == "armed sess-checkpoint"
     assert result.stdout == refusal.text

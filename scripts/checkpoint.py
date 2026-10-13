@@ -27,7 +27,6 @@ the drift the single-parser design exists to prevent.
 
 from __future__ import annotations
 
-import os
 import shlex
 import subprocess
 import sys
@@ -72,13 +71,12 @@ def main() -> int:
     held = hold_decision(
         transition, memory=bool(memory.text), commit=commit_mode == "with-commit"
     )
-    if held:
-        # Resolving before anything is written (task/todo/sentinel):
-        # a held sentinel's first line names the session, and there is
-        # nothing else this run could do with it unset.
-        validation.require_session_id(
-            "transition", "cannot compose a held sentinel naming the session holding it"
-        )
+    # Resolved before anything is written (task/todo/sentinel): every call
+    # composes a sentinel, held or armed, and both name their owner on line 1,
+    # so there is nothing this run could do with it unset.
+    owner = validation.require_session_id(
+        "transition", "cannot compose a sentinel naming the session that owns it"
+    )
 
     plans: list[planning.FilePlan] = []
     if skill in ("handoff", "precompact"):
@@ -93,7 +91,7 @@ def main() -> int:
         for plan in plans:
             planning.apply_plan(plan)
 
-    compose_sentinel(root, transition, continuation, held=held)
+    compose_sentinel(root, transition, continuation, owner=owner, held=held)
     ending = Ending(held=held, typed=transition.typed)
     boundary = Boundary(skill, root, commit_mode)
     parts = compose_directives(boundary, memory, ending, plans)
@@ -118,17 +116,21 @@ def hold_decision(
 
 
 def compose_sentinel(
-    root: Path, transition: validation.Transition, continuation: str, *, held: bool
+    root: Path,
+    transition: validation.Transition,
+    continuation: str,
+    *,
+    owner: str,
+    held: bool,
 ) -> None:
     """Write the sentinel, held or armed per `held`, and read it back.
 
-    The read-back goes through the bash parser; a sentinel it rejects is removed
-    and reported as a transition error.
+    Line 1 names `owner` in either state: the prompt-time sweep tells the
+    owner's file from another live session's by it. The read-back goes through
+    the bash parser; a sentinel it rejects is removed and reported as a
+    transition error.
     """
-    state = "armed"
-    if held:
-        session_id = os.environ.get("CLAUDE_CODE_SESSION_ID", "")
-        state = f"held {session_id}"
+    state = f"held {owner}" if held else f"armed {owner}"
 
     drive_path = root / HANDOFF_REL_DRIVE
     drive_path.parent.mkdir(exist_ok=True)

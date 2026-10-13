@@ -277,7 +277,7 @@ def test_handoff_clear_true_no_continuation(tmp_path: Path) -> None:
     assert result.returncode == 0
     assert (
         repo / ".claude" / "autodrive"
-    ).read_text() == "armed\nclear\n/rename A Title\n/clear\n"
+    ).read_text() == "armed sess-checkpoint\nclear\n/rename A Title\n/clear\n"
     assert read_back_drive(repo / ".claude" / "autodrive")
 
 
@@ -295,7 +295,8 @@ def test_handoff_clear_true_with_continuation(tmp_path: Path) -> None:
     result = run_checkpoint(repo, payload)
     assert result.returncode == 0
     assert (repo / ".claude" / "autodrive").read_text() == (
-        "armed\nclear\n/rename A Title\n/clear\npick up per the task file\n"
+        "armed sess-checkpoint\nclear\n/rename A Title\n/clear\n"
+        "pick up per the task file\n"
     )
     assert read_back_drive(repo / ".claude" / "autodrive")
 
@@ -311,7 +312,9 @@ def test_precompact_compact_false_two_line_marker(tmp_path: Path) -> None:
     }
     result = run_checkpoint(repo, payload)
     assert result.returncode == 0
-    assert (repo / ".claude" / "autodrive").read_text() == "armed\ncompact\n"
+    assert (
+        repo / ".claude" / "autodrive"
+    ).read_text() == "armed sess-checkpoint\ncompact\n"
 
 
 def test_precompact_compact_true_no_continuation_bare_compact(tmp_path: Path) -> None:
@@ -325,7 +328,9 @@ def test_precompact_compact_true_no_continuation_bare_compact(tmp_path: Path) ->
     }
     result = run_checkpoint(repo, payload)
     assert result.returncode == 0
-    assert (repo / ".claude" / "autodrive").read_text() == "armed\ncompact\n/compact\n"
+    assert (
+        repo / ".claude" / "autodrive"
+    ).read_text() == "armed sess-checkpoint\ncompact\n/compact\n"
     assert read_back_drive(repo / ".claude" / "autodrive")
 
 
@@ -343,6 +348,7 @@ def test_precompact_focus_directive_and_continuation_both_carried(
     result = run_checkpoint(repo, payload)
     assert result.returncode == 0
     assert (repo / ".claude" / "autodrive").read_text() == (
-        "armed\ncompact\n/compact keep the parser work\ncontinue with task 3\n"
+        "armed sess-checkpoint\ncompact\n/compact keep the parser work\n"
+        "continue with task 3\n"
     )
     assert read_back_drive(repo / ".claude" / "autodrive")

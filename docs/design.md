@@ -247,6 +247,7 @@ The standing calls, each argued in
 - **Hooks are mechanical; anything requiring judgment is in a skill.**
 - **The armed transition is one file whose body names the transition.**
 - **The transition carries its own state.**
+- **A sentinel names its owner, and only the owner judges it stale.**
 - **The drive runs inline at `turn.complete`, never from `Stop`.**
 - **Observability is not gated on the happy path.**
 - **A foreign tool's state file is detected by liveness, not presence.**

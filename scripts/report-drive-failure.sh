@@ -19,9 +19,14 @@
 #    load at all (--safe-mode, or a Claude Code older than 2.1.287). Left on disk
 #    it would be taken by a later turn end, days later and possibly in an
 #    unrelated session, driving a stale transition into work it was never
-#    written for. UserPromptSubmit is the exact discriminator: it cannot fire
-#    between the write and that turn's own end. For an armed file the report
-#    also prints the lines it held, one per line, for the user to type in order.
+#    written for. The owner's own UserPromptSubmit is the exact discriminator:
+#    it cannot fire between the write and that turn's own end. Another
+#    session's can — every session sharing the root runs this hook, the
+#    background session the harness starts after a `git commit` included — so
+#    the file names its owner, and one owned by another session is swept only
+#    when that session is no longer live (its transcript has gone quiet). For
+#    an armed file the report also prints the lines it held, one per line, for
+#    the user to type in order.
 #    (Prose injected into a still-running turn is the one exception, and it
 #    fails safe — the transition is cancelled and said so, not deferred.)
 #
@@ -42,8 +47,8 @@ source "$(dirname "$0")/_lib.sh"
 
 # NUL-terminated and read whole, as in write-guard.sh: a cwd holding a newline
 # or ending in a space would otherwise be cut or trimmed.
-{ IFS= read -r -d '' hook_cwd; IFS= read -r -d '' session_id; } < <(
-    jq -j '(.cwd // ""), "\u0000", (.session_id // ""), "\u0000"'
+{ IFS= read -r -d '' hook_cwd; IFS= read -r -d '' session_id; IFS= read -r -d '' transcript_path; } < <(
+    jq -j '(.cwd // ""), "\u0000", (.session_id // ""), "\u0000", (.transcript_path // ""), "\u0000"'
 ) || true
 handoff_root_read "$hook_cwd"
 cwd="$HANDOFF_ROOT"
@@ -126,12 +131,22 @@ if [[ -f "$drive" ]]; then
     fi
 fi
 
-# A held file waits on an approval that arrives in the session that composed it.
-# Once another session is taking prompts in this repo, that session is gone and
-# the answer can never come — so its exemption from the sweep below ends with it.
-# Left on disk it stays armable by handoff-approved indefinitely.
-if [[ "$drive_state" == "held" && -n "$session_id" && "$drive_owner" != "$session_id" ]]; then
-    drive_state="abandoned"
+# `armed` and `held` both name their owner, and every session sharing this root
+# runs this hook — the background session the harness starts after a `git
+# commit` included — so another session's prompt says nothing about whether
+# the owner is gone. A file owned by another session that is still live (its
+# transcript written within HANDOFF_OWNER_LIVE_SECS, handoff_owner_live) is
+# not this session's to judge: it is left untouched and nothing is said. One
+# whose owner is not live is swept: an armed one as a stale autodrive, a held
+# one as abandoned, since the approval it waits on can no longer arrive and
+# left on disk it stays armable by handoff-approved indefinitely.
+if [[ ( "$drive_state" == "armed" || "$drive_state" == "held" ) \
+      && -n "$session_id" && "$drive_owner" != "$session_id" ]]; then
+    if handoff_owner_live "$transcript_path" "$drive_owner"; then
+        drive_state="foreign"
+    elif [[ "$drive_state" == "held" ]]; then
+        drive_state="abandoned"
+    fi
 fi
 
 if [[ -f "$failed" ]]; then
@@ -158,17 +173,21 @@ fi
 # but pending": a held transition is *waiting* on an approval whose answer
 # arrives at this very hook, so surviving the turn boundary is what it is for.
 # The exemption reaches exactly as far as that reason — a held file owned by
-# another session was reclassified above, because the approval it waits on
-# cannot arrive and handoff-approved would otherwise arm it into this
-# conversation.
+# another session that is not live was reclassified above as abandoned. A file
+# of either state owned by another live session was reclassified as `foreign`
+# and is not this session's to take.
 armed_lines=""   # the armed lines, for the user to type in order
-if [[ -n "$drive_state" && "$drive_state" != "pending" && "$drive_state" != "held" ]]; then
+if [[ -n "$drive_state" && "$drive_state" != "pending" && "$drive_state" != "held" \
+      && "$drive_state" != "foreign" ]]; then
     record_sweep
     rm -f "$drive"
     if [[ "$drive_state" == "armed" ]]; then
         msgs+=("stale autodrive discarded — the drive mod did not run it")
         notes+=("A .claude/autodrive file was still armed when this turn began, so the transition it described did not run. Most likely the drive mod did not load (--safe-mode, or a Claude Code older than 2.1.287); an interrupt or crash that ended the turn before it was taken leaves the same trace. The file has been discarded, so it cannot fire into unrelated work later.")
-        if (( ${#drive_lines[@]} > 0 )); then
+        # The lines are offered only to the session that wrote them. Another
+        # session's, swept because its owner is not live, would be replayed into
+        # this conversation — the reason a dead session's held file offers none.
+        if (( ${#drive_lines[@]} > 0 )) && [[ "$drive_owner" == "$session_id" ]]; then
             armed_lines="$(printf '%s\n' "${drive_lines[@]}")"
             notes+=("Present these lines to the user in a fenced code block, to type in order:
 $armed_lines")

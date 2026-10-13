@@ -45,15 +45,18 @@ test('project-root cwd without a sentinel never spawns', async ($, on) => {
   expect(r.log).toEqual([])
 })
 
-test('a sentinel makes it run drive-take.sh with the cwd', async ($, on) => {
+// The session id is what lets drive-take.sh take only this session's armed
+// file: every session sharing the root ends turns there.
+test('a sentinel makes it run drive-take.sh with the cwd and the Stop session id', async ($, on) => {
   const r = rig(on, { sentinelExists: true, stdout: '' })
   await endTurn($)
   expect(r.log).toEqual(['process.run'])
   expect(r.processArgv.length).toBe(1)
-  const [bash, script, cwd, ...rest] = r.processArgv[0]
+  const [bash, script, cwd, session, ...rest] = r.processArgv[0]
   expect(bash).toBe('bash')
   expect(script.endsWith('/scripts/drive-take.sh')).toBe(true)
   expect(cwd).toBe(CWD)
+  expect(session).toBe('s1')
   expect(rest).toEqual([])
 })
 

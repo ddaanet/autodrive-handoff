@@ -17,6 +17,17 @@ behaviour it failed to have.
 
 ## A held sentinel outlived the session that held it
 
+> **Superseded 2026-10-13** (see [The armed sentinel has an
+> owner](2026-10-13-the-armed-sentinel-has-an-owner.md)) on the sweep's
+> inference and on the owner being `held`'s alone: another session taking
+> prompts in the repo does not mean the owner is gone, since background
+> sessions share the root. A `held` file owned by another session is swept as
+> abandoned only when that session is not live (its transcript quiet for
+> `HANDOFF_OWNER_LIVE_SECS`), and `armed` names its owner too, so
+> `handoff_drive_arm` now carries it from `held` to `armed`. The owner on line 1
+> and `handoff-approved`'s refusal stand. The rejected age-based sweep stays
+> rejected: liveness reads the owner's transcript, never the sentinel's age.
+
 `held` was written by the checkpoint, left by `Stop`, exempted from the
 `UserPromptSubmit` sweep, and left by `bin/handoff-approved` and nothing else.
 The design note said a stale one was **inert**: no gate fires on that state, and

@@ -144,7 +144,7 @@ run_approved() {
         "pick up per the task file" > "$repo/.claude/autodrive"
     run_approved "$repo"
     [ "$status" -eq 0 ]
-    [ "$(cat "$repo/.claude/autodrive")" = "armed
+    [ "$(cat "$repo/.claude/autodrive")" = "armed $CLAUDE_CODE_SESSION_ID
 clear
 /rename A Title
 /clear
@@ -176,11 +176,12 @@ pick up per the task file" ]
 # say the approval released something it did not.
 @test "handoff-approved: an armed sentinel -> exit 2 naming the state it found" {
     repo="$(make_repo)"
-    printf '%s\n' armed clear "/rename A Title" /clear > "$repo/.claude/autodrive"
+    printf '%s\n' "armed $CLAUDE_CODE_SESSION_ID" clear "/rename A Title" /clear \
+        > "$repo/.claude/autodrive"
     run_approved "$repo"
     [ "$status" -eq 2 ]
     [[ "$stderr" == *"armed"* ]]
-    [ "$(head -n1 "$repo/.claude/autodrive")" = "armed" ]
+    [ "$(head -n1 "$repo/.claude/autodrive")" = "armed $CLAUDE_CODE_SESSION_ID" ]
 }
 
 @test "handoff-approved: HANDOFF_ROOT unset -> refuses, naming the unrecognised invocation" {
@@ -199,7 +200,7 @@ pick up per the task file" ]
         > "$repo/.claude/autodrive"
     run bash -c 'cd "$1" && PATH="$2:$PATH" HANDOFF_ROOT="$1" handoff-approved' _ "$repo" "$repo_root/bin"
     [ "$status" -eq 0 ]
-    [ "$(head -n1 "$repo/.claude/autodrive")" = "armed" ]
+    [ "$(head -n1 "$repo/.claude/autodrive")" = "armed $CLAUDE_CODE_SESSION_ID" ]
 }
 
 # After arming, handoff-approved prints the status fact, a blank line, then the

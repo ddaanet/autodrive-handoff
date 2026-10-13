@@ -6,6 +6,14 @@
 > by a `Stop` hook. The sweep of a sentinel still `armed` at the next prompt
 > stands, and its note now names an unloaded mod as the likely cause.
 
+> **Superseded 2026-10-13** (see [The armed sentinel has an
+> owner](2026-10-13-the-armed-sentinel-has-an-owner.md)) on "no session id, no
+> heuristic": the discriminator holds only for the owner's own
+> `UserPromptSubmit`, and every session sharing the root runs the hook. The
+> `armed` line now names its owner; the owner's own prompt still sweeps it
+> unconditionally, while another session's prompt sweeps it only when the owner
+> is not live by its transcript's mtime.
+
 `stop-compact.sh` checked only that `.claude/autocompact` existed. Its header
 claimed the fail-safe direction for free: *"Stop does NOT fire on an Esc
 interrupt, so an interrupted turn cannot arm the compaction."* True of the

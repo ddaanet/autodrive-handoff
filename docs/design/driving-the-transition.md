@@ -31,6 +31,11 @@ call composes a `rename` sentinel and rides the same drive.
 
 One sentinel, `.claude/autodrive`, whose first line is its **state** and
 second line the kind. The states are `held` → `armed` → `pending` → gone.
+`held` and `armed` name their **owner** on the same line, `held <session-id>`
+and `armed <session-id>`: the session that composed or approved the
+transition, whose turn end takes it. `pending` names none, because past the
+take the transition belongs to the confirming `SessionStart` in whichever
+session it opened.
 `checkpoint.py` is the file's one writer: it composes the sentinel and reads
 its own output back through `handoff_drive_read`, so composer and parser
 cannot drift, and a direct agent Write or Edit is denied at `PreToolUse`.
@@ -41,13 +46,16 @@ file cannot be made to run something else. One fact per line throughout.
 
 `held` is the checkpoint's, released by `handoff-approved`
 ([The checkpoint directive](the-checkpoint-directive.md)). Everything after it
-is a hook's: `drive-take.sh` moves `armed` to `pending`, and the transition's
-own `SessionStart` loader removes `pending`.
+is a hook's: `drive-take.sh` moves `armed` to `pending`, dropping the owner, and
+the transition's own `SessionStart` loader removes `pending`. Every session
+sharing the root runs the same hooks and the same mod — the background session
+the harness starts after a `git commit` among them — so the owner is what tells
+one session's sentinel from another's.
 
 ## Who runs it, and when
 
-The mod registers two handlers. `classic.Stop` records the turn's cwd and does
-nothing else. `turn.complete`, which follows it by a fraction of a second,
+The mod registers two handlers. `classic.Stop` records the turn's cwd and session
+id and does nothing else. `turn.complete`, which follows it by a fraction of a second,
 consumes the recorded cwd and drives inline.
 
 Both halves are forced by the host:
@@ -70,12 +78,13 @@ Both halves are forced by the host:
   go idle. The drive starts only after the turn is over.
   [Mid-turn input: the taxonomy](../changelog/2026-07-19-mid-turn-tui-input-taxonomy.md)
 
-The cwd is the `Stop` payload's, because `turn.complete` carries none.
+The cwd and the session id are the `Stop` payload's, because `turn.complete`
+carries neither.
 
 ## `drive-take.sh` is the one reader
 
-The mod never reads or writes the sentinel. `scripts/drive-take.sh <cwd>`
-takes it and prints the plan, for the same reason the checkpoint reads its own
+The mod never reads or writes the sentinel. `scripts/drive-take.sh <cwd>
+<session-id>` takes it and prints the plan, for the same reason the checkpoint reads its own
 output back: `handoff_drive_read` is the one parser, and a TypeScript copy of
 it would be a second one that can drift. The mod also cannot do what the take
 needs — `$.fs` has no rename or delete, so the atomic `armed` → `pending`
@@ -85,9 +94,11 @@ root resolution stays in `worktree_root.py`.
 The contract, pinned by `tests/drive-take.bats` against fixtures the mod's own
 tests also consume:
 
-- **Empty stdout** means nothing was armed: no file, a `pending` or a `held`
-  one. Only `armed` is this turn's to take, so a transition already in flight
-  cannot be taken twice.
+- **Empty stdout** means nothing was armed for this session: no file, a
+  `pending` or a `held` one, or one `armed` by another session (or no session
+  id given). Only this session's `armed` file is this turn's to take, so a
+  transition already in flight cannot be taken twice, and another session's
+  turn end cannot run the owner's `/rename` and `/clear` in itself.
 - Otherwise one line of JSON, `{kind, before[], after[], failFile, message}`.
   `armed` is left **before** the plan is printed: `pending` for a kind with a
   confirming `SessionStart`, removal for `rename`, which has none and would
@@ -172,8 +183,21 @@ the take and the transition.
 
 The hook also sweeps a sentinel still `armed`. `drive-take.sh` leaves it
 `pending` or removes it at the end of the turn that wrote it, so one still
-`armed` when a later prompt arrives never ran. There are two causes the hook
-cannot tell apart: an aborted turn, and **the mod not being loaded** —
+`armed` when the owner's next prompt arrives never ran. That holds only for the
+owner's prompt: another session's can arrive while the owning turn is still
+running. For a file owned by another session the hook asks whether that session
+is **live** — its transcript, `<owner>.jsonl` beside the one in the hook input's
+`transcript_path`, written within `HANDOFF_OWNER_LIVE_SECS` (600 s by default).
+A live owner's `armed` or `held` file is left untouched and nothing is said; a
+file whose owner is not live (stale or missing transcript, or no
+`transcript_path` in the input) is swept as below. Liveness is a heuristic, and
+each way it can be wrong sweeps a file that should have stayed, which is what
+every cross-session sweep did before the owner was read; the argument is in
+[The armed sentinel has an
+owner](../changelog/2026-10-13-the-armed-sentinel-has-an-owner.md).
+
+For the owner's own `armed` file, or one whose owner is not live, there are
+two causes the hook cannot tell apart: an aborted turn, and **the mod not being loaded** —
 `--safe-mode`, or a Claude Code older than 2.1.287. The mod needs that version
 and the plugin manifest has no field to pin a minimum, so this note is where
 the requirement surfaces: it names the mod as the likely cause, discards the
@@ -182,8 +206,8 @@ held for the user to run in order. A file that will not parse is swept too,
 without lines — it describes no transition anyone can complete. `held` is
 exempt while it belongs to the session at the prompt, which is why the sweep
 names its states rather than taking anything that is not `pending`; a `held`
-file whose owner is another session is reclassified as abandoned first, and
-no lines are offered for it.
+file whose owner is another session that is not live is reclassified as
+abandoned first, and no lines are offered for it.
 
 Each removal the sweep makes also appends a line to `.claude/autodrive.swept`:
 time, the removing session, the file's state, owner, kind and age, and the

@@ -170,6 +170,18 @@ checkpoint composes it, and a direct agent Write or Edit is denied outright.
 [One transition, one file, explicit
 state](../changelog/2026-08-03-one-transition-one-file.md)
 
+**A sentinel names its owner, and only the owner judges it stale.** Every
+session sharing the root runs the same hooks and the same mod, the background
+session the harness starts after a `git commit` among them, so seeing a
+sentinel says nothing about whose it is. `held` and `armed` carry their owner on
+line 1. Only the owner's turn end takes an `armed` file, and only the owner's
+prompt sweeps one as an aborted turn. Another session sweeps it, or a `held`
+one, only once the owner is not live by its transcript's mtime. That test is a
+heuristic. Every way it can be wrong sweeps a file that should have stayed,
+which is the behaviour it replaced, so no case is worse than before.
+[The armed sentinel has an
+owner](../changelog/2026-10-13-the-armed-sentinel-has-an-owner.md)
+
 **Observability is not gated on the happy path.** A clean run says nothing
 about whether a dirty one would be noticed, and the failing run is exactly
 the one nobody is watching. The drive runs after the turn that armed it, so a

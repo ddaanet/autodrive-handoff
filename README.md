@@ -246,8 +246,10 @@ Per project, two tracked files in the project root:
 And under `./.claude/`, two transient files:
 
 - `autodrive` — transient file describing the transition to carry out:
-  first line its state, second the kind (`rename`, `compact` or `clear`),
-  then the lines to run. Written by the checkpoint and by nothing else — a
+  first line its state (with the owning session's id while it waits to run),
+  second the kind (`rename`, `compact` or `clear`), then the lines to run.
+  Only the owning session's turn end runs it, and another session's prompt
+  leaves it alone while the owning session is active. Written by the checkpoint and by nothing else — a
   direct agent write is denied. It starts out `held` when running it now would
   cost you something: it would run at the end of a turn that is still asking
   an unanswered memory question, or it would carry out a transition while a commit your

@@ -3,7 +3,8 @@
 Boots a real ``claude -p`` (cheap model, one trivial turn) with this repo as
 ``--plugin-dir`` in a throwaway git repo, where the first turn writes
 ``.claude/autodrive`` in state ``armed`` through one allowed ``printf`` Bash
-call, then reads what the transition left in the session transcripts. The
+call, owned by the session id the test hands ``claude`` with ``--session-id``,
+then reads what the transition left in the session transcripts. The
 file is written mid-turn because the sweep at ``UserPromptSubmit`` discards an
 ``armed`` sentinel that predates the prompt. Nothing is read from a pane: the
 mod drives the session through the mods API, and the transcript is the record.
@@ -24,6 +25,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import uuid
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -42,17 +44,19 @@ FOCUS = "keep the word PINEAPPLE"
 
 
 def test_rename_row(smoke_repo: Path) -> None:
-    prompt = arm_prompt(f"rename\n/rename {TITLE}\n")
+    session = str(uuid.uuid4())
+    prompt = arm_prompt(session, f"rename\n/rename {TITLE}\n")
 
-    run_claude(smoke_repo, prompt)
+    run_claude(smoke_repo, prompt, session)
 
     assert TITLE in custom_titles(smoke_repo)
 
 
 def test_clear_row_continues_in_the_fresh_session(smoke_repo: Path) -> None:
-    prompt = arm_prompt(f"clear\n/rename {TITLE}\n/clear\n{CONTINUATION}\n")
+    session = str(uuid.uuid4())
+    prompt = arm_prompt(session, f"clear\n/rename {TITLE}\n/clear\n{CONTINUATION}\n")
 
-    run_claude(smoke_repo, prompt)
+    run_claude(smoke_repo, prompt, session)
 
     sessions = user_prompts_by_session(smoke_repo)
     first = [s for s, texts in sessions.items() if prompt in texts]
@@ -66,9 +70,10 @@ def test_clear_row_continues_in_the_fresh_session(smoke_repo: Path) -> None:
 
 
 def test_compact_row_carries_the_focus_and_continues(smoke_repo: Path) -> None:
-    prompt = arm_prompt(f"compact\n/compact {FOCUS}\n{CONTINUATION}\n")
+    session = str(uuid.uuid4())
+    prompt = arm_prompt(session, f"compact\n/compact {FOCUS}\n{CONTINUATION}\n")
 
-    run_claude(smoke_repo, prompt)
+    run_claude(smoke_repo, prompt, session)
 
     entries = [e for _, e in transcript_entries(smoke_repo)]
     assert any(e.get("isCompactSummary") for e in entries), "no compaction"
@@ -91,10 +96,10 @@ def git(repo: Path, *args: str) -> None:
     subprocess.run(["git", "-C", str(repo), *args], check=True)
 
 
-def arm_prompt(body: str) -> str:
-    """The first prompt: have the model write an ``armed`` sentinel, then
-    reply."""
-    lines = ["armed", *body.splitlines()]
+def arm_prompt(session: str, body: str) -> str:
+    """The first prompt: have the model write an ``armed`` sentinel owned by
+    ``session``, then reply."""
+    lines = [f"armed {session}", *body.splitlines()]
     quoted = " ".join(shlex.quote(line) for line in lines)
     command = f"printf '%s\\n' {quoted} > .claude/autodrive"
     return (
@@ -103,7 +108,7 @@ def arm_prompt(body: str) -> str:
     )
 
 
-def run_claude(repo: Path, prompt: str) -> None:
+def run_claude(repo: Path, prompt: str, session: str) -> None:
     env = allowed_env()
     proc = subprocess.run(
         [
@@ -113,6 +118,8 @@ def run_claude(repo: Path, prompt: str) -> None:
             MODEL,
             "--plugin-dir",
             str(REPO),
+            "--session-id",
+            session,
             "--permission-mode",
             "default",
             # `=` form: the flags are variadic and would swallow the prompt.

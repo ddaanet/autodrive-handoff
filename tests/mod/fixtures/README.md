@@ -6,7 +6,8 @@ sentinel case: one line of compact JSON plus a trailing newline. The token
 `tests/drive-take.bats` substitutes it before comparing. The mod tests
 stub `process.run` with the same files, substituting the same way.
 
-Empty stdout (no fixture) means nothing is armed: no file, `pending`, `held`.
+Empty stdout (no fixture) means nothing is armed for this session: no file,
+`pending`, `held`, or `armed` by another session.
 
 Choices the contract fixes for `drive-take.sh`:
 - Key order is `kind, before, after, failFile, message`; `failFile` is always

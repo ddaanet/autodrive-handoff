@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# drive-take.sh <cwd>: take the armed transition and print the plan the mod runs.
-# Called by hooks/handoff.ts at turn.complete after a Stop. Exit 0 always; empty
-# stdout means nothing was armed (no file, `pending`, `held`). Otherwise one line
-# of JSON: {kind, before[], after[], failFile, message}.
+# drive-take.sh <cwd> <session-id>: take this session's armed transition and
+# print the plan the mod runs. Called by hooks/handoff.ts at turn.complete after
+# a Stop, with the Stop event's cwd and session id. Exit 0 always; empty stdout
+# means nothing was armed for this session (no file, `pending`, `held`, or
+# `armed` by another session). Otherwise one line of JSON:
+# {kind, before[], after[], failFile, message}.
 #
 # The mod never touches the sentinel: this script is the one place that leaves
 # `armed`, through the same parser every other reader uses, so there is no second
@@ -14,6 +16,7 @@ set -euo pipefail
 source "$(dirname "$0")/_lib.sh"
 
 root="$(handoff_root "${1:-}")"
+session_id="${2:-}"
 [[ -n "$root" ]] || exit 0
 
 drive="$root/$HANDOFF_REL_DRIVE"
@@ -32,8 +35,13 @@ if ! handoff_drive_read "$drive"; then
 fi
 
 # Only an armed transition is this turn's to take; a pending one is in flight,
-# waiting on its confirming SessionStart.
+# waiting on its confirming SessionStart. And only the owner's: every session
+# sharing the root ends turns here, the background session the harness starts
+# after a `git commit` among them, and the prompt-time sweep leaves a live
+# owner's file alone, so another session's turn end would otherwise run the
+# owner's /rename and /clear in itself. No session id takes nothing.
 [[ "$DRIVE_STATE" == "armed" ]] || exit 0
+[[ -n "$session_id" && "$DRIVE_OWNER" == "$session_id" ]] || exit 0
 
 # `rename` has no confirming SessionStart, so a pending file would never clear.
 if handoff_drive_has_source "$DRIVE_KIND"; then

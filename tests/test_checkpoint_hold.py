@@ -134,7 +134,7 @@ def test_untyped_handoff_with_commit_clean_memory_is_armed(tmp_path: Path) -> No
     result = run_checkpoint(repo, payload)
     assert result.returncode == 0
     first_line = (repo / ".claude" / "autodrive").read_text().splitlines()[0]
-    assert first_line == "armed"
+    assert first_line == "armed sess-checkpoint"
     assert "handoff-approved" not in result.stdout
     assert commit_act in result.stdout
 
@@ -146,7 +146,7 @@ def test_untyped_precompact_with_commit_clean_memory_is_armed(tmp_path: Path) ->
     result = run_checkpoint(repo, precompact_payload("with-commit"))
     assert result.returncode == 0
     first_line = (repo / ".claude" / "autodrive").read_text().splitlines()[0]
-    assert first_line == "armed"
+    assert first_line == "armed sess-checkpoint"
 
 
 def test_handoff_commit_precedes_closing_line_when_armed(tmp_path: Path) -> None:
@@ -159,7 +159,7 @@ def test_handoff_commit_precedes_closing_line_when_armed(tmp_path: Path) -> None
     result = run_checkpoint(repo, handoff_payload("with-commit"))
     assert result.returncode == 0
     first_line = (repo / ".claude" / "autodrive").read_text().splitlines()[0]
-    assert first_line == "armed"
+    assert first_line == "armed sess-checkpoint"
     out = result.stdout
     commit_index = out.index(commit_act)
     closing_index = out.index(closing)
@@ -220,14 +220,25 @@ def test_held_session_id_set_still_succeeds_via_commit(tmp_path: Path) -> None:
     assert first_line == "held sess-checkpoint"
 
 
-def test_armed_cell_succeeds_with_session_id_unset(tmp_path: Path) -> None:
-    """The validation is scoped to the held path — an armed cell needs no id."""
+def test_armed_cell_session_id_unset_errors_before_any_write(tmp_path: Path) -> None:
+    """An armed sentinel names its owner too, so an armed cell needs the id."""
     repo = make_gitlore_repo(tmp_path)
     payload = handoff_payload("without-commit")
     result = _run_checkpoint_no_session_id(repo, payload)
+    assert result.returncode != 0
+    assert "cannot read back" not in result.stderr
+    assert "CLAUDE_CODE_SESSION_ID" in result.stderr
+    _assert_nothing_written(repo)
+
+
+def test_armed_cell_session_id_set_names_the_owner(tmp_path: Path) -> None:
+    """Paired positive for the armed row: same fixture, variable set."""
+    repo = make_gitlore_repo(tmp_path)
+    payload = handoff_payload("without-commit")
+    result = run_checkpoint(repo, payload)
     assert result.returncode == 0
     first_line = (repo / ".claude" / "autodrive").read_text().splitlines()[0]
-    assert first_line == "armed"
+    assert first_line == "armed sess-checkpoint"
 
 
 # --- held versus armed ---
@@ -287,7 +298,7 @@ def test_typed_transition_no_memory_gate_armed_no_arming_instruction(
     result = run_checkpoint(repo, payload)
     assert result.returncode == 0
     first_line = (repo / ".claude" / "autodrive").read_text().splitlines()[0]
-    assert first_line == "armed"
+    assert first_line == "armed sess-checkpoint"
     assert "handoff-approved" not in result.stdout
 
 
@@ -327,7 +338,7 @@ def test_sentinel_typing_nothing_arms_even_with_memory_gate_pending(
     result = run_checkpoint(repo, payload)
     assert result.returncode == 0
     first_line = (repo / ".claude" / "autodrive").read_text().splitlines()[0]
-    assert first_line == "armed"
+    assert first_line == "armed sess-checkpoint"
     assert "handoff-approved" not in result.stdout
 
 
@@ -340,4 +351,4 @@ def test_autoname_arms_against_dirty_memory_having_asked_nothing(
     result = run_checkpoint(repo, payload)
     assert result.returncode == 0
     first_line = (repo / ".claude" / "autodrive").read_text().splitlines()[0]
-    assert first_line == "armed"
+    assert first_line == "armed sess-checkpoint"

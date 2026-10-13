@@ -220,10 +220,16 @@ _handoff_drive_prose() {
 #            written, but not yet the turn's to arm: a memory approval or,
 #            ahead of a driven transition, the turn's commit is outstanding,
 #            and handoff-approved is what releases it. The session
-#            id is the one whose approval it waits on — the state that outlives
-#            its turn by design is the one that must say whose turn
-#   armed    the transition drive-take.sh takes after this turn's Stop
-#   pending  armed, in flight, waiting on its confirming SessionStart
+#            id is the one whose approval it waits on
+#   armed <session-id>
+#            the transition drive-take.sh takes after the owner's turn ends.
+#            The session id is the one that wrote it (or approved it out of
+#            `held`): every session sharing the root runs the UserPromptSubmit
+#            sweep, and only the owner tells another session's prompt from
+#            the owner's own next one
+#   pending  armed, in flight, waiting on its confirming SessionStart; no
+#            owner, since the session that consumes it is whichever one the
+#            transition opened
 #
 #   rename   /rename <title>
 #   compact  /compact [directive]         [+ continuation prose]
@@ -267,22 +273,22 @@ handoff_drive_read() {
         *' '*) DRIVE_OWNER="${lines[0]#* }" ;;
     esac
     case "$DRIVE_STATE" in
-        held)
-            # `held` alone among the states outlives the turn that wrote it, so
-            # it is the one that has to say whose turn that was: the approval it
-            # waits on arrives in that session or not at all. Without the name,
-            # a file left by a session that quit before answering stays armable
-            # by any later session in the repo.
+        held | armed)
+            # Both outlive the turn that wrote them in some session's eyes:
+            # `held` waits on an approval that arrives in its owner's later
+            # turn, and `armed` sits on disk until its owner's turn ends while
+            # other sessions sharing the root take prompts. So each says whose
+            # it is, and the sweep and handoff-approved compare against it.
             if [ -z "$DRIVE_OWNER" ]; then
-                DRIVE_ERR="line 1 state \`held\` must name the session holding it"
+                DRIVE_ERR="line 1 state \`$DRIVE_STATE\` must name the session that owns it"
                 return 1
             fi
             case "$DRIVE_OWNER" in *' '*)
-                DRIVE_ERR="line 1 state \`held\` takes one session id, not \`$DRIVE_OWNER\`"
+                DRIVE_ERR="line 1 state \`$DRIVE_STATE\` takes one session id, not \`$DRIVE_OWNER\`"
                 return 1 ;;
             esac
             ;;
-        armed | pending)
+        pending)
             if [ -n "$DRIVE_OWNER" ]; then
                 DRIVE_ERR="line 1 state \`$DRIVE_STATE\` takes no session id (got \`$DRIVE_OWNER\`)"
                 return 1
@@ -336,6 +342,24 @@ handoff_drive_read() {
     return 0
 }
 
+# Whether session $2 is live, judged from this session's transcript path ($1):
+# the owner's transcript is `<owner>.jsonl` in the same directory, and it is
+# live when that file was written within HANDOFF_OWNER_LIVE_SECS (default 600).
+# A heuristic: a running turn writes its transcript on every message, but an
+# owner idle longer than the window reads as gone. No transcript path, an owner
+# that is not a plain file name, or no transcript for it: not live.
+handoff_owner_live() {
+    local transcript="$1" owner="$2" file mtime now
+    [ -n "$transcript" ] && [ -n "$owner" ] || return 1
+    case "$owner" in */* | . | ..) return 1 ;; esac
+    file="$(dirname "$transcript")/$owner.jsonl"
+    [ -f "$file" ] || return 1
+    mtime="$(stat -c %Y "$file" 2>/dev/null || stat -f %m "$file" 2>/dev/null || true)"
+    [[ "$mtime" =~ ^[0-9]+$ ]] || return 1
+    now="$(date +%s)"
+    (( now - mtime <= ${HANDOFF_OWNER_LIVE_SECS:-600} ))
+}
+
 # Kinds whose transition is confirmed by a SessionStart. `rename` is not one:
 # no loader consumes it, so drive-take.sh deletes its sentinel outright instead
 # of leaving it pending for nobody to clear.
@@ -346,13 +370,16 @@ handoff_drive_has_source() {
     esac
 }
 
-# Rewrite the sentinel ($1) into state $2, preserving every line below the
-# first. The state is the only field any transition changes, so one helper
-# serves them all and none of them has to know the kind's shape.
+# Rewrite the sentinel ($1) with $2 as its line 1 — the state, and the owner
+# when the state takes one — preserving every line below the first. Line 1 is
+# the only line any transition changes, so one helper serves them all and none
+# of them has to know the kind's shape.
 #
-# Line 1 is replaced whole, so leaving `held` drops its session id with it —
-# which is right: the owner answers "whose approval is outstanding", and past
-# the approval there is none. No state below `held` accepts one.
+# Line 1 is replaced whole, so the owner is the caller's to carry or drop:
+# handoff-approved passes `armed <owner>` on, since the session that approved is
+# the one whose turn end takes it, and drive-take.sh writes a bare `pending`,
+# since past the take the transition is the confirming SessionStart's, in
+# whichever session it opened.
 #
 # Atomic: a sibling temp file renamed over the original. Concurrent readers
 # exist — both loaders, drive-take.sh and the sweep parse this file — so a

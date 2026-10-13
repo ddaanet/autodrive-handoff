@@ -281,7 +281,7 @@ def test_precompact_parts_print_in_order(tmp_path: Path) -> None:
     # Untyped precompact types nothing, so it stays armed with memory dirty:
     # the one cell where the closing line follows every other part.
     first_line = (repo / ".claude" / "autodrive").read_text().splitlines()[0]
-    assert first_line == "armed"
+    assert first_line == "armed sess-checkpoint"
     out = result.stdout
     memory_index = out.index("gitlore memory has uncommitted changes")
     sdd_index = out.index(sdd_directive)

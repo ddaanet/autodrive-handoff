@@ -52,9 +52,14 @@ root](../changelog/2026-06-09-per-worktree-handoff-root.md)
 **A session-id sidecar or a recency timeout for a stale sentinel** —
 the most likely trigger is an Esc in the *same* session, so the id matches
 and the next `Stop` arms it anyway; a timeout is a guess about how long a
-turn may run, and a wrong guess silently drops a wanted compaction.
+turn may run, and a wrong guess silently drops a wanted compaction. Both stay
+rejected for the owner's own sentinel, which its next prompt sweeps
+unconditionally. Across sessions the owner rides on line 1 rather than in a
+sidecar, and what is timed is the owner's transcript, never the sentinel.
 [A stale autocompact is one a later turn can
-see](../changelog/2026-07-22-stale-autocompact.md)
+see](../changelog/2026-07-22-stale-autocompact.md),
+[The armed sentinel has an
+owner](../changelog/2026-10-13-the-armed-sentinel-has-an-owner.md)
 
 **Detecting commit awareness in the checkpoint, and defaulting the answer**
 — a transcript scrape is the maintenance trap this design already refuses,

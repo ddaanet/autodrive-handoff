@@ -11,8 +11,9 @@ schema-validated JSON payload on stdin → `checkpoint.py` writes `TASK.md` and
 `TODO.md` in the project root (FR5 write semantics — content written as given,
 or a named action) and `.claude/autodrive`, and does no git work (NFR1):
 both files are plain tracked files and nothing stages them → the turn ends:
-`classic.Stop` records the cwd and `turn.complete` runs the drive in
-`hooks/handoff.ts`, which has `scripts/drive-take.sh` take the sentinel and
+`classic.Stop` records the cwd and session id and `turn.complete` runs the
+drive in `hooks/handoff.ts`, which has `scripts/drive-take.sh` take the
+sentinel (only one this session owns) and
 print the plan, then runs each line through `$.command.run` or
 `$.prompt.submit` → the transition's own `SessionStart(clear|compact)` loader
 consumes the `pending` sentinel and injects the frame (header + whichever of
@@ -121,23 +122,25 @@ note in `report-drive-failure.sh`.
   (`session-pointer.sh`), on `startup|clear` (`load-handoff.sh`) and on
   `compact` (`load-compact.sh`).
 - `hooks/handoff.ts` — the mod. `classic.Stop` records the turn's cwd and
-  nothing else (an interrupt fires no `Stop`, so an aborted turn arms nothing);
+  session id and nothing else (an interrupt fires no `Stop`, so an aborted turn arms nothing);
   `turn.complete` consumes it and drives **inline** — the host refuses
   `$.command.run` from a `Stop` hook's call context, `$.clock.after` from it
   included, and timers die under `-p`. Fast path: a cwd equal to the session
   root with no `.claude/autodrive` returns without a spawn. Otherwise it runs
-  `scripts/drive-take.sh`; empty stdout is nothing armed. It reads the prompt
+  `scripts/drive-take.sh <cwd> <session-id>`; empty stdout is nothing armed. It reads the prompt
   before each line and stops entirely on user text; a `/`-line is
   `$.command.run({command, args})`, other prose
   `$.prompt.submit({text, asUser: true})`; the first rejection writes
   `failFile` and toasts, and ends the sequence. It never reads the sentinel. A
   hooks module may pass `$` only to top-level functions (a static check at
   load). See `docs/design/driving-the-transition.md`.
-- `scripts/drive-take.sh <cwd>` — takes the armed transition. Parses through
-  `handoff_drive_read`, acts only on `armed`, moves it to `pending`
-  (`handoff_drive_arm`, atomic) or removes it for `rename` (no confirming
-  source), then prints one JSON line `{kind, before[], after[], failFile,
-  message}`; empty stdout for no file, `pending` or `held`. FR-G (empty
+- `scripts/drive-take.sh <cwd> <session-id>` — takes this session's armed
+  transition. Parses through `handoff_drive_read`, acts only on `armed` whose
+  owner is the given session (every session sharing the root ends turns here),
+  moves it to an ownerless `pending` (`handoff_drive_arm`, atomic) or removes it
+  for `rename` (no confirming source), then prints one JSON line `{kind,
+  before[], after[], failFile, message}`; empty stdout for no file, `pending`,
+  `held`, or `armed` by another session or with no session id given. FR-G (empty
   `before`) leaves `pending` and prints only the message; a malformed file is
   removed and reported with `kind: null`. Its stdout is pinned by
   `tests/mod/fixtures/*.json`.
@@ -167,7 +170,12 @@ note in `report-drive-failure.sh`.
   ended on Esc or the mod did not load — with a note naming the unloaded mod
   (`--safe-mode`, Claude Code older than 2.1.287) and printing the lines for the
   user to run. A file that does not parse is swept without lines; `held` is
-  exempt unless its owner is not this session (then it is abandoned). It also
+  exempt while its owner is this session. An `armed` or `held` file owned by
+  another session is left untouched and unreported while that session is live
+  (`handoff_owner_live`: its transcript, `<owner>.jsonl` beside the hook
+  input's `transcript_path`, read NUL-terminated, written within
+  `HANDOFF_OWNER_LIVE_SECS`, default 600), and swept otherwise (`held` as
+  abandoned), since background sessions share the root. It also
   reports session-root drift, once per episode (marker
   `/tmp/claude/handoff-drift-<session_id>`), with a `systemMessage` that leads
   with an ANSI style reset. Every removal it makes (`armed`, abandoned,
@@ -207,10 +215,13 @@ note in `report-drive-failure.sh`.
   `HANDOFF_POINTER_DIR` (`/tmp/claude`, overridable for tests);
   `handoff_drive_read()` parsing and validating
   the sentinel into `DRIVE_STATE`, `DRIVE_OWNER`, `DRIVE_KIND`, `DRIVE_BEFORE[]`,
-  `DRIVE_AFTER[]` or `DRIVE_ERR`; `handoff_drive_arm()` rewriting line 1
-  atomically (sibling temp, `mv`); `handoff_drive_has_source()` (`rename` has no
+  `DRIVE_AFTER[]` or `DRIVE_ERR`; `handoff_drive_arm()` writing the line 1 it
+  is given atomically (sibling temp, `mv`), so `handoff-approved` carries the
+  owner into `armed` and `drive-take.sh` drops it on `pending`;
+  `handoff_owner_live <transcript_path> <owner>` (the sweep's liveness test); `handoff_drive_has_source()` (`rename` has no
   confirming `SessionStart`; `compact` and `clear` do). Line 1 is the state
-  (`held <session-id>`, `armed`, `pending`; only `held` carries an owner), line 2
+  (`held <session-id>`, `armed <session-id>`, `pending`; the owner is one id,
+  required on `held` and `armed`, refused on `pending`), line 2
   the kind, and the kind fixes the shape: `rename` 3 lines, `compact` 2, 3 or 4,
   `clear` 4 or 5, counted over the whole file. Each command literal is pinned
   to its slot and a prose line may not begin with `/`. Parsed with a `read`
@@ -248,9 +259,10 @@ note in `report-drive-failure.sh`.
   for a boundary skill. The legacy reports (`legacy_reports`, from the plan
   module) print ahead of the directive parts, which
   `compose_directives(boundary, memory, ending, plans)` orders; the closing
-  line stays last. The state is `held
-  <session>` iff `(sentinel names a command ∧ memory directive emitted) ∨
-  (driven ∧ with-commit)`, else `armed` (`hold_decision`, one value that also
+  line stays last. Every call needs `CLAUDE_CODE_SESSION_ID`, checked before
+  anything is written, since line 1 names the owner either way. The state is
+  `held <session>` iff `(sentinel names a command ∧ memory directive emitted) ∨
+  (driven ∧ with-commit)`, else `armed <session>` (`hold_decision`, one value that also
   picks the arming instruction or the closing line). NFR1: no git work; the git
   line for a moved or removed legacy file is printed, never run, and names the
   paths relative to the root, which it hands to `git -C` (the reports name the
@@ -310,8 +322,8 @@ note in `report-drive-failure.sh`.
 - `bin/handoff-checkpoint` — PATH shim that execs `scripts/checkpoint.py`
   (`${CLAUDE_PLUGIN_ROOT}` is not available in the agent's Bash).
 - `bin/handoff-approved` — the one command that leaves `held`: no stdin, no
-  arguments, root from `HANDOFF_ROOT`. Moves the file to `armed` through
-  `handoff_drive_arm`; exits 2 when it is absent or not `held`, when the held
+  arguments, root from `HANDOFF_ROOT`. Moves the file to `armed <owner>`
+  through `handoff_drive_arm`, keeping the owner; exits 2 when it is absent or not `held`, when the held
   file is another session's, or when the kind is not `rename|clear|compact`.
   Prints its status fact, a blank line, then the closing line (literal per
   `case` arm, byte-for-byte `closing_directive()`).
@@ -435,18 +447,21 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
   prints, through the generated `tests/mod/fixtures.ts`.
 - `tests/drive-take.bats` — runs the real `drive-take.sh` over real sentinel
   files and asserts stdout equals `tests/mod/fixtures/*.json` (`@ROOT@`
-  substituted), plus: no file, `pending` and `held` print nothing and are
-  untouched; a take arms once only; `rename` removes the file; FR-G stays
+  substituted), plus: no file, `pending`, `held`, `armed` by another session
+  and no session id given print nothing and are untouched; a take arms once
+  only and leaves `pending` ownerless; `rename` removes the file; FR-G stays
   `pending`; malformed is discarded with `kind: null`; a worktree cwd takes the
   worktree's file and leaves the project's alone. Mutation-checked: dropping the
-  file check, the `armed` gate, the cwd, the arming.
+  file check, the `armed` gate, the owner check, the cwd, the arming, keeping
+  the owner on `pending`.
 - `tests/test_mod_fixtures.py` — `fixtures.ts` equals what
   `scripts/gen_mod_fixtures.py` renders; regenerate with
   `python3 scripts/gen_mod_fixtures.py`, never by hand.
 - `just mod-smoke` (`pytest -m live tests/test_mod_live.py -v -rs`, the `live`
   marker, deselected from `precommit`) — boots a real `claude -p --model haiku`
-  with this repo as `--plugin-dir` in a throwaway git repo, where the first turn
-  writes `.claude/autodrive` armed through one allowed `printf` Bash call (a
+  with this repo as `--plugin-dir` and a fixed `--session-id` in a throwaway git
+  repo, where the first turn writes `.claude/autodrive` armed and owned by that
+  id through one allowed `printf` Bash call (a
   sentinel that predates the prompt is discarded by the `UserPromptSubmit`
   sweep), then reads the session transcripts: a `custom-title` entry for
   `rename`; for `clear`, the continuation as a different session's first user
@@ -478,7 +493,11 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
   legacy file read rather than the project's, and both channels asserted whole
   with the note order pinned), `report-drive-failure.sh` (the failure file,
   the stranded-`pending` clear, the sweep's note naming the mod and printing the
-  lines, held-by-another-session as abandoned with no lines, a malformed file
+  lines, held-by-another-session as abandoned with no lines, an `armed` or
+  `held` file of another live session left untouched and one whose owner's
+  transcript is stale or missing, or with no `transcript_path`, swept, the
+  owner's own aborted turn swept however fresh its transcript, the
+  `HANDOFF_OWNER_LIVE_SECS` window, each gate mutation-checked, a malformed file
   with none, session-root drift episodes, the sweep's record: one line per
   removal naming the sweeper, newest 50 kept, an unwritable record not
   blocking the sweep; the `|| true` after the trim pipeline is pinned by the
@@ -563,8 +582,8 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
     closing line last, and the clause-file refusal printed last on a held and an
     armed fixture.
   - `tests/test_checkpoint_hold.py` — the arming instruction, the hold rule, the
-    held state and its owner, and the held path's check of
-    `CLAUDE_CODE_SESSION_ID`. Mutation-checked: the held/armed pair over one
+    held state and its owner, the armed state's owner, and the check of
+    `CLAUDE_CODE_SESSION_ID` on both paths. Mutation-checked: the held/armed pair over one
     fixture (never hold ⟹ the held row alone reds; hold whatever the sentinel
     names ⟹ the names-nothing row alone reds) and the `(driven ∧ with-commit)`
     disjunct.
