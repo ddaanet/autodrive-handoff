@@ -28,7 +28,8 @@ source "$(dirname "$0")/_lib.sh"
 # What this does not catch is the sentinel reached by a path that does not
 # mention its name: through a symlink called something else, or a case variant
 # on a case-insensitive filesystem.
-cwd="$(handoff_root "$hook_cwd")"
+handoff_root_read "$hook_cwd"
+cwd="$HANDOFF_ROOT"
 [[ -n "$cwd" ]] || exit 0
 { IFS= read -r -d '' target; IFS= read -r -d '' expected; IFS= read -r -d '' lexical; } < <(
     python3 -c 'import os, sys

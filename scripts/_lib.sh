@@ -408,9 +408,9 @@ handoff_drive_arm() {
 # plans/2026-06-09-per-worktree-handoff-root-design.md and
 # plans/2026-07-31-session-root-drift-design.md.
 #
-# Caller-scope globals rather than stdout (the handoff_drive_read idiom):
-# every other caller wants the root printed, and a global set inside the
-# `$(...)` that captures it would die with the subshell.
+# Caller-scope globals rather than stdout (the handoff_drive_read idiom): a
+# root printed into a `$(...)` capture loses any trailing newline it ends on,
+# naming a sibling directory, so no caller takes the root from stdout.
 # shellcheck disable=SC2034  # assigned for the caller's scope
 handoff_root_read() {
     local project="${CLAUDE_PROJECT_DIR:-$PWD}"
@@ -430,13 +430,6 @@ handoff_root_read() {
     { IFS= read -r -d '' HANDOFF_ROOT; IFS= read -r -d '' HANDOFF_ROOT_BRANCH; } < <(
         python3 "$(dirname "${BASH_SOURCE[0]}")/worktree_root.py" "$1" "$project"
     )
-}
-
-# The root alone, on stdout — one line, unchanged. Callers that also want the
-# branch call handoff_root_read directly.
-handoff_root() {
-    handoff_root_read "${1:-}" || return 1
-    printf '%s\n' "$HANDOFF_ROOT"
 }
 
 # Emit a PreToolUse deny on stdout, then `exit 0` (not `return`) —

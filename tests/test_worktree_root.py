@@ -114,3 +114,28 @@ def test_submodule_inside_project_is_inside(tmp_path: Path) -> None:
     sub.mkdir()
     (sub / ".git").write_text("gitdir: ../.git/modules/memory\n")
     assert worktree_root(str(sub), str(project)) == (str(project), "inside")
+
+
+# git writes `gitdir: <path>` and a newline, and reads back everything after the
+# prefix with only trailing CR/LF stripped, so a project path holding a newline
+# or a space survives in the file (probed: git 2.47 links such a worktree). A
+# line-wise read cuts the path at its newline and never matches project/.git.
+def test_project_path_with_newline_and_space_links_its_worktree(
+    tmp_path: Path,
+) -> None:
+    project = tmp_path / "pr\noj " / "proj"
+    (project / ".git" / "worktrees").mkdir(parents=True)
+    wt = _make_worktree(project)
+    assert worktree_root(str(wt), str(project)) == (str(wt), "worktree")
+
+
+# What git itself accepts, read back: no `gitdir: ` prefix on the first byte is
+# no link, whatever a later line says.
+def test_gitdir_line_not_first_is_not_a_link(tmp_path: Path) -> None:
+    project = _make_project(tmp_path)
+    wt = project.parent / "late"
+    wt.mkdir()
+    gitdir = project / ".git" / "worktrees" / "late"
+    gitdir.mkdir(parents=True)
+    (wt / ".git").write_text(f"junk\ngitdir: {gitdir}\n")
+    assert worktree_root(str(wt), str(project)) == (str(project), "foreign")

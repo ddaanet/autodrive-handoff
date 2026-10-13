@@ -210,8 +210,9 @@ note in `report-drive-failure.sh`.
   `handoff_root_read "<.cwd>"` setting `HANDOFF_ROOT` and
   `HANDOFF_ROOT_BRANCH` (`inside`, `worktree`, `foreign`, `unrelated` — the last
   two are drift) in the caller's scope, reading the resolver's answer
-  NUL-terminated so a root holding a newline survives, and `handoff_root()`
-  printing the root alone; every cwd-scoped hook anchors on it, an empty or project-root cwd
+  NUL-terminated so a root holding a newline survives (nothing prints the
+  root: a `$(...)` capture would strip a trailing newline); every cwd-scoped
+  hook anchors on it, an empty or project-root cwd
   short-circuiting in bash and labelling its own branch;
   `HANDOFF_POINTER_DIR` (`/tmp/claude`, overridable for tests);
   `handoff_drive_read()` parsing and validating
@@ -390,7 +391,7 @@ note in `report-drive-failure.sh`.
 ## Conventions
 
 - Use `${CLAUDE_PLUGIN_ROOT}` in `hooks.json` for portability.
-- All hooks are mechanical and cwd-scoped. They anchor on `handoff_root`
+- All hooks are mechanical and cwd-scoped. They anchor on `handoff_root_read`
   (the enclosing git-worktree root, else `CLAUDE_PROJECT_DIR`) — never on the
   raw hook-input `.cwd` (drift-prone) nor on `CLAUDE_PROJECT_DIR` directly
   (pinned to the main tree in a worktree session).
@@ -456,7 +457,8 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
   and no session id given print nothing and are untouched; a take arms once
   only and leaves `pending` ownerless; `rename` removes the file; FR-G stays
   `pending`; malformed is discarded with `kind: null`; a worktree cwd takes the
-  worktree's file and leaves the project's alone. Mutation-checked: dropping the
+  worktree's file and leaves the project's alone, one ending in a newline
+  included. Mutation-checked: dropping the
   file check, the `armed` gate, the owner check, the cwd, the arming, keeping
   the owner on `pending`.
 - `tests/test_mod_fixtures.py` — `fixtures.ts` equals what
@@ -509,7 +511,9 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
   4000-line row and the record call by the first two rows), a cwd holding a newline or ending in
   a space (`load-handoff.sh` and `report-drive-failure.sh`, at the project root
   and in a linked worktree; the fields that follow the cwd, `source` and
-  `session_id`, pinned apart from the root), the write guard (the sentinel
+  `session_id`, pinned apart from the root), a worktree whose path ends in a
+  newline (`handoff_root_read`, both loaders and the write guard), the drift
+  marker against a cwd holding or ending in a newline, the write guard (the sentinel
   denied under every spelling that normalises onto it — a trailing slash, a
   `/.`, a `..` detour, a newline in a directory component — and when it is a
   symlink or reached through an alias, in this project and across projects;
@@ -522,12 +526,15 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
   dropped task-shadowed note in `load-compact.sh`, and the legacy files read
   from `$CLAUDE_PROJECT_DIR` instead of the worktree.
   `tests/checkpoint.bats` covers what stayed bash around the checkpoint:
-  `inject-checkpoint-root.sh`, `bin/handoff-approved` (output pinned whole, one
+  `inject-checkpoint-root.sh` (a root holding whitespace or ending in a newline
+  round-trips), `bin/handoff-approved` (output pinned whole, one
   row per kind, against `closing_directive()` itself so the producers cannot
   drift) and the `bin/handoff-checkpoint` shim. `version-guard.sh` is tested
   in the toolkit, not here.
 - `just py-test` — `pytest`: `tests/test_worktree_root.py` (the resolver's
-  branch matrix, including the containment rule that keeps a submodule `inside`),
+  branch matrix, including the containment rule that keeps a submodule `inside`,
+  and the `.git` file read as git reads it: a project path holding a newline
+  and a space linked, a `gitdir: ` line not first not),
   `tests/test_mod_fixtures.py`, and the `tests/test_checkpoint_*.py` files,
   which drive `scripts/checkpoint.py` end-to-end via subprocess.
   `tests/conftest.py` holds what two or more of them use (the repository

@@ -2,7 +2,7 @@
 
 Part of [handoff — Design](../design.md).
 
-Every cwd-scoped hook anchors on `handoff_root()` — the enclosing linked
+Every cwd-scoped hook anchors on `handoff_root_read()` — the enclosing linked
 git-worktree root derived from on-disk `.git` linkage
 (`scripts/worktree_root.py`), falling back to `CLAUDE_PROJECT_DIR` — never
 the raw hook-input `.cwd` (drifts with `cd` and `/add-dir`) and never
@@ -14,9 +14,14 @@ the `python3` spawn.
 The resolver also reports **which branch** produced that answer — `inside`,
 `worktree`, `foreign`, `unrelated` — because the root alone collapses four
 different situations into one. `handoff_root_read()` sets the caller's
-`HANDOFF_ROOT` and `HANDOFF_ROOT_BRANCH` (the `handoff_drive_read` idiom);
-`handoff_root()` is the printing form, since every other caller captures it
-in a `$(...)` where a global would die with the subshell. Containment beats
+`HANDOFF_ROOT` and `HANDOFF_ROOT_BRANCH` (the `handoff_drive_read` idiom),
+and nothing prints the root: a `$(...)` capture strips trailing newlines, so a
+root ending in one came back naming a sibling directory. For the same reason
+every hook reads the hook input's `.cwd` NUL-terminated rather than through
+`jq -r` in a capture, the resolver answers NUL-terminated, the drift marker
+holds its cwd NUL-terminated, and `worktree_root.py` reads a worktree's
+`.git` file as git does — everything after `gitdir: ` with trailing CR and LF
+stripped — rather than line by line. Containment beats
 the branch the walk took: a submodule or vendored checkout inside the
 project is `inside`, not `foreign`.
 

@@ -13,9 +13,11 @@ set -euo pipefail
 # shellcheck source-path=SCRIPTDIR source=_lib.sh
 source "$(dirname "$0")/_lib.sh"
 
-input="$(cat)"
-hook_cwd="$(jq -r '.cwd // ""' <<<"$input")"
-cwd="$(handoff_root "$hook_cwd")"
+# NUL-terminated and read whole: a cwd is any string, and one ending in a
+# newline would lose it to a `$(...)` capture.
+IFS= read -r -d '' hook_cwd < <(jq -j '(.cwd // ""), "\u0000"') || true
+handoff_root_read "$hook_cwd"
+cwd="$HANDOFF_ROOT"
 [[ -n "$cwd" ]] || exit 0
 
 drive="$cwd/$HANDOFF_REL_DRIVE"

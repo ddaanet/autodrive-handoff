@@ -25,15 +25,19 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/_lib.sh"
 
 payload="$(cat)"
-command="$(jq -r '.tool_input.command // ""' <<<"$payload")"
+# One parse for both fields, each NUL-terminated and read whole: a cwd ending in
+# a newline would lose it to a `$(...)` capture.
+{ IFS= read -r -d '' command; IFS= read -r -d '' cwd; } < <(
+    jq -j '(.tool_input.command // ""), "\u0000", (.cwd // ""), "\u0000"' <<<"$payload"
+) || true
 
 case "$command" in
     *handoff-checkpoint* | *handoff-approved*) ;;
     *) exit 0 ;;
 esac
 
-cwd="$(jq -r '.cwd // ""' <<<"$payload")"
-root="$(handoff_root "$cwd")"
+handoff_root_read "$cwd"
+root="$HANDOFF_ROOT"
 [ -n "$root" ] || exit 0
 
 # export …; rather than a bare VAR=… prefix, so the value survives a batched

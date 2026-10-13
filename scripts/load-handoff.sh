@@ -26,7 +26,8 @@ source "$(dirname "$0")/_lib.sh"
 { IFS= read -r -d '' hook_cwd; IFS= read -r -d '' hook_event; IFS= read -r -d '' hook_source; } < <(
     jq -j '(.cwd // ""), "\u0000", (.hook_event_name // "SessionStart"), "\u0000", (.source // ""), "\u0000"'
 ) || true
-cwd="$(handoff_root "$hook_cwd")"
+handoff_root_read "$hook_cwd"
+cwd="$HANDOFF_ROOT"
 [[ -n "$cwd" ]] || exit 0
 
 notes=()   # systemMessage fragments from the transition, if any

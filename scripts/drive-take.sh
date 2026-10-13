@@ -15,7 +15,8 @@ set -euo pipefail
 # shellcheck source-path=SCRIPTDIR source=_lib.sh
 source "$(dirname "$0")/_lib.sh"
 
-root="$(handoff_root "${1:-}")"
+handoff_root_read "${1:-}"
+root="$HANDOFF_ROOT"
 session_id="${2:-}"
 [[ -n "$root" ]] || exit 0
 

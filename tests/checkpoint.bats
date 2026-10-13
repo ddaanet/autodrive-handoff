@@ -99,6 +99,18 @@ run_inject_root() {
     [ "$(cat "$repo/seen")" = "$repo" ]
 }
 
+# A root ending in a newline is what a `$(...)` capture of it loses: the
+# rewritten command would export a sibling directory.
+@test "inject-checkpoint-root: a root ending in a newline round-trips through the rewrite" {
+    repo="$(make_repo "$BATS_TEST_TMPDIR/nl-end"$'\n'; printf X)"; repo="${repo%$'\n'X}"
+    # shellcheck disable=SC2016   # $HANDOFF_ROOT is meant literal — it expands inside new_cmd's own bash -c, below
+    run_inject_root "$repo" 'printf %s "$HANDOFF_ROOT" > seen; true # handoff-checkpoint'
+    [ "$status" -eq 0 ]
+    new_cmd="$(jq -r '.hookSpecificOutput.updatedInput.command' <<<"$output")"
+    (cd "$repo" && bash -c "$new_cmd")
+    [ "$(cat "$repo/seen"; printf X)" = "$repo"X ]
+}
+
 # The row that would stay green under a bare `VAR=… cmd` prefix only by
 # accident: `VAR=x a && b` sets the variable for `a` alone, so a batched
 # command's SECOND stage would see nothing. `export …;` must survive it.

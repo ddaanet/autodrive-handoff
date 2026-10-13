@@ -69,13 +69,15 @@ notes=()
 marker="$HANDOFF_POINTER_DIR/handoff-drift-$session_id"
 case "$HANDOFF_ROOT_BRANCH" in
     foreign | unrelated)
+        # NUL-terminated and read whole: a cwd holding a newline compared by
+        # its first line would never match, and re-announce every turn.
         last=""
         if [[ -f "$marker" ]]; then
-            last="$(head -n1 "$marker")"
+            IFS= read -r -d '' last < "$marker" || true
         fi
         if [[ "$last" != "$hook_cwd" ]]; then
             mkdir -p "$HANDOFF_POINTER_DIR"
-            printf '%s\n' "$hook_cwd" > "$marker"
+            printf '%s\0' "$hook_cwd" > "$marker"
             msgs+=("session cwd left the launch repo — now $hook_cwd, handoff root stays $cwd")
             notes+=("The session cwd is $hook_cwd, outside the launch repo $cwd. Everything derived from cwd describes $hook_cwd — the environment block's working directory, the gitStatus block, the project CLAUDE.md. The transcript, the scratchpad, CLAUDE_PROJECT_DIR and every handoff file are under $cwd.")
         fi

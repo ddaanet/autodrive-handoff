@@ -158,3 +158,16 @@ take() {
     [ "$output" = "" ]
     [ "$(head -n1 "$tmp/.claude/autodrive")" = "armed sess-hook-test" ]
 }
+
+# A `$(...)` capture of the root strips a trailing newline and names a sibling
+# directory, so the worktree's own file would go untaken.
+@test "drive-take (worktree cwd ending in a newline: takes the worktree file)" {
+    wt="$BATS_TEST_TMPDIR/wtNL"$'\n'
+    mkdir -p "$wt/.claude" "$tmp/.git/worktrees/wtNL"
+    printf 'gitdir: %s\n' "$tmp/.git/worktrees/wtNL" > "$wt/.git"
+    seed "$wt" "armed sess-hook-test" compact "/compact" "continue with task 3"
+    take "$wt"
+    [ "$status" -eq 0 ]
+    jq -e --arg f "$wt/.claude/autodrive.failed" '.kind == "compact" and .failFile == $f' <<<"$output" >/dev/null
+    [ "$(head -n1 "$wt/.claude/autodrive")" = "pending" ]
+}

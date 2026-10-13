@@ -17,25 +17,31 @@ import sys
 def _read_gitdir(dotgit_file: str) -> str:
     """Return the absolute gitdir from a linked worktree's ``.git`` file, or "".
 
-    A linked worktree's ``.git`` is a file containing ``gitdir: <path>``. A
-    relative path is joined to the file's directory but not normalized; git
-    writes absolute gitdir paths in practice, so a relative one simply won't
-    match ``project/.git`` and the dir is treated as not-a-worktree (safe).
+    A linked worktree's ``.git`` is a file containing ``gitdir: <path>`` and a
+    newline. It is read as git reads it (``read_gitfile_gently``): the file
+    starts with ``gitdir: ``, and the path is everything after that prefix with
+    trailing CR and LF stripped, so a path holding a newline or ending in a
+    space is kept whole where a line-wise read would cut it. A relative path is
+    joined to the file's directory but not normalized; git writes absolute
+    gitdir paths in practice, so a relative one simply won't match
+    ``project/.git`` and the dir is treated as not-a-worktree (safe).
     """
     try:
-        with open(dotgit_file, encoding="utf-8") as f:
+        with open(dotgit_file, encoding="utf-8", newline="") as f:
             content = f.read()
     except (OSError, UnicodeDecodeError):
         return ""
-    for line in content.splitlines():
-        if line.startswith("gitdir:"):
-            path = line[len("gitdir:") :].strip()
-            if not path:
-                return ""
-            if not os.path.isabs(path):
-                path = os.path.join(os.path.dirname(dotgit_file), path)
-            return path
-    return ""
+    if not content.startswith(GITDIR_PREFIX):
+        return ""
+    path = content[len(GITDIR_PREFIX) :].rstrip("\r\n")
+    if not path:
+        return ""
+    if not os.path.isabs(path):
+        path = os.path.join(os.path.dirname(dotgit_file), path)
+    return path
+
+
+GITDIR_PREFIX = "gitdir: "
 
 
 def _is_under(path: str, parent: str) -> bool:
@@ -95,9 +101,7 @@ def main() -> None:
 
     The root, then the branch label, each terminated by a NUL byte: a root is
     any string, and one holding a newline would be cut by a line-wise read.
-    ``handoff_root_read`` in ``scripts/_lib.sh`` reads both; ``handoff_root``
-    prints only the first, so its own stdout contract — the root alone — is
-    unchanged.
+    ``handoff_root_read`` in ``scripts/_lib.sh`` reads both.
     """
     cwd = sys.argv[1] if len(sys.argv) > 1 else ""
     project = sys.argv[2] if len(sys.argv) > 2 else ""

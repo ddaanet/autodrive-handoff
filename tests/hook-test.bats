@@ -53,40 +53,39 @@ make_worktree() {
     printf '%s\n' "$wt"
 }
 
-# --- _lib.sh: handoff_root resolver ---
+# --- _lib.sh: handoff_root_read resolver ---
 
-@test "handoff_root: worktree cwd -> worktree root" {
+@test "handoff_root_read: worktree cwd -> worktree root" {
     wt="$(make_worktree wtA)"
-    run handoff_root "$wt"
-    [ "$status" -eq 0 ]
-    [ "$output" = "$wt" ]
+    handoff_root_read "$wt"
+    [ "$HANDOFF_ROOT" = "$wt" ]
 }
 
-@test "handoff_root: worktree subdir -> worktree root" {
+@test "handoff_root_read: worktree subdir -> worktree root" {
     wt="$(make_worktree wtB)"
-    run handoff_root "$wt/scripts"
-    [ "$status" -eq 0 ]
-    [ "$output" = "$wt" ]
+    handoff_root_read "$wt/scripts"
+    [ "$HANDOFF_ROOT" = "$wt" ]
 }
 
-@test "handoff_root: non-worktree cwd -> CLAUDE_PROJECT_DIR" {
-    run handoff_root "$other"
-    [ "$status" -eq 0 ]
-    [ "$output" = "$tmp" ]
+@test "handoff_root_read: non-worktree cwd -> CLAUDE_PROJECT_DIR" {
+    handoff_root_read "$other"
+    [ "$HANDOFF_ROOT" = "$tmp" ]
 }
 
 # The project-root and empty-cwd cases resolve in bash without spawning
 # python3 (they mirror worktree_root.py's trivial branches) — UserPromptSubmit and
 # the loaders hit this on every turn. A broken python3 on PATH proves
 # the fast path never leaves the shell.
-@test "handoff_root: project-root or empty cwd -> fast path, no python3" {
+@test "handoff_root_read: project-root or empty cwd -> fast path, no python3" {
     run bash -c '
         stub="$1/nopy"; mkdir -p "$stub"
         printf "#!/usr/bin/env bash\nexit 97\n" > "$stub/python3"
         chmod +x "$stub/python3"
         PATH="$stub:$PATH"
         source "$2/scripts/_lib.sh"
-        handoff_root "$CLAUDE_PROJECT_DIR" && handoff_root ""
+        handoff_root_read "$CLAUDE_PROJECT_DIR" && printf "%s\n" "$HANDOFF_ROOT"
+        HANDOFF_ROOT=stale
+        handoff_root_read "" && printf "%s\n" "$HANDOFF_ROOT"
     ' _ "$BATS_TEST_TMPDIR" "$repo_root"
     [ "$status" -eq 0 ]
     [ "$output" = "$tmp
@@ -98,9 +97,7 @@ $tmp" ]
 # The root alone collapses four different situations into one answer. The
 # branch label is what separates "cwd is still in the launch repo" from "cwd
 # has left it", which is the whole drift signal. It reaches the caller as a
-# global rather than on stdout, in the handoff_drive_read idiom: every printing
-# caller runs handoff_root in a command substitution, where a global set inside
-# the subshell would not survive.
+# global rather than on stdout, in the handoff_drive_read idiom.
 
 @test "handoff_root_read: worktree cwd -> branch worktree" {
     wt="$(make_worktree wtBR)"
@@ -159,11 +156,15 @@ inside" ]
     [ "$HANDOFF_ROOT_BRANCH" = "inside" ]
 }
 
-# handoff_root itself keeps its contract: the root alone on stdout, one line.
-@test "handoff_root: prints the root alone, not the branch" {
-    run handoff_root "$other"
-    [ "$status" -eq 0 ]
-    [ "$output" = "$tmp" ]
+# The root comes back in a variable, never through stdout, so a root ending in
+# a newline keeps it: a `$(...)` capture would strip it and name a sibling.
+@test "handoff_root_read: a worktree root ending in a newline survives, and nothing is printed" {
+    wt="$(make_worktree_nl_end wtnlR)"; wt="${wt%X}"
+    run handoff_root_read "$wt"
+    [ "$output" = "" ]
+    handoff_root_read "$wt"
+    [ "$HANDOFF_ROOT" = "$wt" ]
+    [ "$HANDOFF_ROOT_BRANCH" = "worktree" ]
 }
 
 # --- _lib.sh: handoff_deny emitter ---
@@ -1512,6 +1513,68 @@ context_of() {
     ctx="$(context_of "$output")"
     [[ "$ctx" == *"trailing worktree body"* ]]
     [[ "$ctx" != *"hook smoke test"* ]]
+}
+
+# A path ENDING in a newline is the shape a `$(...)` capture loses: command
+# substitution strips trailing newlines, so a root printed into one comes back
+# naming a sibling directory. Each hook that resolves the root is owed the same
+# answer as for any other path.
+
+# <name> — a linked worktree of $tmp whose path ends in a newline; echoes it
+# with an X appended, which the caller strips (the capture would eat the newline).
+make_worktree_nl_end() {
+    local wt="$BATS_TEST_TMPDIR/$1"$'\n'
+    mkdir -p "$wt/.claude" "$tmp/.git/worktrees/$1"
+    printf 'gitdir: %s\n' "$tmp/.git/worktrees/$1" > "$wt/.git"
+    printf '%sX' "$wt"
+}
+
+@test "load-handoff (cwd in a linked worktree whose path ends in a newline): the worktree's frame is injected" {
+    wt="$(make_worktree_nl_end wtnlA)"; wt="${wt%X}"
+    printf '## Current task\n\nnewline-ended worktree body\n' > "$wt/TASK.md"
+    run_load_handoff "$wt" "startup"
+    [ "$status" -eq 0 ]
+    ctx="$(context_of "$output")"
+    [[ "$ctx" == *"newline-ended worktree body"* ]]
+    [[ "$ctx" != *"hook smoke test"* ]]
+}
+
+@test "load-compact (cwd in a linked worktree whose path ends in a newline): consumed, todo re-injected" {
+    wt="$(make_worktree_nl_end wtnlB)"; wt="${wt%X}"
+    printf '## Remaining\n\n- newline-ended item\n' > "$wt/TODO.md"
+    printf '%s\n' pending compact /compact > "$wt/.claude/autodrive"
+    run_load_compact "$wt"
+    [ "$status" -eq 0 ]
+    [ ! -e "$wt/.claude/autodrive" ]
+    ctx="$(context_of "$output")"
+    [[ "$ctx" == *"newline-ended item"* ]]
+}
+
+@test "write-guard (worktree whose path ends in a newline: its own sentinel is checkpoint-only)" {
+    wt="$(make_worktree_nl_end wtnlC)"; wt="${wt%X}"
+    run_write_guard Write "$wt" "$wt/.claude/autodrive"
+    [ "$status" -eq 0 ]
+    echo "$output" | jq -e '.systemMessage == "write-guard: autodrive is checkpoint-only"' >/dev/null
+}
+
+@test "report-drive-failure (drift to a cwd holding a newline: reported once, not every prompt)" {
+    nlo="$BATS_TEST_TMPDIR/oth"$'\n'"er"
+    mkdir -p "$nlo/.git"
+    run_report_failure "$nlo"
+    [ -n "$output" ]
+    run_report_failure "$nlo"
+    [ "$status" -eq 0 ]
+    [ "$output" = "" ]
+}
+
+@test "report-drive-failure (drift to a cwd ending in a newline: reported once, not every prompt)" {
+    nlo="$BATS_TEST_TMPDIR/other-nl"$'\n'
+    mkdir -p "$nlo/.git"
+    run_report_failure "$nlo"
+    [ -n "$output" ]
+    run_report_failure "$nlo"
+    [ "$status" -eq 0 ]
+    [ "$output" = "" ]
 }
 
 @test "report-drive-failure (project root with a newline in a directory component): sweeps an armed sentinel" {
