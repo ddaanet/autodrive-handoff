@@ -14,7 +14,6 @@ from pathlib import Path
 import _checkpoint_lib as lib
 import pytest
 from conftest import (
-    _run_checkpoint_no_session_id,
     add_sdd_ledger,
     dirty_memory,
     drive_state,
@@ -185,7 +184,7 @@ def test_held_via_commit_session_id_unset_errors_before_any_write(
     repo = make_gitlore_repo(tmp_path)
     payload = handoff_payload("with-commit")
     payload["clear"] = True
-    result = _run_checkpoint_no_session_id(repo, payload)
+    result = run_checkpoint(repo, payload, with_session_id=False)
     assert result.returncode != 0
     # Guard against a vacuous pass: today's message blames the composer
     # ("composed a sentinel this version cannot read back") without naming
@@ -202,7 +201,7 @@ def test_held_via_memory_session_id_unset_errors_before_any_write(
     repo = make_gitlore_repo(tmp_path)
     dirty_memory(repo)
     payload = handoff_payload("without-commit")
-    result = _run_checkpoint_no_session_id(repo, payload)
+    result = run_checkpoint(repo, payload, with_session_id=False)
     assert result.returncode != 0
     assert "cannot read back" not in result.stderr
     assert "CLAUDE_CODE_SESSION_ID" in result.stderr
@@ -224,7 +223,7 @@ def test_armed_cell_session_id_unset_errors_before_any_write(tmp_path: Path) -> 
     """An armed sentinel names its owner too, so an armed cell needs the id."""
     repo = make_gitlore_repo(tmp_path)
     payload = handoff_payload("without-commit")
-    result = _run_checkpoint_no_session_id(repo, payload)
+    result = run_checkpoint(repo, payload, with_session_id=False)
     assert result.returncode != 0
     assert "cannot read back" not in result.stderr
     assert "CLAUDE_CODE_SESSION_ID" in result.stderr

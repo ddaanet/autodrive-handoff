@@ -299,3 +299,57 @@ def test_precompact_parts_print_in_order(tmp_path: Path) -> None:
 def test_closing_directive_raises_on_unknown_skill() -> None:
     with pytest.raises(ValueError, match="bogus"):
         lib.closing_directive("bogus", typed=False)
+
+
+# ==========================================================================
+# The harness acts on the repository it built, whatever git's environment
+# ==========================================================================
+#
+# gitlore's pre-commit hook runs `just precommit` with GIT_DIR, GIT_INDEX_FILE
+# and GIT_WORK_TREE exported for the outer repository. A builder or a runner
+# that passes them on aims every git call at that repository instead of the one
+# under tmp_path. A decoy repository stands in for the outer one.
+
+
+def _decoy_git_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    decoy = tmp_path / "decoy"
+    decoy.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=decoy, check=True)
+    (decoy / "tracked.txt").write_text("decoy\n")
+    subprocess.run(["git", "add", "tracked.txt"], cwd=decoy, check=True)
+    monkeypatch.setenv("GIT_DIR", str(decoy / ".git"))
+    monkeypatch.setenv("GIT_WORK_TREE", str(decoy))
+    monkeypatch.setenv("GIT_INDEX_FILE", str(decoy / ".git" / "index"))
+    return decoy
+
+
+def _git_bytes(decoy: Path) -> dict[str, bytes]:
+    git = decoy / ".git"
+    return {
+        str(p.relative_to(git)): p.read_bytes()
+        for p in sorted(git.rglob("*"))
+        if p.is_file()
+    }
+
+
+def test_make_repo_ignores_an_inherited_git_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    decoy = _decoy_git_env(tmp_path, monkeypatch)
+    before = _git_bytes(decoy)
+    repo = make_repo(tmp_path, "built")
+    assert (repo / ".git").is_dir()
+    assert _git_bytes(decoy) == before
+
+
+def test_run_checkpoint_ignores_an_inherited_git_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = make_gitlore_repo(tmp_path)
+    dirty_memory(repo)
+    decoy = _decoy_git_env(tmp_path, monkeypatch)
+    before = _git_bytes(decoy)
+    result = run_checkpoint(repo, handoff_payload("without-commit"))
+    assert result.returncode == 0
+    assert "feedback_x.md" in result.stdout
+    assert _git_bytes(decoy) == before

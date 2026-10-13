@@ -15,8 +15,6 @@ from conftest import (
     prose,
     run_checkpoint,
     task_clear,
-    task_content,
-    todo_content,
 )
 
 pytestmark = pytest.mark.usefixtures("_session_id")
@@ -53,7 +51,7 @@ def assert_task_shape_error(
 def test_task_body_cap_boundary(tmp_path: Path, count: int, *, accepted: bool) -> None:
     repo = make_repo(tmp_path)
     content = f"## Current task\n\n{prose(count)}\n"
-    result = run_checkpoint(repo, frame_payload(task_content(content)))
+    result = run_checkpoint(repo, frame_payload(content))
     task = repo / "TASK.md"
     if accepted:
         assert result.returncode == 0
@@ -80,7 +78,7 @@ def test_task_body_cap_does_not_count_headings(tmp_path: Path, content: str) -> 
     """Both fixtures exceed 1000 characters once heading lines are counted."""
     assert len(content) > TASK_BODY_LIMIT + 10
     repo = make_repo(tmp_path)
-    result = run_checkpoint(repo, frame_payload(task_content(content)))
+    result = run_checkpoint(repo, frame_payload(content))
     assert result.returncode == 0
     assert (repo / "TASK.md").read_text() == content
 
@@ -90,7 +88,7 @@ def test_task_body_cap_ignores_blank_lines_and_whitespace_around_the_body(
 ) -> None:
     content = f"\n\n   \n{prose(TASK_BODY_LIMIT)}\n  \n\n"
     repo = make_repo(tmp_path)
-    result = run_checkpoint(repo, frame_payload(task_content(content)))
+    result = run_checkpoint(repo, frame_payload(content))
     assert result.returncode == 0
     assert (repo / "TASK.md").read_text() == content
 
@@ -106,7 +104,7 @@ def test_task_body_cap_counts_characters_not_bytes(
     content = f"## Current task\n\n{prose(count, 'é')}\n"
     assert len(prose(count, "é").encode()) == 2 * count
     repo = make_repo(tmp_path)
-    result = run_checkpoint(repo, frame_payload(task_content(content)))
+    result = run_checkpoint(repo, frame_payload(content))
     if accepted:
         assert result.returncode == 0
         assert (repo / "TASK.md").read_text() == content
@@ -119,7 +117,7 @@ def test_task_hash_without_space_is_body_not_a_heading(tmp_path: Path) -> None:
     1000."""
     content = f"## Current task\n\n{prose(TASK_BODY_LIMIT)}\n#tag\n"
     repo = make_repo(tmp_path)
-    result = run_checkpoint(repo, frame_payload(task_content(content)))
+    result = run_checkpoint(repo, frame_payload(content))
     assert_task_shape_error(
         result, "task", "body is 1005 characters, the limit is 1000"
     )
@@ -158,7 +156,7 @@ def test_task_list_item_rejected_naming_its_line(
 ) -> None:
     assert len(quote) <= 40
     repo = make_repo(tmp_path)
-    result = run_checkpoint(repo, frame_payload(task_content(content)))
+    result = run_checkpoint(repo, frame_payload(content))
     assert_task_shape_error(result, "task", f'line {number} is a list item ("{quote}")')
     assert result.stderr.count("is a list item") == 1
     assert not (repo / "TASK.md").exists()
@@ -178,7 +176,7 @@ def test_task_list_item_rejected_naming_its_line(
 def test_task_lines_that_are_not_list_items_accepted(tmp_path: Path, line: str) -> None:
     content = f"## Current task\n\nintro\n{line}\n"
     repo = make_repo(tmp_path)
-    result = run_checkpoint(repo, frame_payload(task_content(content)))
+    result = run_checkpoint(repo, frame_payload(content))
     assert result.returncode == 0
     assert (repo / "TASK.md").read_text() == content
 
@@ -190,7 +188,7 @@ def test_task_over_the_cap_with_a_list_item_is_one_error_with_both_facts(
     count = len(content.strip())
     assert count > TASK_BODY_LIMIT
     repo = make_repo(tmp_path)
-    result = run_checkpoint(repo, frame_payload(task_content(content)))
+    result = run_checkpoint(repo, frame_payload(content))
     assert_task_shape_error(
         result,
         'line 2 is a list item ("- item")',
@@ -208,9 +206,7 @@ def test_task_shape_failure_writes_nothing(tmp_path: Path, content: str) -> None
     task_path = repo / "TASK.md"
     task_before = "## Current task\n\nstale\n"
     task_path.write_text(task_before)
-    payload = frame_payload(
-        task_content(content), todo_content("## Remaining\n\nnext step\n")
-    )
+    payload = frame_payload(content, "## Remaining\n\nnext step\n")
     result = run_checkpoint(repo, payload)
     assert result.returncode == 2
     assert "task" in result.stderr

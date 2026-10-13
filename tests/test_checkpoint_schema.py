@@ -19,8 +19,6 @@ from conftest import (
     precompact_payload,
     run_checkpoint,
     task_clear,
-    task_content,
-    todo_content,
     todo_keep,
 )
 
@@ -84,7 +82,7 @@ def test_drifted_cwd_writes_injected_root_never_cwd(tmp_path: Path) -> None:
         "rename": "T",
         "clear": False,
         "continue": None,
-        "task": task_content("## Current task\n\nbody\n"),
+        "task": "## Current task\n\nbody\n",
         "todo": todo_keep(),
     }
     result = run_checkpoint(elsewhere, payload, root=root)
@@ -249,7 +247,7 @@ def test_empty_or_null_rename_under_precompact_errors(
 
 @pytest.mark.parametrize(
     "value",
-    [task_content("## Current task\n\nreplacement\n"), task_clear(), None],
+    ["## Current task\n\nreplacement\n", task_clear(), None],
     ids=["content", "clear", "null"],
 )
 def test_task_present_under_precompact_errors(tmp_path: Path, value: object) -> None:
@@ -294,7 +292,7 @@ def test_precompact_without_task_leaves_no_task_file(
     if existed:
         (repo / "TASK.md").write_text("## Current task\n\nstale\n")
     todo = "## Remaining\n\n- an item\n"
-    result = run_checkpoint(repo, precompact_payload("with-commit", todo_content(todo)))
+    result = run_checkpoint(repo, precompact_payload("with-commit", todo))
     assert result.returncode == 0
     assert result.stderr == ""
     assert not (repo / "TASK.md").exists()
@@ -321,7 +319,7 @@ def test_precompact_task_removal_with_todo_content_writes_the_todo(
     todo = "## Remaining\n\n- fresh item\n"
     (repo / "TASK.md").write_text("## Current task\n\nstale\n")
     (repo / "TODO.md").write_text("## Remaining\n\n- old\n")
-    result = run_checkpoint(repo, precompact_payload("with-commit", todo_content(todo)))
+    result = run_checkpoint(repo, precompact_payload("with-commit", todo))
     assert result.returncode == 0
     assert not (repo / "TASK.md").exists()
     assert (repo / "TODO.md").read_text() == todo

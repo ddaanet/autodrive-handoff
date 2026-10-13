@@ -556,7 +556,12 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
   which drive `scripts/checkpoint.py` end-to-end via subprocess.
   `tests/conftest.py` holds what two or more of them use (the repository
   builders `make_repo` and `make_gitlore_repo`, the payload builders, the
-  `run_checkpoint` runner, `drive_state`, the ledger and memory fixtures), which
+  `run_checkpoint` runner (`with_session_id=False` for a run with no
+  `CLAUDE_CODE_SESSION_ID`), `drive_state`, the ledger and memory fixtures, and
+  `git_free_env`, the environment minus git's repository-local variables
+  (`git rev-parse --local-env-vars`) that both builders and the runner pass to
+  git, since gitlore's pre-commit hook exports `GIT_DIR`, `GIT_INDEX_FILE` and
+  `GIT_WORK_TREE` for the outer repository), which
   they import by name, since pytest's `pythonpath` carries `tests/`; a helper
   only one file uses is in that file. It also defines the `_session_id` fixture
   without `autouse`, so the other test files do not inherit it: each
@@ -610,7 +615,9 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
     sentinel's exact bytes, read back through `handoff_drive_read`.
   - `tests/test_checkpoint_directives.py` — the memory directive, the commit act
     (present under `with-commit` and absent without), the order of the parts
-    and the ledger-liveness matrix. Mutation-checked: `with-commit` output never
+    and the ledger-liveness matrix; and the harness's own isolation, `make_repo`
+    and `run_checkpoint` under a decoy `GIT_DIR`/`GIT_WORK_TREE`/
+    `GIT_INDEX_FILE` leaving the decoy byte-identical. Mutation-checked: `with-commit` output never
     mentions the trigger file.
   - `tests/test_checkpoint_composition.py` — the directive composition per skill
     (memory then SDD under `precompact`, absent under `handoff`), stdout exactly

@@ -20,9 +20,7 @@ from conftest import (
     precompact_payload,
     run_checkpoint,
     task_clear,
-    task_content,
     todo_clear,
-    todo_content,
     todo_edit,
     todo_keep,
 )
@@ -39,7 +37,7 @@ def test_task_write_creates_file(tmp_path: Path) -> None:
     """Handoff only: precompact forbids `task`, so it never writes one."""
     repo = make_repo(tmp_path)
     content = "## Current task\n\nreal content\n"
-    result = run_checkpoint(repo, frame_payload(task_content(content)))
+    result = run_checkpoint(repo, frame_payload(content))
     assert result.returncode == 0
     assert (repo / "TASK.md").read_text() == content
 
@@ -48,7 +46,7 @@ def test_task_write_replaces_a_pre_existing_file_whole(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
     (repo / "TASK.md").write_text("## Current task\n\nstale, and longer\n")
     content = "## Current task\n\nfresh\n"
-    result = run_checkpoint(repo, frame_payload(task_content(content)))
+    result = run_checkpoint(repo, frame_payload(content))
     assert result.returncode == 0
     assert (repo / "TASK.md").read_text() == content
 
@@ -66,7 +64,7 @@ def test_task_clear_leaves_no_file(tmp_path: Path, *, existed: bool) -> None:
     if existed:
         (repo / "TASK.md").write_text("## Current task\n\nstale\n")
     todo = "## Remaining\n\n- an item\n"
-    result = run_checkpoint(repo, frame_payload(task_clear(), todo_content(todo)))
+    result = run_checkpoint(repo, frame_payload(task_clear(), todo))
     assert result.returncode == 0
     assert result.stderr == ""
     assert not (repo / "TASK.md").exists()
@@ -86,7 +84,7 @@ def test_todo_clear_leaves_no_file(tmp_path: Path, *, existed: bool) -> None:
     if existed:
         (repo / "TODO.md").write_text("## Remaining\n\n- stale\n")
     task = "## Current task\n\nlive\n"
-    result = run_checkpoint(repo, frame_payload(task_content(task), todo_clear()))
+    result = run_checkpoint(repo, frame_payload(task, todo_clear()))
     assert result.returncode == 0
     assert result.stderr == ""
     assert not (repo / "TODO.md").exists()
@@ -112,9 +110,9 @@ def test_content_with_no_body_is_written_as_given(
     target = repo / ("TASK.md" if field == "task" else "TODO.md")
     target.write_text("## Remaining\n\nstale body\n")
     if field == "task":
-        payload = frame_payload(task_content(body))
+        payload = frame_payload(body)
     else:
-        payload = frame_payload(task_clear(), todo_content(body))
+        payload = frame_payload(task_clear(), body)
     result = run_checkpoint(repo, payload)
     assert result.returncode == 0
     assert target.read_text() == body
@@ -131,9 +129,9 @@ def test_todo_write_creates_file(tmp_path: Path, skill: str) -> None:
     repo = make_repo(tmp_path)
     content = "## Remaining\n\n- an item\n"
     if skill == "handoff":
-        payload = frame_payload(task_clear(), todo_content(content))
+        payload = frame_payload(task_clear(), content)
     else:
-        payload = precompact_payload("with-commit", todo_content(content))
+        payload = precompact_payload("with-commit", content)
     result = run_checkpoint(repo, payload)
     assert result.returncode == 0
     assert (repo / "TODO.md").read_text() == content
@@ -143,7 +141,7 @@ def test_task_and_todo_both_written(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
     task = "## Current task\n\nbody\n"
     todo = "## Remaining\n\n- x\n"
-    result = run_checkpoint(repo, frame_payload(task_content(task), todo_content(todo)))
+    result = run_checkpoint(repo, frame_payload(task, todo))
     assert result.returncode == 0
     assert (repo / "TASK.md").read_text() == task
     assert (repo / "TODO.md").read_text() == todo
@@ -249,7 +247,7 @@ def test_todo_edit_old_string_absent_errors_task_file_not_created(
     todo_before = "## Remaining\n\n- keep this\n"
     (repo / "TODO.md").write_text(todo_before)
     payload = frame_payload(
-        task_content("## Current task\n\nwould have been written\n"),
+        "## Current task\n\nwould have been written\n",
         todo_edit("- not present", "- x"),
     )
     result = run_checkpoint(repo, payload)
@@ -277,7 +275,7 @@ def test_todo_keep_leaves_the_list_as_it_is(tmp_path: Path, before: str | None) 
     if before is not None:
         todo.write_text(before)
     task = "## Current task\n\nreal content\n"
-    result = run_checkpoint(repo, frame_payload(task_content(task), todo_keep()))
+    result = run_checkpoint(repo, frame_payload(task, todo_keep()))
     assert result.returncode == 0
     assert (repo / "TASK.md").read_text() == task
     if before is None:

@@ -18,6 +18,7 @@ which must not inherit it. Each tests/test_checkpoint_*.py applies it with a
 module-level `pytestmark`.
 """
 
+import functools
 import json
 import os
 import shutil
@@ -56,8 +57,34 @@ def make_repo(tmp_path: Path, name: str = "repo") -> Path:
     if repo.exists():
         shutil.rmtree(repo)
     (repo / ".claude").mkdir(parents=True)
-    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True, env=git_free_env())
     return repo
+
+
+def git_free_env() -> dict[str, str]:
+    """This process's environment without git's repository-local variables.
+
+    gitlore's pre-commit hook runs the suite with GIT_DIR, GIT_INDEX_FILE and
+    GIT_WORK_TREE exported for the outer repository, and a git call that
+    inherits them acts on that repository rather than the one a test built. The
+    names are git's own list (`git rev-parse --local-env-vars`), a superset of
+    those three.
+    """
+    env = dict(os.environ)
+    for name in _git_local_env_vars():
+        env.pop(name, None)
+    return env
+
+
+@functools.cache
+def _git_local_env_vars() -> tuple[str, ...]:
+    result = subprocess.run(
+        ["git", "rev-parse", "--local-env-vars"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return tuple(result.stdout.split())
 
 
 def make_gitlore_repo(tmp_path: Path, name: str = "glrepo") -> Path:
@@ -66,18 +93,19 @@ def make_gitlore_repo(tmp_path: Path, name: str = "glrepo") -> Path:
         shutil.rmtree(repo)
     (repo / "memory").mkdir(parents=True)
     (repo / ".claude").mkdir(parents=True)
-    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True, env=git_free_env())
     (repo / ".gitmodules").write_text(
         '[submodule "gitlore-memory"]\n\tpath = memory\n\turl = ./memory\n'
     )
     mem = repo / "memory"
-    subprocess.run(["git", "init", "-q"], cwd=mem, check=True)
+    subprocess.run(["git", "init", "-q"], cwd=mem, check=True, env=git_free_env())
     (mem / "seed.md").write_text("seed\n")
-    subprocess.run(["git", "add", "-A"], cwd=mem, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=mem, check=True, env=git_free_env())
     subprocess.run(
         ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "seed"],
         cwd=mem,
         check=True,
+        env=git_free_env(),
     )
     clause_file = repo / ".gitlore-memory-approval-clause.txt"
     clause_file.write_text(GITLORE_MEMORY_APPROVAL_CLAUSE + "\n")
@@ -85,6 +113,7 @@ def make_gitlore_repo(tmp_path: Path, name: str = "glrepo") -> Path:
         ["git", "config", "gitlore.memoryApprovalClauseFile", str(clause_file)],
         cwd=repo,
         check=True,
+        env=git_free_env(),
     )
     return repo
 
@@ -119,18 +148,10 @@ def add_unidentified_sdd_ledger(repo: Path, slug: str = "ghmem") -> None:
     (d / "progress.md").write_text("# ghmem — progress (C2 COMPLETE)\n")
 
 
-def task_content(content: str) -> str:
-    return content
-
-
 def task_clear() -> dict[str, str]:
     # Also spelled out in tests/checkpoint.bats' handoff_payload(); the two
     # move together.
     return {"action": "clear"}
-
-
-def todo_content(content: str) -> str:
-    return content
 
 
 def todo_keep() -> dict[str, str]:
@@ -151,17 +172,23 @@ def run_checkpoint(
     root: Path | None = None,
     *,
     command: Sequence[str] = (sys.executable, str(CHECKPOINT)),
+    with_session_id: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     """Run checkpoint.py with cwd=repo, HANDOFF_ROOT=root (default repo).
 
     `command` replaces the interpreter-and-script argv, for a harness that wraps
-    the script.
+    the script. `with_session_id=False` runs it with no CLAUDE_CODE_SESSION_ID,
+    as a Bash call outside a session would. The environment carries none of
+    git's repository-local variables (`git_free_env`).
     """
-    env = dict(os.environ)
+    env = git_free_env()
     env["HANDOFF_ROOT"] = str(root if root is not None else repo)
-    env["CLAUDE_CODE_SESSION_ID"] = os.environ.get(
-        "CLAUDE_CODE_SESSION_ID", "sess-checkpoint"
-    )
+    if with_session_id:
+        env["CLAUDE_CODE_SESSION_ID"] = os.environ.get(
+            "CLAUDE_CODE_SESSION_ID", "sess-checkpoint"
+        )
+    else:
+        env.pop("CLAUDE_CODE_SESSION_ID", None)
     env.pop("CLAUDE_PROJECT_DIR", None)
     text = payload if isinstance(payload, str) else json.dumps(payload)
     return subprocess.run(
@@ -249,21 +276,3 @@ def precompact_payload(commit: str, todo: object = None) -> dict[str, object]:
         "continue": None,
         "todo": todo_keep() if todo is None else todo,
     }
-
-
-def _run_checkpoint_no_session_id(
-    repo: Path, payload: Mapping[str, object]
-) -> subprocess.CompletedProcess[str]:
-    env = dict(os.environ)
-    env["HANDOFF_ROOT"] = str(repo)
-    env.pop("CLAUDE_CODE_SESSION_ID", None)
-    env.pop("CLAUDE_PROJECT_DIR", None)
-    return subprocess.run(
-        [sys.executable, str(CHECKPOINT)],
-        cwd=repo,
-        input=json.dumps(payload),
-        env=env,
-        capture_output=True,
-        text=True,
-        check=False,
-    )

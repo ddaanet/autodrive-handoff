@@ -19,7 +19,6 @@ import _checkpoint_lib as lib
 import pytest
 from conftest import (
     CHECKPOINT,
-    _run_checkpoint_no_session_id,
     add_sdd_ledger,
     dirty_memory,
     drive_state,
@@ -30,9 +29,7 @@ from conftest import (
     precompact_payload,
     run_checkpoint,
     task_clear,
-    task_content,
     todo_clear,
-    todo_content,
     todo_edit,
     todo_keep,
 )
@@ -111,7 +108,7 @@ TODO_OVER_LEGACY = {
         TODO_LEGACY_BODY.replace("- second legacy item", "- edited item"),
         "moved",
     ),
-    "content": (todo_content(TODO_WRITTEN), TODO_WRITTEN, "moved_or_removed"),
+    "content": (TODO_WRITTEN, TODO_WRITTEN, "moved_or_removed"),
 }
 
 # The same three actions over a root file that has a body: what it ends as.
@@ -121,7 +118,7 @@ TODO_OVER_ROOT = {
         todo_edit("- second root item", "- edited root item"),
         TODO_ROOT_BODY.replace("- second root item", "- edited root item"),
     ),
-    "content": (todo_content(TODO_WRITTEN), TODO_WRITTEN),
+    "content": (TODO_WRITTEN, TODO_WRITTEN),
 }
 
 
@@ -267,7 +264,7 @@ def test_legacy_task_with_no_root_file_is_replaced_by_the_written_task(
 ) -> None:
     repo = make_repo(tmp_path)
     put(repo, LEGACY_TASK_REL, TASK_LEGACY_BODY)
-    result = run_checkpoint(repo, migration_payload(task_content(TASK_WRITTEN), None))
+    result = run_checkpoint(repo, migration_payload(TASK_WRITTEN, None))
     ok(result)
     assert read(repo / "TASK.md") == TASK_WRITTEN
     assert not (repo / LEGACY_TASK_REL).exists()
@@ -278,7 +275,7 @@ def test_both_halves_migrate_in_one_call_each_reported(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
     put(repo, LEGACY_TASK_REL, TASK_LEGACY_BODY)
     put(repo, LEGACY_TODO_REL, TODO_LEGACY_BODY)
-    payload = migration_payload(task_content(TASK_WRITTEN), todo_keep())
+    payload = migration_payload(TASK_WRITTEN, todo_keep())
     result = run_checkpoint(repo, payload)
     ok(result)
     assert read(repo / "TASK.md") == TASK_WRITTEN
@@ -336,7 +333,7 @@ def test_bodyless_root_task_is_replaced_by_the_written_task(
     repo = make_repo(tmp_path)
     put(repo, "TASK.md", root_before)
     put(repo, LEGACY_TASK_REL, TASK_LEGACY_BODY)
-    result = run_checkpoint(repo, migration_payload(task_content(TASK_WRITTEN), None))
+    result = run_checkpoint(repo, migration_payload(TASK_WRITTEN, None))
     ok(result)
     assert read(repo / "TASK.md") == TASK_WRITTEN
     assert not (repo / LEGACY_TASK_REL).exists()
@@ -377,7 +374,7 @@ def test_root_task_with_a_body_wins_and_the_legacy_file_is_reported_ignored(
     repo = make_repo(tmp_path)
     put(repo, "TASK.md", TASK_ROOT_BODY)
     put(repo, LEGACY_TASK_REL, legacy_before)
-    result = run_checkpoint(repo, migration_payload(task_content(TASK_WRITTEN), None))
+    result = run_checkpoint(repo, migration_payload(TASK_WRITTEN, None))
     ok(result)
     assert read(repo / "TASK.md") == TASK_WRITTEN
     assert read(repo / LEGACY_TASK_REL) == legacy_before
@@ -411,7 +408,7 @@ def test_each_ignored_legacy_file_is_reported_once(tmp_path: Path) -> None:
     put(repo, LEGACY_TASK_REL, TASK_LEGACY_BODY)
     put(repo, LEGACY_TODO_REL, TODO_LEGACY_BODY)
     before = snapshot(repo)
-    payload = migration_payload(task_content(TASK_ROOT_BODY), todo_keep())
+    payload = migration_payload(TASK_ROOT_BODY, todo_keep())
     result = run_checkpoint(repo, payload)
     ok(result)
     after = snapshot(repo)
@@ -435,7 +432,7 @@ def test_bodyless_todo_content_removes_the_legacy_file_and_says_so(
     repo = make_repo(tmp_path)
     put(repo, "TODO.md", root_before)
     put(repo, LEGACY_TODO_REL, TODO_LEGACY_BODY)
-    payload = migration_payload(task_clear(), todo_content(HEADINGS_ONLY))
+    payload = migration_payload(task_clear(), HEADINGS_ONLY)
     result = run_checkpoint(repo, payload)
     ok(result)
     assert read(repo / "TODO.md") == HEADINGS_ONLY
@@ -484,7 +481,7 @@ def test_bodyless_task_content_removes_the_legacy_file_and_says_so(
     put(repo, "TASK.md", root_before)
     put(repo, LEGACY_TASK_REL, TASK_LEGACY_BODY)
     headings = "## Current task\n"
-    result = run_checkpoint(repo, migration_payload(task_content(headings), None))
+    result = run_checkpoint(repo, migration_payload(headings, None))
     ok(result)
     assert read(repo / "TASK.md") == headings
     assert not (repo / LEGACY_TASK_REL).exists()
@@ -625,9 +622,8 @@ def test_a_rejected_payload_moves_nothing_and_the_fixed_one_migrates(
     put(repo, LEGACY_TASK_REL, TASK_LEGACY_BODY)
     put(repo, LEGACY_TODO_REL, TODO_LEGACY_BODY)
     before = snapshot(repo)
-    base = migration_payload(task_content(TASK_WRITTEN), todo_keep())
-    run = run_checkpoint if has_session else _run_checkpoint_no_session_id
-    rejected = run(repo, {**base, **spoiled})
+    base = migration_payload(TASK_WRITTEN, todo_keep())
+    rejected = run_checkpoint(repo, {**base, **spoiled}, with_session_id=has_session)
     assert rejected.returncode != 0
     assert stderr_says in rejected.stderr
     assert snapshot(repo) == before
@@ -1064,7 +1060,7 @@ def test_git_rm_act_names_only_the_files_that_moved_or_went(tmp_path: Path) -> N
     put(repo, "TASK.md", TASK_ROOT_BODY)
     put(repo, LEGACY_TASK_REL, TASK_LEGACY_BODY)
     put(repo, LEGACY_TODO_REL, TODO_LEGACY_BODY)
-    payload = migration_payload(task_content(TASK_WRITTEN), todo_keep(), "with-commit")
+    payload = migration_payload(TASK_WRITTEN, todo_keep(), "with-commit")
     result = run_checkpoint(repo, payload)
     ok(result)
     assert_reported(result.stdout, LEGACY_TASK_REL, "ignored")
@@ -1083,9 +1079,7 @@ def test_git_rm_act_is_not_owed_to_a_legacy_file_that_is_only_ignored(
     put(repo, "TODO.md", TODO_ROOT_BODY)
     put(repo, LEGACY_TASK_REL, TASK_LEGACY_BODY)
     put(repo, LEGACY_TODO_REL, TODO_LEGACY_BODY)
-    payload = migration_payload(
-        task_content(TASK_ROOT_BODY), todo_keep(), "with-commit"
-    )
+    payload = migration_payload(TASK_ROOT_BODY, todo_keep(), "with-commit")
     result = run_checkpoint(repo, payload)
     ok(result)
     assert_reported(result.stdout, LEGACY_TASK_REL, "ignored")
@@ -1143,7 +1137,7 @@ def test_todo_directory_with_a_legacy_body_is_refused_not_a_traceback(
     put(repo, LEGACY_TASK_REL, TASK_LEGACY_BODY)
     before = snapshot(repo)
     todo, _expected, _kind = TODO_OVER_LEGACY[action]
-    payload = migration_payload(task_content(TASK_WRITTEN), todo)
+    payload = migration_payload(TASK_WRITTEN, todo)
     result = run_checkpoint(repo, payload)
     assert result.returncode != 0
     assert "Traceback" not in result.stderr
@@ -1160,9 +1154,7 @@ def test_task_directory_with_a_legacy_body_is_refused_not_a_traceback(
     put(repo, LEGACY_TASK_REL, TASK_LEGACY_BODY)
     put(repo, LEGACY_TODO_REL, TODO_LEGACY_BODY)
     before = snapshot(repo)
-    result = run_checkpoint(
-        repo, migration_payload(task_content(TASK_WRITTEN), todo_keep())
-    )
+    result = run_checkpoint(repo, migration_payload(TASK_WRITTEN, todo_keep()))
     assert result.returncode != 0
     assert "Traceback" not in result.stderr
     assert "TASK.md" in result.stderr
@@ -1266,14 +1258,14 @@ FAILING_WRITES = {
         TODO_LEGACY_BODY,
         HEADINGS_ONLY,
         task_clear(),
-        todo_content(TODO_WRITTEN),
+        TODO_WRITTEN,
     ),
     "task_content": (
         "TASK.md",
         LEGACY_TASK_REL,
         TASK_LEGACY_BODY,
         "## Current task\n",
-        task_content(TASK_WRITTEN),
+        TASK_WRITTEN,
         todo_keep(),
     ),
 }
@@ -1373,14 +1365,14 @@ def test_todo_symlinked_at_the_legacy_path_is_refused_and_nothing_moves(
     todo = {
         "keep": todo_keep(),
         "edit": todo_edit("- second legacy item", "- c"),
-        "content": todo_content(TODO_WRITTEN),
+        "content": TODO_WRITTEN,
         "clear": todo_clear(),
     }[action]
     repo = make_repo(tmp_path)
     make_symlinked_legacy(repo, LEGACY_TODO_REL, TODO_LEGACY_BODY, relative=relative)
     put(repo, LEGACY_TASK_REL, TASK_LEGACY_BODY)
     before = snapshot(repo)
-    result = run_checkpoint(repo, migration_payload(task_content(TASK_WRITTEN), todo))
+    result = run_checkpoint(repo, migration_payload(TASK_WRITTEN, todo))
     assert result.returncode != 0
     assert "Traceback" not in result.stderr
     assert LEGACY_TODO_REL in result.stderr
@@ -1393,7 +1385,7 @@ def test_task_symlinked_at_the_legacy_path_is_refused_and_nothing_moves(
     tmp_path: Path, action: str, *, relative: bool
 ) -> None:
     """Its positive: the written task replacing a regular legacy task file."""
-    task = task_content(TASK_WRITTEN) if action == "content" else task_clear()
+    task = TASK_WRITTEN if action == "content" else task_clear()
     repo = make_repo(tmp_path)
     make_symlinked_legacy(repo, LEGACY_TASK_REL, TASK_LEGACY_BODY, relative=relative)
     put(repo, LEGACY_TODO_REL, TODO_LEGACY_BODY)
@@ -1425,9 +1417,7 @@ def test_a_symlinked_root_file_beside_a_legacy_file_is_refused(
     target.write_text(HEADINGS_ONLY)
     (repo / root_rel).symlink_to(target)
     before = snapshot(repo)
-    result = run_checkpoint(
-        repo, migration_payload(task_content(TASK_WRITTEN), todo_keep())
-    )
+    result = run_checkpoint(repo, migration_payload(TASK_WRITTEN, todo_keep()))
     assert snapshot(repo) == before
     assert result.returncode == 2
     assert "Traceback" not in result.stderr

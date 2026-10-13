@@ -19,9 +19,7 @@ from conftest import (
     make_repo,
     run_checkpoint,
     task_clear,
-    task_content,
     todo_clear,
-    todo_content,
     todo_edit,
     todo_keep,
 )
@@ -39,20 +37,20 @@ SENTINEL_REL = ".claude/autodrive"
 # Each case: the root name, and the task and todo of a call that reaches it.
 # The other half is a plain write, so a refusal is the whole call's.
 REACHING = {
-    "task_content": ("TASK.md", task_content(TASK_WRITTEN), todo_keep()),
+    "task_content": ("TASK.md", TASK_WRITTEN, todo_keep()),
     "task_clear": ("TASK.md", task_clear(), todo_keep()),
     "todo_content": (
         "TODO.md",
-        task_content(TASK_WRITTEN),
-        todo_content(TODO_WRITTEN),
+        TASK_WRITTEN,
+        TODO_WRITTEN,
     ),
     "todo_edit": (
         "TODO.md",
-        task_content(TASK_WRITTEN),
+        TASK_WRITTEN,
         todo_edit("- the link target's own item", "- edited"),
     ),
-    "todo_clear": ("TODO.md", task_content(TASK_WRITTEN), todo_clear()),
-    "todo_keep": ("TODO.md", task_content(TASK_WRITTEN), todo_keep()),
+    "todo_clear": ("TODO.md", TASK_WRITTEN, todo_clear()),
+    "todo_keep": ("TODO.md", TASK_WRITTEN, todo_keep()),
 }
 
 
@@ -104,7 +102,7 @@ def test_a_dangling_symlinked_root_file_is_refused_and_creates_nothing(
     """Writing through a dangling link would create its target."""
     repo = make_repo(tmp_path)
     (repo / rel).symlink_to("nowhere.md")
-    payload = frame_payload(task_content(TASK_WRITTEN), todo_content(TODO_WRITTEN))
+    payload = frame_payload(TASK_WRITTEN, TODO_WRITTEN)
     result = run_checkpoint(repo, payload)
     assert not (repo / "nowhere.md").exists()
     assert_refused(result, rel[:4].lower(), "symbolic link")
@@ -140,7 +138,7 @@ def test_a_todo_that_is_not_utf8_is_refused_on_edit_naming_the_field(
     repo = make_repo(tmp_path)
     raw = b"## Remaining\n\n- caf\xe9 item\n"
     (repo / "TODO.md").write_bytes(raw)
-    payload = frame_payload(task_content(TASK_WRITTEN), todo_edit("item", "x"))
+    payload = frame_payload(TASK_WRITTEN, todo_edit("item", "x"))
     result = run_checkpoint(repo, payload)
     assert_refused(result, "todo", "utf-8")
     assert (repo / "TODO.md").read_bytes() == raw
@@ -155,7 +153,7 @@ def test_a_todo_that_cannot_be_read_is_refused_on_edit_naming_the_field(
     (repo / "TODO.md").write_text(TODO_WRITTEN)
     (repo / "TODO.md").chmod(0o000)
     try:
-        payload = frame_payload(task_content(TASK_WRITTEN), todo_edit("item", "x"))
+        payload = frame_payload(TASK_WRITTEN, todo_edit("item", "x"))
         result = run_checkpoint(repo, payload)
         assert_refused(result, "todo", "cannot be read")
         assert not (repo / "TASK.md").exists()
@@ -175,7 +173,7 @@ def test_a_write_keeps_an_existing_files_mode(tmp_path: Path, mode: int) -> None
     for rel in ("TASK.md", "TODO.md"):
         (repo / rel).write_text("stale\n")
         (repo / rel).chmod(mode)
-    payload = frame_payload(task_content(TASK_WRITTEN), todo_content(TODO_WRITTEN))
+    payload = frame_payload(TASK_WRITTEN, TODO_WRITTEN)
     result = run_checkpoint(repo, payload)
     assert result.returncode == 0, result.stderr
     for rel, body in (("TASK.md", TASK_WRITTEN), ("TODO.md", TODO_WRITTEN)):
@@ -189,7 +187,7 @@ def test_a_new_file_takes_the_umask_mode_and_no_temporary_is_left(
     repo = make_repo(tmp_path)
     umask = os.umask(0o027)
     try:
-        payload = frame_payload(task_content(TASK_WRITTEN), todo_content(TODO_WRITTEN))
+        payload = frame_payload(TASK_WRITTEN, TODO_WRITTEN)
         result = run_checkpoint(repo, payload)
     finally:
         os.umask(umask)

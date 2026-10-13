@@ -9,7 +9,6 @@ from pathlib import Path
 
 import pytest
 from conftest import (
-    _run_checkpoint_no_session_id,
     dirty_memory,
     drive_state,
     frame_payload,
@@ -18,8 +17,6 @@ from conftest import (
     read_back_drive,
     run_checkpoint,
     task_clear,
-    task_content,
-    todo_content,
     todo_keep,
 )
 
@@ -95,7 +92,7 @@ def test_root_without_a_claude_directory_gets_one_for_the_sentinel(
     (repo / ".claude").rmdir()
     task = "## Current task\n\nbody\n"
     todo = "## Remaining\n\n- x\n"
-    result = run_checkpoint(repo, frame_payload(task_content(task), todo_content(todo)))
+    result = run_checkpoint(repo, frame_payload(task, todo))
     assert result.returncode == 0
     assert (repo / "TASK.md").read_text() == task
     assert (repo / "TODO.md").read_text() == todo
@@ -125,7 +122,7 @@ def test_autoname_without_a_session_id_errors_and_composes_nothing(
     """The rename sentinel is armed, and an armed sentinel names its owner."""
     repo = make_repo(tmp_path)
     payload = {"skill": "autoname", "rename": "A Side Conversation"}
-    result = _run_checkpoint_no_session_id(repo, payload)
+    result = run_checkpoint(repo, payload, with_session_id=False)
     assert result.returncode != 0
     assert "cannot read back" not in result.stderr
     assert "CLAUDE_CODE_SESSION_ID" in result.stderr
@@ -157,8 +154,8 @@ def test_rename_missing_under_autoname_errors(tmp_path: Path) -> None:
     ("field", "value"),
     [
         ("commit", "with-commit"),
-        ("task", task_content("body")),
-        ("todo", todo_content("body")),
+        ("task", "body"),
+        ("todo", "body"),
         ("clear", True),
         ("compact", True),
         ("continue", "pick up per the task file"),
