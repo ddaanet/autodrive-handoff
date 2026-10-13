@@ -2215,6 +2215,56 @@ run_report_failure() {
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
     echo "$output" | jq -e '.systemMessage | test("stale")' >/dev/null
+    [ -z "$(ls -A "$tmp/.claude/autodrive.swept")" ]
+}
+
+# mktemp failing (a read-only directory) is the record's failure, not the sweep's.
+@test "report-drive-failure (no temporary file can be made: the sweep still reports)" {
+    mkdir -p "$BATS_TEST_TMPDIR/stubmk"
+    printf '#!/usr/bin/env bash\nexit 1\n' > "$BATS_TEST_TMPDIR/stubmk/mktemp"
+    chmod +x "$BATS_TEST_TMPDIR/stubmk/mktemp"
+    seed_drive "$tmp" "compact" "/compact" "continue"
+    PATH="$BATS_TEST_TMPDIR/stubmk:$PATH" run_report_failure "$tmp"
+    [ "$status" -eq 0 ]
+    [ ! -e "$tmp/.claude/autodrive" ]
+    echo "$output" | jq -e '.systemMessage | test("stale")' >/dev/null
+    [ ! -e "$tmp/.claude/autodrive.swept" ]
+}
+
+# The record's paths sit in a directory the agent writes freely, so either may
+# be a symlink. Followed, the record would copy whatever the link names into a
+# file the agent reads, and write over it.
+@test "report-drive-failure (the record is a symlink: not read or replaced, the sweep still reports)" {
+    printf 'decoy bytes\n' > "$other/decoy"
+    ln -s "$other/decoy" "$tmp/.claude/autodrive.swept"
+    seed_drive "$tmp" "compact" "/compact" "continue"
+    run_report_failure "$tmp"
+    [ "$status" -eq 0 ]
+    [ ! -e "$tmp/.claude/autodrive" ]
+    echo "$output" | jq -e '.systemMessage | test("stale")' >/dev/null
+    [ -L "$tmp/.claude/autodrive.swept" ]
+    [ "$(cat "$other/decoy")" = "decoy bytes" ]
+}
+
+@test "report-drive-failure (a symlink at the old temporary name: not written through, the record still lands)" {
+    printf 'decoy bytes\n' > "$other/decoy"
+    ln -s "$other/decoy" "$tmp/.claude/autodrive.swept.tmp"
+    seed_drive "$tmp" "compact" "/compact" "continue"
+    run_report_failure "$tmp"
+    [ "$status" -eq 0 ]
+    [ ! -e "$tmp/.claude/autodrive" ]
+    [ "$(cat "$other/decoy")" = "decoy bytes" ]
+    [ ! -L "$tmp/.claude/autodrive.swept" ]
+    [ "$(wc -l < "$tmp/.claude/autodrive.swept")" -eq 1 ]
+    [[ "$(cat "$tmp/.claude/autodrive.swept")" == *$'\tstate=armed\t'* ]]
+}
+
+# The temporary file is the writer's own and is gone once the record is in place.
+@test "report-drive-failure (the record leaves no temporary file behind)" {
+    seed_drive "$tmp" "compact" "/compact" "continue"
+    run_report_failure "$tmp"
+    [ "$status" -eq 0 ]
+    [ "$(cd "$tmp/.claude" && printf '%s\n' autodrive.swept*)" = "autodrive.swept" ]
 }
 
 # The armed sentinel that survived to the next prompt never ran. One cause is a

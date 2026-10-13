@@ -185,7 +185,10 @@ note in `report-drive-failure.sh`.
   one tab-separated line to `.claude/autodrive.swept` — UTC time,
   `sweeper=<session id>`, `state=`, `owner=` (`-` for none), `kind=`,
   `age=<s>s` by mtime, `cwd=` `%q`-quoted — newest first, trimmed to 50, never
-  consumed, and a write failure never blocks the sweep. The report goes to the
+  consumed, and a write failure never blocks the sweep. A record that is a
+  symlink or not a regular file is left alone and nothing is recorded, and
+  the new record is built in a `mktemp` file beside it, never a fixed name.
+  The report goes to the
   removing session's channels, invisible from the session that composed the
   file, so this is the only trace of who took a sentinel.
 - `scripts/_lib.sh` — sourced helper (`# shellcheck source-path=SCRIPTDIR
@@ -509,8 +512,9 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
   `HANDOFF_OWNER_LIVE_SECS` window, each gate mutation-checked, a malformed file
   with none, session-root drift episodes and its cwd quoted (newline, ESC,
   backtick), the sweep's record: one line per
-  removal naming the sweeper, newest 50 kept, an unwritable record not
-  blocking the sweep; the `|| true` after the trim pipeline is pinned by the
+  removal naming the sweeper, newest 50 kept, an unwritable record, a
+  failing `mktemp`, a symlinked record and a symlink at the old fixed
+  temporary name each not blocking the sweep and none written through; the `|| true` after the trim pipeline is pinned by the
   4000-line row and the record call by the first two rows), a cwd holding a newline or ending in
   a space (`load-handoff.sh` and `report-drive-failure.sh`, at the project root
   and in a linked worktree; the fields that follow the cwd, `source` and

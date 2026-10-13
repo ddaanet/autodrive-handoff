@@ -102,9 +102,20 @@ swept="$cwd/$HANDOFF_REL_DRIVE_SWEPT"
 # session, the state and owner it saw, the kind, the sentinel's age in seconds
 # and the hook's cwd. Tab-separated; the cwd is %q-quoted so one holding a
 # newline stays on its line. Keeps the last 50 lines. A failure to write is not
-# the sweep's failure.
+# the sweep's failure, so every step is guarded: this runs under `set -e`.
+#
+# .claude/ is a directory the agent writes freely, so the record may be a
+# symlink: reading through one would copy what it names into the record, and
+# the rename would replace the link. A record that is a symlink, or anything
+# but a regular file, is left alone and nothing is recorded. The new record is built in a temporary file mktemp
+# creates beside it (never a fixed name, which could be a planted link to write
+# through) under the `autodrive.` prefix the `.claude/autodrive*` ignore
+# covers, and renamed over the record.
 record_sweep() {
-    local mtime now age
+    local mtime now age tmp_record
+    [[ -L "$swept" ]] && return 0
+    [[ -e "$swept" && ! -f "$swept" ]] && return 0
+    tmp_record="$(mktemp "$swept.XXXXXX" 2>/dev/null)" || return 0
     now="$(date +%s)"
     mtime="$(stat -c %Y "$drive" 2>/dev/null || stat -f %m "$drive" 2>/dev/null || true)"
     age="?"
@@ -118,8 +129,8 @@ record_sweep() {
         if [[ -f "$swept" ]]; then
             cat "$swept"
         fi
-    } 2>/dev/null | head -n 50 > "$swept.tmp" 2>/dev/null || true
-    mv -f "$swept.tmp" "$swept" 2>/dev/null || true
+    } 2>/dev/null | head -n 50 > "$tmp_record" 2>/dev/null || true
+    mv -f "$tmp_record" "$swept" 2>/dev/null || rm -f "$tmp_record" || true
 }
 
 # Parse once: the failure branch and the sweep want different states of the same

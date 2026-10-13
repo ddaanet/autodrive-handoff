@@ -215,8 +215,12 @@ cwd. The sweep's report lands on the removing session's own channels, which
 the session that composed the file never sees, and background sessions
 sharing the root (the commit review) run this hook too; without the record a
 vanished sentinel names no remover. It is newest first, trimmed to 50 lines,
-never consumed, and a failed write never blocks the sweep. It says who took
-the file and how old it was; it does not decide whether the sweep was right.
+never consumed, and a failed write never blocks the sweep. `.claude/` is the
+agent's to write, so the record is never followed through a symlink: one that
+is a link, or not a regular file, is left alone and nothing is recorded, and
+the rewrite goes through a `mktemp` file beside it rather than a fixed name a
+planted link could redirect. It says who took the file and how old it was; it
+does not decide whether the sweep was right.
 
 ## Verification
 
