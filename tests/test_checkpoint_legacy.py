@@ -761,7 +761,7 @@ def test_reports_and_the_git_rm_act_print_ahead_of_the_clause_file_refusal(
         act = git_act(repo, LEGACY_TODO_REL)
         assert report_at < out.index(act) < out.index(refusal.text)
     else:
-        assert UNSTAGE_MARK not in out
+        assert "git -C" not in out
         assert report_at < out.index(refusal.text)
 
 
@@ -818,7 +818,7 @@ def test_git_rm_act_is_owed_only_to_with_commit_over_a_legacy_file(
         assert act in out
         assert out.index(act) < out.rindex("Once everything above is done")
     else:
-        assert UNSTAGE_MARK not in out
+        assert "git -C" not in out
 
 
 def git_status_lines(repo: Path) -> list[str]:
@@ -1005,10 +1005,14 @@ UNPRINTABLE_ROOTS = {
     "carriage_return": "a\rINJECTED",
     "escape": "a\x1bINJECTED",
     "delete": "a\x7fINJECTED",
+    "line_separator": "a\u2028INJECTED",
+    "next_line": "a\x85INJECTED",
+    "bidi_override": "a\u202eINJECTED",
 }
 UNPRINTABLE_SENTENCE = (
-    "The project path holds a character that cannot be printed safely; "
-    "unstage the legacy files by hand with `git rm --cached` from the project root."
+    "The project path holds a character that cannot be printed safely. "
+    "From the directory that holds the project's `.claude/` directory, "
+    f"run `git rm --cached --ignore-unmatch -q -- {LEGACY_TODO_REL}`."
 )
 
 
@@ -1035,7 +1039,7 @@ def test_a_root_that_cannot_be_printed_is_refused_not_interpolated(
     assert "INJECTED" not in out, out
     assert str(root) not in out
     assert UNPRINTABLE_SENTENCE in out
-    assert UNSTAGE_MARK not in out
+    assert "git -C" not in out
     assert "\x1b" not in out
     assert out.count(UNPRINTABLE_SENTENCE) == 1
     assert out.endswith(lib.closing_directive("handoff", typed=False)), out
