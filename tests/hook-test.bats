@@ -2615,13 +2615,13 @@ run_report_failure() {
     [[ "$line" == *$'\tsweeper='"$SESSION_ID"$'\tstate=armed\towner='"$SESSION_ID"$'\tkind=compact\tage='[0-9]*s$'\tcwd='* ]]
 }
 
-@test "report-drive-failure (a sweep records who removed what: held by another session)" {
-    printf '%s\n' "held other-session" "clear" "/rename t" "/clear" "go" > "$tmp/.claude/autodrive"
+@test "report-drive-failure (a sweep records who removed what: armed by another session)" {
+    printf '%s\n' "armed other-session" "clear" "/rename t" "/clear" "go" > "$tmp/.claude/autodrive"
     run_report_failure "$tmp"
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
     line="$(cat "$tmp/.claude/autodrive.swept")"
-    [[ "$line" == *$'\tsweeper='"$SESSION_ID"$'\tstate=abandoned\towner=other-session\tkind=clear\t'* ]]
+    [[ "$line" == *$'\tsweeper='"$SESSION_ID"$'\tstate=armed\towner=other-session\tkind=clear\t'* ]]
 }
 
 @test "report-drive-failure (a sweep records a stranded pending file)" {
@@ -2797,17 +2797,6 @@ pick up '"'"'task  3'"'"' per the *file*; then \ done'
     echo "$output" | jq -e '.hookSpecificOutput.additionalContext | test("fenced code block") | not' >/dev/null
 }
 
-# A held file owned by a dead session is a different cause entirely, and its
-# lines are a dead session's: offering them for typing would replay them into
-# this conversation.
-@test "report-drive-failure (held file of a dead session: lines are not offered)" {
-    printf '%s\n' "held sess-someone-else" "clear" "/rename A Title" "/clear" "resume" \
-        > "$tmp/.claude/autodrive"
-    run_report_failure "$tmp"
-    [ "$status" -eq 0 ]
-    echo "$output" | jq -e '.systemMessage | test("Type in order") | not' >/dev/null
-    echo "$output" | jq -e '.hookSpecificOutput.additionalContext | test("/rename A Title") | not' >/dev/null
-}
 
 # A sentinel that does not parse — here, a `clear` with only one of its four
 # command/prose lines — describes no transition this session can complete.
@@ -2931,18 +2920,21 @@ clear" ]
     [ "$(head -n1 "$tmp/.claude/autodrive")" = "held $SESSION_ID" ]
 }
 
-# The exemption reaches exactly as far as its reason. A held file belongs to the
-# session whose approval it waits on; once that session is gone the approval can
-# never arrive. Left on disk it stays armable indefinitely, and handoff-approved
-# would arm a dead session's `/rename` + `/clear` into a live conversation. With
-# no transcript_path nothing shows the owner alive, so it is swept.
-@test "report-drive-failure (held file owned by a dead session: discarded)" {
+# Another session's held file waits on that session's user, for as long as the
+# approval takes, and an idle transcript is what such a wait looks like. It is
+# never swept from here, whatever shows of its owner: with no transcript_path
+# nothing does, and it is still left as it was, its lines never offered. A dead
+# owner's file is replaced by the next checkpoint in the root, and only its
+# owner's handoff-approved can arm it.
+@test "report-drive-failure (held file of another session, no transcript_path: left untouched)" {
     printf '%s\n' "held sess-someone-else" "clear" "/rename A Title" "/clear" "resume" \
         > "$tmp/.claude/autodrive"
+    before="$(cat "$tmp/.claude/autodrive")"
     run_report_failure "$tmp"
     [ "$status" -eq 0 ]
-    [ ! -e "$tmp/.claude/autodrive" ]
-    echo "$output" | jq -e '.systemMessage | test("stale|discarded")' >/dev/null
+    [ "$output" = "" ]
+    [ "$(cat "$tmp/.claude/autodrive")" = "$before" ]
+    [ ! -e "$tmp/.claude/autodrive.swept" ]
 }
 
 # --- report-drive-failure: a sentinel owned by another live session ---
@@ -2989,7 +2981,7 @@ seed_owned() {  # <state> <owner>
     echo "$output" | jq -e '.systemMessage | test("stale autodrive discarded — the drive mod")' >/dev/null
     [[ "$(cat "$tmp/.claude/autodrive.swept")" == *$'\tstate=armed\towner=sess-owner\t'* ]]
     # Its lines are a dead session's: offering them for typing would replay them
-    # into this conversation, as for a dead session's held file.
+    # into this conversation.
     echo "$output" | jq -e '.systemMessage | test("Type in order") | not' >/dev/null
     echo "$output" | jq -e '.hookSpecificOutput.additionalContext | test("/rename A Title") | not' >/dev/null
 }
@@ -3044,22 +3036,26 @@ seed_owned() {  # <state> <owner>
     [ ! -e "$tmp/.claude/autodrive.swept" ]
 }
 
-@test "report-drive-failure (held by another session, its transcript stale: swept as abandoned)" {
+# The pair to the stale-armed row above, over the same transcript age: a held
+# file waits on a human, so a quiet transcript sweeps the armed file and not
+# this one.
+@test "report-drive-failure (held by another session, its transcript stale: left untouched)" {
     seed_owned held sess-owner
     tp="$(seed_transcript sess-owner 3600)"
     run_report_failure "$tmp" "$SESSION_ID" "$tp"
     [ "$status" -eq 0 ]
-    [ ! -e "$tmp/.claude/autodrive" ]
-    echo "$output" | jq -e '.systemMessage | test("held by a session that is gone")' >/dev/null
+    [ "$output" = "" ]
+    [ "$(head -n1 "$tmp/.claude/autodrive")" = "held sess-owner" ]
+    [ ! -e "$tmp/.claude/autodrive.swept" ]
 }
 
-@test "report-drive-failure (held by another session with no transcript of its own: swept as abandoned)" {
+@test "report-drive-failure (held by another session with no transcript of its own: left untouched)" {
     seed_owned held sess-owner
     tp="$(seed_transcript "$SESSION_ID")"
     run_report_failure "$tmp" "$SESSION_ID" "$tp"
     [ "$status" -eq 0 ]
-    [ ! -e "$tmp/.claude/autodrive" ]
-    echo "$output" | jq -e '.systemMessage | test("held by a session that is gone")' >/dev/null
+    [ "$output" = "" ]
+    [ "$(head -n1 "$tmp/.claude/autodrive")" = "held sess-owner" ]
 }
 
 @test "report-drive-failure (failure and stale file: one report covering both)" {

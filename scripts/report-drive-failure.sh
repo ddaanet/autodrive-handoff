@@ -24,7 +24,8 @@
 #    session's can — every session sharing the root runs this hook, the
 #    background session the harness starts after a `git commit` included — so
 #    the file names its owner, and one owned by another session is swept only
-#    when that session is no longer live (its transcript has gone quiet). For
+#    when that session is no longer live (its transcript has gone quiet); a
+#    `held` one, waiting on its owner's user, never. For
 #    an armed file the report also prints the lines it held, one per line, for
 #    the user to type in order.
 #    (Prose injected into a still-running turn is the one exception, and it
@@ -230,19 +231,23 @@ fi
 # `armed` and `held` both name their owner, and every session sharing this root
 # runs this hook — the background session the harness starts after a `git
 # commit` included — so another session's prompt says nothing about whether
-# the owner is gone. A file owned by another session that is still live (its
-# transcript written within HANDOFF_OWNER_LIVE_SECS, handoff_owner_live) is
-# not this session's to judge: it is left untouched and nothing is said. One
-# whose owner is not live is swept: an armed one as a stale autodrive, a held
-# one as abandoned, since the approval it waits on can no longer arrive and
-# left on disk it stays armable by handoff-approved indefinitely.
-if [[ ( "$drive_state" == "armed" || "$drive_state" == "held" ) \
-      && -n "$session_id" && "$drive_owner" != "$session_id" ]]; then
-    if handoff_owner_live "$transcript_path" "$drive_owner"; then
-        drive_state="foreign"
-    elif [[ "$drive_state" == "held" ]]; then
-        drive_state="abandoned"
-    fi
+# the owner is gone.
+#
+# Another session's `armed` file lives only until its owner's turn ends. One
+# whose owner is still live (its transcript written within
+# HANDOFF_OWNER_LIVE_SECS, handoff_owner_live) is left untouched and nothing
+# is said; one whose owner is not live is swept as a stale autodrive.
+#
+# A `held` file, whoever owns it, is not judged by liveness at all and stays in
+# its state, which the sweep below exempts: it waits on a human approval,
+# which takes as long as it takes, and an idle transcript is exactly what a
+# session waiting on its user looks like. A dead owner's held file stays on
+# disk: it is a few short lines, arms nothing by itself (only its owner's
+# handoff-approved releases it) and the next checkpoint in this root replaces
+# it.
+if [[ "$drive_state" == "armed" && -n "$session_id" && "$drive_owner" != "$session_id" ]] \
+    && handoff_owner_live "$transcript_path" "$drive_owner"; then
+    drive_state="foreign"
 fi
 
 # The mod writes the record only on a rejection it observed, and never a link:
@@ -287,10 +292,8 @@ fi
 # `held` is the exception, and the reason this is a list rather than "anything
 # but pending": a held transition is *waiting* on an approval whose answer
 # arrives at this very hook, so surviving the turn boundary is what it is for.
-# The exemption reaches exactly as far as that reason — a held file owned by
-# another session that is not live was reclassified above as abandoned. A file
-# of either state owned by another live session was reclassified as `foreign`
-# and is not this session's to take.
+# That holds for any owner's held file. Another session's armed file while it
+# is live was reclassified above as `foreign` and is not this session's to take.
 armed_lines=""   # the armed lines, for the user to type in order
 if [[ "$drive_state" == "unread" ]]; then
     msgs+=("autodrive not read — $drive_err; left in place")
@@ -305,7 +308,7 @@ if [[ -n "$drive_state" && "$drive_state" != "pending" && "$drive_state" != "hel
         notes+=("A .claude/autodrive file was still armed when this turn began, so the transition it described did not run. Most likely the drive mod did not load (--safe-mode, or a Claude Code older than 2.1.287); an interrupt or crash that ended the turn before it was taken leaves the same trace. The file has been discarded, so it cannot fire into unrelated work later.")
         # The lines are offered only to the session that wrote them. Another
         # session's, swept because its owner is not live, would be replayed into
-        # this conversation — the reason a dead session's held file offers none.
+        # this conversation.
         if (( ${#drive_lines[@]} > 0 )) && [[ "$drive_owner" == "$session_id" ]]; then
             armed_lines="$(printf '%s\n' "${drive_lines[@]}")"
             notes+=("Present these lines to the user in a fenced code block, to type in order:
@@ -314,9 +317,6 @@ $armed_lines")
     elif [[ "$drive_state" == "link" ]]; then
         msgs+=("autodrive discarded — it was a symbolic link, which no checkpoint writes")
         notes+=("A .claude/autodrive symbolic link was on disk when this turn began. No checkpoint writes one, so it was removed without reading what it points at, and no transition ran from it.")
-    elif [[ "$drive_state" == "abandoned" ]]; then
-        msgs+=("stale autodrive discarded — it was held by a session that is gone")
-        notes+=("A .claude/autodrive file held by another session was still on disk when this turn began. The approval it waited on can no longer arrive, so it has been discarded and the transition it described did not happen.")
     else
         msgs+=("stale autodrive discarded — it does not parse in this version's format")
         notes+=("A .claude/autodrive file was still on disk when this turn began and does not parse in this version's format. It has been discarded, so the transition it described did not happen and cannot fire into unrelated work later.")
