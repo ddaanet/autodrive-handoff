@@ -77,6 +77,7 @@ def main() -> int:
     owner = validation.require_session_id(
         "transition", "cannot compose a sentinel naming the session that owns it"
     )
+    check_sentinel_target(root)
 
     plans: list[planning.FilePlan] = []
     if skill in ("handoff", "precompact"):
@@ -133,7 +134,6 @@ def compose_sentinel(
     state = f"held {owner}" if held else f"armed {owner}"
 
     drive_path = root / HANDOFF_REL_DRIVE
-    drive_path.parent.mkdir(exist_ok=True)
     sentinel_lines = [state, transition.kind, *transition.cmds]
     if continuation:
         sentinel_lines.append(continuation)
@@ -142,9 +142,15 @@ def compose_sentinel(
     # The temporary file takes the `autodrive.` prefix, which the
     # `.claude/autodrive*` ignore covers, so one orphaned by a kill is never
     # committed.
-    planning.write_replacing(
-        drive_path, "\n".join(sentinel_lines) + "\n", prefix=f"{drive_path.name}."
-    )
+    try:
+        drive_path.parent.mkdir(exist_ok=True)
+        planning.write_replacing(
+            drive_path,
+            "\n".join(sentinel_lines) + "\n",
+            prefix=f"{drive_path.name}.",
+        )
+    except OSError as e:
+        lib.err("transition", f"cannot write {HANDOFF_REL_DRIVE}: {e.strerror or e}")
 
     ok, drive_err = _read_back_drive(drive_path)
     if not ok:
@@ -153,6 +159,26 @@ def compose_sentinel(
             "transition",
             f"composed a sentinel this version cannot read back — {drive_err}",
         )
+
+
+def check_sentinel_target(root: Path) -> None:
+    """Refuse a sentinel path that cannot take a file, before any write.
+
+    `.claude` must be a directory (a link to one is written where it points) or
+    absent, and `.claude/autodrive` must not be a directory. Checked ahead of
+    the frame files, so a call that could not compose its sentinel leaves
+    TASK.md and TODO.md as they were. compose_sentinel still routes any other
+    write failure through `lib.err`.
+    """
+    drive_path = root / HANDOFF_REL_DRIVE
+    parent = drive_path.parent
+    if (parent.exists() or parent.is_symlink()) and not parent.is_dir():
+        lib.err(
+            "transition",
+            f"cannot write {HANDOFF_REL_DRIVE}: {parent.name} is not a directory",
+        )
+    if drive_path.is_dir() and not drive_path.is_symlink():
+        lib.err("transition", f"cannot write {HANDOFF_REL_DRIVE}: it is a directory")
 
 
 def _read_back_drive(drive_path: Path) -> tuple[bool, str]:

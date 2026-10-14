@@ -99,6 +99,37 @@ def test_root_without_a_claude_directory_gets_one_for_the_sentinel(
     assert read_back_drive(repo / ".claude" / "autodrive")
 
 
+@pytest.mark.parametrize("blocked", ["claude-is-a-file", "sentinel-is-a-directory"])
+def test_a_sentinel_path_that_cannot_take_a_file_is_refused_before_any_write(
+    tmp_path: Path, blocked: str
+) -> None:
+    """`.claude` a file, or `.claude/autodrive` a directory: the sentinel cannot
+    be written there.
+
+    The call exits 2 naming the field and the path, with no traceback, and is
+    refused before either frame file is touched.
+    """
+    repo = make_repo(tmp_path)
+    if blocked == "claude-is-a-file":
+        (repo / ".claude").rmdir()
+        (repo / ".claude").write_text("not a directory\n")
+        rel = ".claude"
+    else:
+        (repo / ".claude" / "autodrive").mkdir()
+        rel = ".claude/autodrive"
+    (repo / "TASK.md").write_text("## Current task\n\nold\n")
+    (repo / "TODO.md").write_text("## Remaining\n\n- old\n")
+    result = run_checkpoint(
+        repo, frame_payload("## Current task\n\nnew\n", "## Remaining\n\n- new\n")
+    )
+    assert result.returncode == 2, result.stderr
+    assert "Traceback" not in result.stderr
+    assert "transition" in result.stderr
+    assert rel in result.stderr
+    assert (repo / "TASK.md").read_text() == "## Current task\n\nold\n"
+    assert (repo / "TODO.md").read_text() == "## Remaining\n\n- old\n"
+
+
 # ==========================================================================
 # the autoname skill
 # ==========================================================================
