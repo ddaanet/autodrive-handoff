@@ -2319,6 +2319,52 @@ run_load_compact() {
     [ "$(head -n1 "$tmp/.claude/autodrive")" = "armed $SESSION_ID" ]
 }
 
+# --- the sentinel reader's helper fails (python3 -I prints nothing) ---
+#
+# A reader that could not run says nothing about the file, which may be a
+# perfectly valid transition: no caller removes it, and each says so. The stub
+# fails only handoff_read_regular's `python3 -I -c` (the one opening with
+# O_NOFOLLOW), so every other python3 call still runs; the cwd is the project root, so the
+# resolver's fast path spawns nothing.
+reader_stub() {
+    local real stub="$BATS_TEST_TMPDIR/broken-reader"
+    real="$(command -v python3)"
+    mkdir -p "$stub"
+    # shellcheck disable=SC2016  # the stub's own $1/$3, expanded when it runs
+    printf '#!/usr/bin/env bash\ncase "$1 $3" in "-I "*O_NOFOLLOW*) exit 97 ;; esac\nexec %q "$@"\n' "$real" > "$stub/python3"
+    chmod +x "$stub/python3"
+    printf '%s' "$stub"
+}
+
+@test "load-handoff (clear, the reader's helper fails: pending kept, said so)" {
+    seed_pending "$tmp" "clear" "/rename A Title" "/clear" "pick up per the task file"
+    before="$(cat "$tmp/.claude/autodrive")"
+    PATH="$(reader_stub):$PATH" run_load_handoff "$tmp" clear
+    [ "$status" -eq 0 ]
+    [ "$(cat "$tmp/.claude/autodrive")" = "$before" ]
+    echo "$output" | jq -e '.systemMessage | test("helper that reads it failed") and test("left in place")' >/dev/null
+}
+
+@test "load-compact (the reader's helper fails: pending kept, said so)" {
+    seed_pending "$tmp" "compact" "/compact" "continue"
+    before="$(cat "$tmp/.claude/autodrive")"
+    PATH="$(reader_stub):$PATH" run_load_compact "$tmp"
+    [ "$status" -eq 0 ]
+    [ "$(cat "$tmp/.claude/autodrive")" = "$before" ]
+    echo "$output" | jq -e '.systemMessage | test("helper that reads it failed") and test("left in place")' >/dev/null
+}
+
+@test "report-drive-failure (the reader's helper fails: armed file kept, not swept, said so)" {
+    seed_drive "$tmp" "compact" "/compact" "continue"
+    before="$(cat "$tmp/.claude/autodrive")"
+    PATH="$(reader_stub):$PATH" run_report_failure "$tmp"
+    [ "$status" -eq 0 ]
+    [ "$(cat "$tmp/.claude/autodrive")" = "$before" ]
+    [ ! -e "$tmp/.claude/autodrive.swept" ]
+    echo "$output" | jq -e '.systemMessage | test("helper that reads it failed") and test("left in place")' >/dev/null
+    echo "$output" | jq -e '.hookSpecificOutput.additionalContext | test("left in place")' >/dev/null
+}
+
 # --- session-pointer (SessionStart, every source: sweep stale pointer files) ---
 #
 # Used to also publish this session's resolved root here, at a session-keyed

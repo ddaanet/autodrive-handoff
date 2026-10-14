@@ -196,6 +196,23 @@ rename
     [ "$(head -n1 "$wt/.claude/autodrive")" = "pending" ]
 }
 
+# The sentinel reader's python3 -I helper fails (prints nothing): that says
+# nothing about the file, which may be this session's valid transition, so it
+# is kept as it was and the plan carries only the message.
+@test "drive-take (the reader's helper fails: file kept, kind null, the message says so)" {
+    real="$(command -v python3)"
+    stub="$BATS_TEST_TMPDIR/broken-reader"; mkdir -p "$stub"
+    # shellcheck disable=SC2016  # the stub's own $1/$3, expanded when it runs
+    printf '#!/usr/bin/env bash\ncase "$1 $3" in "-I "*O_NOFOLLOW*) exit 97 ;; esac\nexec %q "$@"\n' "$real" > "$stub/python3"
+    chmod +x "$stub/python3"
+    seed "$tmp" "armed sess-hook-test" compact "/compact" "continue with task 3"
+    before="$(cat "$tmp/.claude/autodrive")"
+    PATH="$stub:$PATH" take "$tmp"
+    [ "$status" -eq 0 ]
+    jq -e '.kind == null and .before == [] and .after == [] and .failFile == "" and (.message | test("helper that reads it failed") and test("left in place"))' <<<"$output" >/dev/null
+    [ "$(cat "$tmp/.claude/autodrive")" = "$before" ]
+}
+
 # A resolver that crashes leaves the root unknown: nothing is taken, and the mod
 # toasts the plan's message rather than the turn ending in silence.
 @test "drive-take (resolver crashes: nothing taken, kind null, the message says so)" {

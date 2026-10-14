@@ -34,7 +34,18 @@ fail_file="$root/$HANDOFF_REL_DRIVE_FAILED"
 # A link, dangling or not, reaches the reader, which refuses it.
 [[ -L "$drive" || -f "$drive" ]] || exit 0
 
-if ! handoff_drive_read "$drive"; then
+read_rc=0
+handoff_drive_read "$drive" || read_rc=$?
+if (( read_rc == 2 )); then
+    # The reader could not run: the file may be a valid transition, so it is
+    # left where it is and the plan carries the message alone, as for an
+    # unresolved root. A later turn end, with a working reader, takes it.
+    jq -nc --arg e "$DRIVE_ERR" \
+        '{kind: null, before: [], after: [], failFile: "",
+          message: ("handoff: autodrive not read — " + $e + "; left in place, nothing taken.")}'
+    exit 0
+fi
+if (( read_rc != 0 )); then
     # A file no writer of this version composed: consume it so the complaint
     # does not repeat at every turn.
     rm -f "$drive"

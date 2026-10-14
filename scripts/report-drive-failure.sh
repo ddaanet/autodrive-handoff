@@ -196,16 +196,26 @@ record_sweep() {
 # no transition anyone can complete, so the sweep takes it. So is a link at the
 # sentinel, dangling or not, which the reader refuses unread: it is recorded as
 # `link`, so the report names it and offers no line of whatever it points at.
+# A reader that could not run at all is `unread`: no evidence either way, so
+# the file is reported and left for a later turn.
 drive_state=""
 drive_owner=""
 drive_kind=""
 drive_lines=()   # the lines an armed file held, before then after
+drive_err=""
 if [[ -L "$drive" || -f "$drive" ]]; then
-    if handoff_drive_read "$drive"; then
+    read_rc=0
+    handoff_drive_read "$drive" || read_rc=$?
+    if (( read_rc == 0 )); then
         drive_state="$DRIVE_STATE"
         drive_owner="$DRIVE_OWNER"
         drive_kind="$DRIVE_KIND"
         drive_lines=( ${DRIVE_BEFORE[@]+"${DRIVE_BEFORE[@]}"} ${DRIVE_AFTER[@]+"${DRIVE_AFTER[@]}"} )
+    elif (( read_rc == 2 )); then
+        # The reader could not run: no evidence about the file, which may be
+        # a live transition. Reported and never swept.
+        drive_state="unread"
+        drive_err="$DRIVE_ERR"
     elif [[ -L "$drive" ]]; then
         drive_state="link"
     else
@@ -278,8 +288,12 @@ fi
 # of either state owned by another live session was reclassified as `foreign`
 # and is not this session's to take.
 armed_lines=""   # the armed lines, for the user to type in order
+if [[ "$drive_state" == "unread" ]]; then
+    msgs+=("autodrive not read — $drive_err; left in place")
+    notes+=("The handoff plugin could not read .claude/autodrive ($drive_err). The file was left in place and not judged; a transition it holds may still run or be swept on a later turn.")
+fi
 if [[ -n "$drive_state" && "$drive_state" != "pending" && "$drive_state" != "held" \
-      && "$drive_state" != "foreign" ]]; then
+      && "$drive_state" != "foreign" && "$drive_state" != "unread" ]]; then
     record_sweep
     rm -f "$drive"
     if [[ "$drive_state" == "armed" ]]; then

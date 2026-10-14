@@ -43,7 +43,12 @@ drive="$cwd/$HANDOFF_REL_DRIVE"
 # `-L` as well as `-f`: a link at the sentinel, dangling or not, is refused by
 # the reader and removed here, never read as no file and left in place.
 if [[ "$hook_source" == "clear" && ( -L "$drive" || -f "$drive" ) ]]; then
-    if ! handoff_drive_read "$drive"; then
+    read_rc=0
+    handoff_drive_read "$drive" || read_rc=$?
+    if (( read_rc == 2 )); then
+        # The reader could not run, which says nothing about the file: kept.
+        notes+=("autodrive not read — $DRIVE_ERR; left in place")
+    elif (( read_rc != 0 )); then
         rm -f "$drive"
         notes+=("autodrive malformed — $DRIVE_ERR; not resuming")
     elif [[ "$DRIVE_STATE" == "pending" && "$DRIVE_KIND" == "clear" ]]; then

@@ -229,6 +229,9 @@ _handoff_drive_prose() {
 # DRIVE_AFTER (lines it runs in the session the transition opens). Returns 0 when
 # well-formed; otherwise returns 1 with DRIVE_ERR set to a one-phrase reason
 # naming the constraint that failed. A symlink at $1 is refused, unread.
+# Returns 2, DRIVE_ERR set, when the reader could not run at all
+# (handoff_read_regular printed nothing): the file is neither valid nor
+# malformed as far as anyone knows, so a caller keeps it and reports that.
 #
 # Line 1 is the state and line 2 is the kind, and the kind fixes the shape — so
 # the remaining lines need no separator, and each kind keeps its own rules:
@@ -304,9 +307,15 @@ handoff_drive_read() {
         absent)
             DRIVE_ERR="the file does not exist"
             return 1 ;;
-        *)
+        other | foreign)
             DRIVE_ERR="the file is not a regular file that can be read"
             return 1 ;;
+        *)
+            # Nothing printed: the helper itself failed (python3 missing or
+            # broken), which says nothing about the file. Its own status, so
+            # no caller removes a sentinel that may be perfectly valid.
+            DRIVE_ERR="the python3 helper that reads it failed, so its state is unknown"
+            return 2 ;;
     esac
 
     n=${#lines[@]}
@@ -457,7 +466,9 @@ handoff_drive_arm() {
 # at any moment is followed. The status is `ok`, `absent`, `link` (the last
 # component is a link, dangling or not), `other` (not a regular file, or
 # unreadable) or, with `own`, `foreign` (a regular file another user owns).
-# Nothing printed means python3 failed; callers read that as `other`. Read it
+# Nothing printed means python3 failed, which is no answer about the file:
+# handoff_drive_read returns 2 on it, and the other callers skip what they
+# would have done with the bytes. Read it
 # as `{ IFS= read -r status; …; } < <(handoff_read_regular …)`, so the bytes
 # follow on the same stream and a NUL in them survives a `read -d ''`.
 handoff_read_regular() {

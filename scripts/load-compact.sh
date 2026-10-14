@@ -31,7 +31,15 @@ drive="$cwd/$HANDOFF_REL_DRIVE"
 # A link, dangling or not, reaches the reader, which refuses it.
 [[ -L "$drive" || -f "$drive" ]] || exit 0
 
-if ! handoff_drive_read "$drive"; then
+read_rc=0
+handoff_drive_read "$drive" || read_rc=$?
+if (( read_rc == 2 )); then
+    # The reader could not run, which says nothing about the file: kept.
+    jq -nc --arg e "$DRIVE_ERR" \
+        '{systemMessage: ("handoff: autodrive not read — " + $e + "; left in place, not resuming.")}'
+    exit 0
+fi
+if (( read_rc != 0 )); then
     rm -f "$drive"
     jq -nc --arg e "$DRIVE_ERR" \
         '{systemMessage: ("handoff: autodrive malformed — " + $e + "; not resuming.")}'
