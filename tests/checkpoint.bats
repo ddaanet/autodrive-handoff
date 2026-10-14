@@ -35,8 +35,40 @@ setup() {
 make_repo() {
     local repo="${1:-$BATS_TEST_TMPDIR/repo}"
     rm -rf "$repo"; mkdir -p "$repo/.claude"
-    git -C "$repo" init -q
+    run_git -C "$repo" init -q
     printf '%s\n' "$repo"
+}
+
+# Gitlore's pre-commit hook runs `just precommit` with GIT_DIR, GIT_INDEX_FILE
+# and GIT_WORK_TREE exported for the outer repository; a git call here that
+# inherits them acts on that repository. A decoy repository stands in for it.
+# The pytest twin is in tests/test_checkpoint_directives.py.
+export_decoy_git_env() {
+    decoy="$BATS_TEST_TMPDIR/decoy"
+    mkdir -p "$decoy"
+    run_git -C "$decoy" init -q
+    echo decoy > "$decoy/tracked.txt"
+    run_git -C "$decoy" add tracked.txt
+    export GIT_DIR="$decoy/.git" GIT_WORK_TREE="$decoy" GIT_INDEX_FILE="$decoy/.git/index"
+}
+
+# Every file under the decoy's .git, named and checksummed.
+decoy_snapshot() {
+    (cd "$decoy/.git" && find . -type f -print0 | sort -z | xargs -0 cksum)
+}
+
+@test "harness: make_repo and make_gitlore_repo act on the repository they build, whatever git's environment" {
+    export_decoy_git_env
+    before="$(decoy_snapshot)"
+    repo="$(make_repo)"
+    glrepo="$(make_gitlore_repo)"
+    [ "$(decoy_snapshot)" = "$before" ]
+    [ -d "$repo/.git" ]
+    [ -d "$glrepo/.git" ]
+    [ -d "$glrepo/memory/.git" ]
+    # The seed commit landed in the built memory repo, not the decoy.
+    [ "$(run_git -C "$glrepo/memory" log --format=%s)" = "seed" ]
+    [ -n "$(run_git -C "$glrepo" config gitlore.memoryApprovalClauseFile)" ]
 }
 
 # ==========================================================================

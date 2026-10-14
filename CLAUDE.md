@@ -576,7 +576,10 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
   `inject-checkpoint-root.sh` (a root holding whitespace or ending in a newline
   round-trips), `bin/handoff-approved` (output pinned whole, one
   row per kind, against `closing_directive()` itself so the producers cannot
-  drift; a failed reader helper reported as unreadable, not malformed) and the `bin/handoff-checkpoint` shim. `version-guard.sh` is tested
+  drift; a failed reader helper reported as unreadable, not malformed) and the `bin/handoff-checkpoint` shim, plus
+  the harness row that `make_repo` and `make_gitlore_repo` (via `run_git` in
+  `tests/probe-helpers.bash`, git minus `git rev-parse --local-env-vars`) leave a
+  decoy `GIT_DIR` repository byte-identical, mutation-checked. `version-guard.sh` is tested
   in the toolkit, not here.
 - `just py-test` — `pytest`: `tests/test_worktree_root.py` (the resolver's
   branch matrix, including the containment rule that keeps a submodule `inside`,
