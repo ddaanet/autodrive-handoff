@@ -41,7 +41,7 @@ async function drive($: any, cwd: string, session: string) {
   // like a rejected line, so the next prompt reports it rather than it passing
   // as a toast alone.
   if (session === '' && plan.failFile) {
-    await $.fs.write(plan.failFile, `${plan.message}\n`)
+    await recordFailure($, plan.failFile, plan.message)
     return
   }
 
@@ -52,11 +52,26 @@ async function drive($: any, cwd: string, session: string) {
       await runLine($, line)
     } catch (err: any) {
       const reason = `handoff: ${line} failed: ${err?.message ?? String(err)}`
-      await $.fs.write(plan.failFile, `${reason}\n`)
-      $.ui.toast(reason)
+      if (await recordFailure($, plan.failFile, reason)) $.ui.toast(reason)
       return
     }
   }
+}
+
+// Writes the failure record for the next prompt's report. $.fs.write follows a
+// link and has no replace-not-follow form, so a link at the name, dangling or
+// not, is checked for first (one stat; a missing file rejects it) and not
+// written through: the toast then says the record was skipped. A link put
+// there between the stat and the write is still followed — the bound, in a
+// project directory the user trusts. Returns false when it toasted instead.
+async function recordFailure($: any, failFile: string, text: string): Promise<boolean> {
+  const st = await $.fs.stat(failFile).catch(() => undefined)
+  if (st?.isLink) {
+    $.ui.toast(`${text} (not recorded: ${failFile} is a symbolic link)`)
+    return false
+  }
+  await $.fs.write(failFile, `${text}\n`)
+  return true
 }
 
 async function runLine($: any, line: string) {

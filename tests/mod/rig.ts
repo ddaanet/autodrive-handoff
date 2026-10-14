@@ -16,6 +16,8 @@ export type Opts = {
   promptTexts?: string[]
   // lines ('/name args' for command.run, the text for prompt.submit) whose call rejects
   rejectLines?: Record<string, string>
+  // answers $.fs.stat on any path: a symbolic link when true, missing (ENOENT) otherwise
+  statIsLink?: boolean
 }
 
 export type Rig = {
@@ -25,6 +27,7 @@ export type Rig = {
   existsPaths: string[]
   writes: { path: string; text: string }[]
   processArgv: string[][]
+  statPaths: string[]
 }
 
 export function fixture(name: keyof typeof FIXTURES, root: string): string {
@@ -33,7 +36,7 @@ export function fixture(name: keyof typeof FIXTURES, root: string): string {
 
 export function rig(on: any, opts: Opts = {}): Rig {
   const root = opts.root ?? ROOT
-  const r: Rig = { log: [], toasts: [], existsPaths: [], writes: [], processArgv: [] }
+  const r: Rig = { log: [], toasts: [], existsPaths: [], writes: [], processArgv: [], statPaths: [] }
   let reads = 0
 
   on('classic.Stop', () => ({}))
@@ -43,6 +46,12 @@ export function rig(on: any, opts: Opts = {}): Rig {
   on('fs.exists', ($: any, e: any) => {
     r.existsPaths.push(e.path)
     return { value: opts.sentinelExists ?? false }
+  })
+  on('fs.stat', ($: any, e: any) => {
+    r.statPaths.push(e.path)
+    // a throwing stub makes the mod's call reject, as a missing path does
+    if (!opts.statIsLink) throw new Error('ENOENT')
+    return { value: { kind: 'other', size: 0, mtimeMs: 0, isLink: true } }
   })
   on('fs.write', ($: any, e: any) => {
     r.writes.push({ path: e.path, text: e.text })

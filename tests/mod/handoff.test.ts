@@ -195,3 +195,21 @@ test('a Stop with no session id writes failFile and toasts', async ($, on) => {
   expect(r.writes[0].text).toContain('no session id')
   expect(r.toasts).toEqual([r.writes[0].text.trimEnd()])
 })
+
+// A link at the failure record, dangling or not, is not written through: the
+// record is skipped and the toast says so. The check is one stat ahead of the
+// write, a window a link put there in between still has.
+test('a link at failFile is not written through', async ($, on) => {
+  const r = rig(on, {
+    sentinelExists: true,
+    stdout: fixture('armed-clear', CWD),
+    rejectLines: { '/rename A Title': 'unknown command' },
+    statIsLink: true,
+  })
+  await endTurn($)
+  expect(r.statPaths).toEqual([FAIL_FILE])
+  expect(r.writes).toEqual([])
+  expect(r.toasts.length).toBe(2)
+  expect(r.toasts[1]).toContain('/rename A Title')
+  expect(r.toasts[1]).toContain('symbolic link')
+})
