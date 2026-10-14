@@ -56,6 +56,13 @@ hands `claude -p` a `--session-id` and writes the sentinel owned by it. A row
 whose sentinel names a different id fails, which shows the id really arrives
 from the host's `Stop` event.
 
+> **Superseded 2026-10-14** (see [Cross-session limits,
+> documented](2026-10-14-cross-session-limits-documented.md)) on the `held`
+> column alone: another session's `held` file is never swept on liveness, live
+> owner or not, since it waits on a human approval of unbounded length; a dead
+> owner's is left for the next checkpoint to replace, and `abandoned` is gone.
+> The `armed` column stands.
+
 **The sweep asks whether the owner is live.** For `armed` and `held`:
 
 | owner | `armed` | `held` |
@@ -85,6 +92,11 @@ untouched: the owner's own next prompt still sweeps its aborted `armed` file
 however fresh its transcript is, and that stays the exact discriminator it was.
 
 The heuristic has known ways to fail:
+
+> **Superseded 2026-10-14** (see [Cross-session limits,
+> documented](2026-10-14-cross-session-limits-documented.md)) on the bullet
+> below: a `held` file is no longer swept on liveness, so an owner idle past
+> the window keeps it.
 
 - **An owner idle past the window.** A `held` file waits on an approval. If the
   owner sits idle for more than 600 seconds before answering, another session's

@@ -287,9 +287,10 @@ handoff_drive_read() {
     # land on it. The test and the read are one O_NOFOLLOW open
     # (handoff_read_regular), so a link put at the name after a caller looked
     # at it is refused too. Every caller takes its malformed path, whose
-    # `rm -f` removes the link and not what it names. The check is on the last
-    # component only: a symlinked `.claude/` is read and written where it
-    # points, as the root and legacy files are.
+    # `rm -f` removes the link and not what it names. The bound is the last
+    # component: a symlinked `.claude/` is read and written where it points,
+    # as the root and legacy files are, and one shared between roots is
+    # unsupported (docs/design/driving-the-transition.md).
     local read_status=""
     {
         IFS= read -r read_status || true

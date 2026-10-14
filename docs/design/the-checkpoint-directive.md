@@ -121,12 +121,14 @@ It names its owner, the session whose release it waits on, carried on line 1
 as `held <session-id>` — and `armed` names its owner the same way, because
 other sessions sharing the root take prompts and end turns while it waits for
 its own (see [Driving the transition](driving-the-transition.md)). That
-release comes from that session or not at all: once the owner is no longer
-live, the file is abandoned, and `report-drive-failure.sh` sweeps it exactly
-as it sweeps a stale `armed` one; while the owner is live, another session's
-prompt leaves it alone. Without the name it would stay armable indefinitely,
-and `handoff-approved` — which otherwise verifies only the state and the kind
-— would run a dead session's `/rename` and `/clear` in a live conversation.
+release comes from that session or not at all. Another session's prompt never
+sweeps it, live owner or not: it waits on a human approval of unbounded
+length, and an idle transcript is what that wait looks like. A dead owner's
+file stays until the next checkpoint in the root replaces it, and arms nothing
+meanwhile: without the name it would stay armable indefinitely, and
+`handoff-approved` — which otherwise verifies only the state and the kind —
+would run a dead session's `/rename` and `/clear` in a live conversation; with
+it, `handoff-approved` refuses a held file another session owns.
 `handoff_drive_arm` writes the line 1 it is given: `handoff-approved` passes
 `armed <owner>`, since the session that approved is the one whose turn end
 takes the transition, and `drive-take.sh` passes a bare `pending`, since past

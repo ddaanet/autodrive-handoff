@@ -59,7 +59,14 @@ repository could commit a link at, and whose rename is `os.replace`, which
 replaces a link put at the sentinel since it was read where `mv` would move
 the file into the directory it points at. The bound is the last component, as
 for the root files: a symlinked `.claude/` is read and written where it
-points.
+points, and one shared between roots is unsupported (see [Sessions sharing a
+root](#sessions-sharing-a-root)).
+
+A reader whose `python3 -I` helper fails prints nothing, which says nothing
+about the file. `handoff_drive_read` returns 2 for it rather than 1, and every
+caller keeps the file and says so: `drive-take.sh` prints a `kind: null` plan
+carrying only the message, the loaders report it, and the sweep records it as
+its own `unread` state and removes nothing.
 
 `held` is the checkpoint's, released by `handoff-approved`
 ([The checkpoint directive](the-checkpoint-directive.md)). Everything after it
@@ -112,10 +119,15 @@ The contract, pinned by `tests/drive-take.bats` against fixtures the mod's own
 tests also consume:
 
 - **Empty stdout** means nothing was armed for this session: no file, a
-  `pending` or a `held` one, or one `armed` by another session (or no session
-  id given). Only this session's `armed` file is this turn's to take, so a
-  transition already in flight cannot be taken twice, and another session's
-  turn end cannot run the owner's `/rename` and `/clear` in itself.
+  `pending` or a `held` one, or one `armed` by another session. Only this
+  session's `armed` file is this turn's to take, so a transition already in
+  flight cannot be taken twice, and another session's turn end cannot run the
+  owner's `/rename` and `/clear` in itself.
+- **No session id given** over an `armed` file takes nothing — whose file it
+  is cannot be told — and prints a `kind: null` plan saying so. The mod writes
+  that message to `failFile`, as for a rejected line, so the next prompt
+  reports it and sweeps the file; a `Stop` that carried no id is a host fault
+  nothing else would surface.
 - Otherwise one line of JSON, `{kind, before[], after[], failFile, message}`.
   `armed` is left **before** the plan is printed: `pending` for a kind with a
   confirming `SessionStart`, removal for `rename`, which has none and would
@@ -144,7 +156,11 @@ other line is `$.prompt.submit({text, asUser: true})`.
 **A line that fails ends the sequence**, which is what makes a `/rename` that
 never lands under kind `clear` cost a wrong title and nothing more. The mod
 writes `<root>/.claude/autodrive.failed` with the line and the host's reason,
-and toasts the same text.
+and toasts the same text. `$.fs.write` follows a link and the mods API has no
+write that replaces one, so the mod stats the name first (`isLink`) and, on a
+link, skips the record and says so in the toast. A link put there between the
+stat and the write is still followed: the bound, in a project directory the
+user trusts.
 
 The host's own resolution is the confirmation. `command.run` resolves when the
 command has taken effect — `/rename` once the title is set, `/clear` once the
@@ -208,15 +224,24 @@ owner's prompt: another session's can arrive while the owning turn is still
 running. For a file owned by another session the hook asks whether that session
 is **live** — its transcript, `<owner>.jsonl` beside the one in the hook input's
 `transcript_path`, written within `HANDOFF_OWNER_LIVE_SECS` (600 s by default).
-A live owner's `armed` or `held` file is left untouched and nothing is said; a
-file whose owner is not live (stale or missing transcript, or no
-`transcript_path` in the input) is swept as below. Liveness is a heuristic, and
-each way it can be wrong sweeps a file that should have stayed, which is what
-every cross-session sweep did before the owner was read; the argument is in
-[The armed sentinel has an
+That question is asked of `armed` alone, which lives only until its owner's
+turn ends. A live owner's `armed` file is left untouched and nothing is said;
+one whose owner is not live (stale or missing transcript, or no
+`transcript_path` in the input) is swept as below. Liveness is a heuristic,
+and each way it can be wrong sweeps an `armed` file that should have stayed —
+an owner turn that writes nothing to its transcript for the whole window;
+the argument is in [The armed sentinel has an
 owner](../changelog/2026-10-13-the-armed-sentinel-has-an-owner.md).
 
-For the owner's own `armed` file, or one whose owner is not live, there are
+A `held` file is never swept on liveness, whoever owns it. It waits on a human
+approval, which takes as long as it takes, and an idle transcript is exactly
+what a session waiting on its user looks like. A dead owner's `held` file stays
+on disk: it is a few short lines, arms nothing by itself (`handoff-approved`
+refuses a held file another session owns), and the next checkpoint in the root
+replaces it.
+[Cross-session limits, documented](../changelog/2026-10-14-cross-session-limits-documented.md)
+
+For the owner's own `armed` file, or another's whose owner is not live, there are
 two causes the hook cannot tell apart: an aborted turn, and **the mod not being loaded** —
 `--safe-mode`, or a Claude Code older than 2.1.287. The mod needs that version
 and the plugin manifest has no field to pin a minimum, so this note is where
@@ -224,10 +249,9 @@ the requirement surfaces: it names the mod as the likely cause, discards the
 file so it cannot fire into unrelated work days later, and prints the lines it
 held for the user to run in order. A file that will not parse is swept too,
 without lines — it describes no transition anyone can complete. `held` is
-exempt while it belongs to the session at the prompt, which is why the sweep
-names its states rather than taking anything that is not `pending`; a `held`
-file whose owner is another session that is not live is reclassified as
-abandoned first, and no lines are offered for it.
+exempt whoever owns it, which is why the sweep names its states rather than
+taking anything that is not `pending`. Lines are offered only for the owner's
+own `armed` file: another session's would be replayed into this conversation.
 
 Each removal the sweep makes also appends a line to `.claude/autodrive.swept`:
 time, the removing session, the file's state, owner, kind and age, and the
@@ -244,6 +268,33 @@ fixed name a planted link could redirect, renamed over the record by
 `os.replace`, which replaces a link put there meanwhile where `mv` would move
 the file into a directory it names. It says who took the file and how old it was; it
 does not decide whether the sweep was right.
+
+## Sessions sharing a root
+
+The owner keeps one session from running or sweeping another live session's
+transition. It does not make a root safe for two sessions at once, and the
+rest is a known limit rather than a defect: making it safe needs locks,
+per-session sentinels or checksums, out of proportion to a setup a worktree
+per session avoids (see [Rejected alternatives](rejected-alternatives.md)).
+
+- **Checkpoint against checkpoint.** The checkpoint renames its sentinel over
+  whatever is there. A later checkpoint in the root replaces an earlier
+  session's sentinel, and that session's turn end finds a file another session
+  owns and takes nothing, silently.
+- **`TASK.md` and `TODO.md` are last-writer-wins.** Each checkpoint writes what
+  it is given.
+- **The take is two steps.** `drive-take.sh` reads the sentinel and checks
+  state and owner, then `handoff_drive_arm` rewrites line 1 over the lines it
+  reads again at that moment. A checkpoint landing between the two is turned
+  `pending`, or removed for `rename`, under the earlier plan.
+- **A `.claude/` shared between roots**, by symlink or otherwise, is
+  unsupported. `pending` is ownerless by necessity — the session after a
+  `/clear` has a new id, so the file cannot name it — and the other root's
+  loader can consume it. The owner on `armed` and `held` does not cover it.
+
+The mitigation is one session per root at a time, or a worktree per session:
+the root is the enclosing worktree ([Scoping](scoping.md)), so each has its own
+`.claude/`, `TASK.md` and `TODO.md`.
 
 ## Verification
 

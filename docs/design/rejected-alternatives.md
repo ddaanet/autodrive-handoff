@@ -245,3 +245,23 @@ readers already share `handoff_drive_read`; a fifth copy of the grammar drifts,
 and the mods API has no rename or delete for the atomic `armed` → `pending`.
 The cost it would save is paid only on the rare path: the every-turn check is a
 single `exists` on the project root.
+
+**Per-session sentinels, locks or checksums for sessions sharing a root** —
+one sentinel per session, a lock around the checkpoint and the take, or a
+checksum the take compares before rewriting. Each closes one race (a later
+checkpoint replacing an earlier session's sentinel, the take's read and
+rewrite in two steps) at the cost of a second file per session, a lock with
+its own stale case to sweep, or a compare-and-swap every bash reader would
+implement, and none touches `TASK.md` and `TODO.md`, which are shared state by
+design: two sessions writing one task frame conflict whatever the sentinel
+does. The complexity is out of proportion to a setup a worktree per session
+already avoids. **Recording the root in the sentinel**, checked on take, to
+catch a `.claude/` shared between roots, is more machinery and another line
+every reader parses for a setup that is unsupported. **Refusing a symlinked
+`.claude/`** adds nothing either: a project directory the user has accepted as
+trusted can already ship hooks and settings, so a planted link gives an
+attacker no capability, and Claude Code documents symlinks only for
+`.claude/rules/` and skills (code.claude.com/docs/en/memory.md,
+code.claude.com/docs/en/skills.md), not for `.claude/` as a whole, which has a
+history of bugs (anthropics/claude-code#764, anthropics/claude-code#10522).
+[Cross-session limits, documented](../changelog/2026-10-14-cross-session-limits-documented.md)

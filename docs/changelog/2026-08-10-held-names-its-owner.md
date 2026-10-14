@@ -27,6 +27,12 @@ behaviour it failed to have.
 > `handoff_drive_arm` now carries it from `held` to `armed`. The owner on line 1
 > and `handoff-approved`'s refusal stand. The rejected age-based sweep stays
 > rejected: liveness reads the owner's transcript, never the sentinel's age.
+> Superseded again 2026-10-14 (see [Cross-session limits,
+> documented](2026-10-14-cross-session-limits-documented.md)) on the sweep
+> itself: no session but the owner sweeps a `held` file, live owner or not.
+> The "inert" reasoning below holds once more, now that `handoff-approved`
+> refuses another session's held file: a dead owner's is left for the next
+> checkpoint to replace.
 
 `held` was written by the checkpoint, left by `Stop`, exempted from the
 `UserPromptSubmit` sweep, and left by `bin/handoff-approved` and nothing else.

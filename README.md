@@ -227,6 +227,26 @@ the same trigger phrases on purpose, so the same words work whichever you
 pick — therefore **enable exactly one handoff provider per project**.
 Enabling both reloads the collision this split was made to remove.
 
+## Limitations
+
+One session per project root at a time. Sessions sharing a root share
+`TASK.md`, `TODO.md` and `.claude/autodrive`, and nothing locks them:
+
+- When two sessions checkpoint in one root, the later checkpoint replaces the
+  earlier one's transition, which is then lost without a word.
+- `TASK.md` and `TODO.md` are last-writer-wins: a second session's wrap-up
+  replaces the first's.
+- Taking a transition at turn end reads the file and then rewrites it, not in
+  one step; a checkpoint landing in between is overwritten.
+- A `.claude/` shared between roots (a symlink from one worktree to another's,
+  or any other sharing) is unsupported: a transition in flight names no
+  session, since the one after a `/clear` has a new id, so the other root can
+  consume it.
+
+To run sessions in parallel, give each its own git worktree: the root is the
+enclosing worktree, so each one has its own `.claude/`, `TASK.md` and
+`TODO.md`.
+
 ## Requirements
 
 - Claude Code 2.1.287 or newer (the transition is run by a mod)
@@ -248,8 +268,9 @@ And under `./.claude/`, two transient files:
 - `autodrive` — transient file describing the transition to carry out:
   first line its state (with the owning session's id while it waits to run),
   second the kind (`rename`, `compact` or `clear`), then the lines to run.
-  Only the owning session's turn end runs it, and another session's prompt
-  leaves it alone while the owning session is active. Written by the checkpoint and by nothing else — a
+  Only the owning session's turn end runs it. Another session's prompt leaves
+  an `armed` one alone while the owning session is active, and a `held` one
+  alone always: it waits on your approval for as long as that takes. Written by the checkpoint and by nothing else — a
   direct agent write is denied. It starts out `held` when running it now would
   cost you something: it would run at the end of a turn that is still asking
   an unanswered memory question, or it would carry out a transition while a commit your

@@ -175,12 +175,15 @@ session sharing the root runs the same hooks and the same mod, the background
 session the harness starts after a `git commit` among them, so seeing a
 sentinel says nothing about whose it is. `held` and `armed` carry their owner on
 line 1. Only the owner's turn end takes an `armed` file, and only the owner's
-prompt sweeps one as an aborted turn. Another session sweeps it, or a `held`
-one, only once the owner is not live by its transcript's mtime. That test is a
-heuristic. Every way it can be wrong sweeps a file that should have stayed,
-which is the behaviour it replaced, so no case is worse than before.
+prompt sweeps one as an aborted turn. Another session sweeps an `armed` file
+only once the owner is not live by its transcript's mtime. That test is a
+heuristic, and every way it can be wrong sweeps a file that should have
+stayed, so it is not applied to `held`, which waits on a human for as long as
+that takes: no session but the owner ever sweeps a `held` file, and a dead
+owner's is replaced by the next checkpoint.
 [The armed sentinel has an
-owner](../changelog/2026-10-13-the-armed-sentinel-has-an-owner.md)
+owner](../changelog/2026-10-13-the-armed-sentinel-has-an-owner.md),
+[Cross-session limits, documented](../changelog/2026-10-14-cross-session-limits-documented.md)
 
 **Observability is not gated on the happy path.** A clean run says nothing
 about whether a dirty one would be noticed, and the failing run is exactly

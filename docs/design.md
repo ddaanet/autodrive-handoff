@@ -292,6 +292,8 @@ Ruled out, each argued in
 - **Driving the TUI through tmux**, **reading the pane to confirm an action**
 - **A `restart` kind, and identifying the exiting process**
 - **A `/autoname` mod command**, **a second parser of the sentinel in the mod**
+- **Per-session sentinels, locks or checksums for sessions sharing a root**,
+  **recording the root in the sentinel**, **refusing a symlinked `.claude/`**
 
 ## Non-goals
 
@@ -312,6 +314,18 @@ Ruled out, each argued in
 - **Replacing `/ddaa:handoff`.** Different target (claude.ai vs
   Claude Code), different scope (full-session summary vs residual task
   frame). Non-overlapping.
+- **Concurrent sessions in one root.** Sessions sharing a root share
+  `TASK.md`, `TODO.md` and `.claude/autodrive`, unlocked: a later checkpoint
+  replaces an earlier session's sentinel and its transition is lost silently,
+  both files are last-writer-wins, and `drive-take.sh` reads the sentinel and
+  rewrites it in two steps, so a checkpoint landing between them is
+  overwritten. A `.claude/` shared between roots, by symlink or otherwise, is
+  unsupported: the ownerless `pending` sentinel can be consumed by the other
+  root, which the owner on `armed`/`held` does not cover. One session per root
+  at a time, or a worktree per session (the root is worktree-scoped). What
+  the plugin does guarantee across sessions is that one never runs or sweeps
+  another live session's transition, nor ever sweeps a `held` one. See
+  [Driving the transition](design/driving-the-transition.md#sessions-sharing-a-root).
 - **Claude.ai portability.** The plugin depends on session JSONL,
   Claude Code hooks, and filesystem — all Claude Code-specific. A
   claude.ai variant would need an entirely different mechanism.
