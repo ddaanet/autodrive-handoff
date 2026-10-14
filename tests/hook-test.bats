@@ -3208,6 +3208,38 @@ assert_drift_quoted() {
     echo "$output" | jq -e --arg c "$other" '.systemMessage | test($c)' >/dev/null
 }
 
+# This runs on every prompt, so the common case — no drift, no marker — must
+# not fork `find` (marker_dir_ok's mode test) just to guard an `rm` of nothing.
+# A `find` on PATH that leaves a witness proves the negative; the paired row
+# proves the same stub is reached when there is a marker to clear. A dangling
+# link at the marker still counts as one, and is removed.
+find_witness_stub() {
+    local real stub="$BATS_TEST_TMPDIR/find-witness"
+    real="$(command -v find)"
+    mkdir -p "$stub"
+    printf '#!/usr/bin/env bash\n: > %q\nexec %q "$@"\n' "$BATS_TEST_TMPDIR/find-ran" "$real" > "$stub/find"
+    chmod +x "$stub/find"
+    printf '%s' "$stub"
+}
+
+@test "report-drive-failure (no drift, no marker: no find forked)" {
+    mkdir -m 700 "$HANDOFF_POINTER_DIR"
+    PATH="$(find_witness_stub):$PATH" run_report_failure "$tmp"
+    [ "$status" -eq 0 ]
+    [ "$output" = "" ]
+    [ ! -e "$BATS_TEST_TMPDIR/find-ran" ]
+}
+
+@test "report-drive-failure (no drift, a marker left: checked and removed)" {
+    mkdir -m 700 "$HANDOFF_POINTER_DIR"
+    ln -s "$BATS_TEST_TMPDIR/nowhere" "$HANDOFF_POINTER_DIR/handoff-drift-$SESSION_ID"
+    PATH="$(find_witness_stub):$PATH" run_report_failure "$tmp"
+    [ "$status" -eq 0 ]
+    [ "$output" = "" ]
+    [ -e "$BATS_TEST_TMPDIR/find-ran" ]
+    [ ! -L "$HANDOFF_POINTER_DIR/handoff-drift-$SESSION_ID" ]
+}
+
 # The marker sits in a directory shared by every local user, so a name in it
 # may be a link someone else planted. A link at the marker is neither read nor
 # written through: one holding this very cwd must not silence the report, and

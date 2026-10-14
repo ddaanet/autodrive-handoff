@@ -137,7 +137,11 @@ case "$HANDOFF_ROOT_BRANCH" in
         fi
         ;;
     *)
-        if marker_dir_ok; then
+        # The common case on every prompt: no marker, so nothing to clear and
+        # no `find` to fork. `-L` too, so a dangling link at the name still
+        # reaches the directory check and is removed (rm unlinks a link and
+        # never what it names).
+        if [[ -e "$marker" || -L "$marker" ]] && marker_dir_ok; then
             rm -f "$marker"
         fi
         ;;
