@@ -224,6 +224,21 @@ pick up per the task file" ]
     [ -L "$repo/.claude/autodrive" ]
 }
 
+# A reader that could not run says nothing about the file: it is reported as
+# unreadable, not malformed, and left where it is.
+@test "handoff-approved: the reader helper failing -> exit 2 saying it could not be read, file kept" {
+    repo="$(make_repo)"
+    printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" compact "/compact" > "$repo/.claude/autodrive"
+    stub="$BATS_TEST_TMPDIR/broken-python"; mkdir -p "$stub"
+    printf '#!/usr/bin/env bash\nexit 97\n' > "$stub/python3"; chmod +x "$stub/python3"
+    # shellcheck disable=SC2016   # $1/$2/$3 are the inner bash -c's own positional params
+    run --separate-stderr bash -c 'cd "$1" && PATH="$2:$PATH" HANDOFF_ROOT="$1" bash "$3"' _ "$repo" "$stub" "$APPROVED"
+    [ "$status" -eq 2 ]
+    [[ "$stderr" == *"could not be read"* ]]
+    [[ "$stderr" != *"malformed"* ]]
+    [ "$(head -n1 "$repo/.claude/autodrive")" = "held $CLAUDE_CODE_SESSION_ID" ]
+}
+
 @test "handoff-approved: HANDOFF_ROOT unset -> refuses, naming the unrecognised invocation" {
     repo="$(make_repo)"
     # shellcheck disable=SC2016   # $1/$2 are the inner bash -c's own positional params

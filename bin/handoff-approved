@@ -43,7 +43,12 @@ session_id="${CLAUDE_CODE_SESSION_ID:-}"
 drive="$root/$HANDOFF_REL_DRIVE"
 [ -f "$drive" ] || err "no transition to arm: $HANDOFF_REL_DRIVE does not exist"
 
-handoff_drive_read "$drive" || err "$HANDOFF_REL_DRIVE is malformed — $DRIVE_ERR"
+handoff_drive_read "$drive" && drive_rc=0 || drive_rc=$?
+case "$drive_rc" in
+    0) ;;
+    2) err "$HANDOFF_REL_DRIVE could not be read — $DRIVE_ERR" ;;
+    *) err "$HANDOFF_REL_DRIVE is malformed — $DRIVE_ERR" ;;
+esac
 
 # Only `held` is this command's to move. An `armed` one is already this turn's
 # to fire and a `pending` one is in flight, so rewriting either would say the
