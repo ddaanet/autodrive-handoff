@@ -263,24 +263,24 @@ Per project, two tracked files in the project root:
   kept by the agent all session. Shared with any `TODO.md` the project
   already has.
 
-And under `./.claude/`, two transient files:
+And under `./.claude/`, three files:
 
-- `autodrive` — transient file describing the transition to carry out:
-  first line its state (with the owning session's id while it waits to run),
-  second the kind (`rename`, `compact` or `clear`), then the lines to run.
-  Only the owning session's turn end runs it. Another session's prompt leaves
-  an `armed` one alone while the owning session is active, and a `held` one
-  alone always: it waits on your approval for as long as that takes. Written by the checkpoint and by nothing else — a
-  direct agent write is denied. It starts out `held` when running it now would
-  cost you something: it would run at the end of a turn that is still asking
-  an unanswered memory question, or it would carry out a transition while a commit your
-  request called for has not been made yet. `handoff-approved` is the one
-  command that releases it to `armed`, and the agent runs it once you have
-  approved the memory summary, or once the commit has landed; otherwise the
-  file starts out `armed` and nothing is waited on. When it goes into
-  flight at the end of your turn its state becomes `pending`, and it is
-  consumed once the transition completes. At most one exists at a time — one
-  prompt, one transition.
+- `autodrive` — transient file describing the transition to carry out: first
+  line its state (with the owning session's id while it waits to run), second
+  the kind (`rename`, `compact` or `clear`), then the lines to run. Only the
+  owning session's turn end runs it. Another session's prompt leaves an
+  `armed` one alone while the owning session is active, and a `held` one alone
+  always: it waits on your approval for as long as that takes. Written by the
+  checkpoint and by nothing else — a direct agent write is denied. It starts
+  out `held` when running it now would cost you something: it would run at the
+  end of a turn that is still asking an unanswered memory question, or it
+  would carry out a transition while a commit your request called for has not
+  been made yet. `handoff-approved` is the one command that releases it to
+  `armed`, and the agent runs it once you have approved the memory summary, or
+  once the commit has landed; otherwise the file starts out `armed` and
+  nothing is waited on. When it goes into flight at the end of your turn its
+  state becomes `pending`, and it is consumed once the transition completes.
+  At most one exists at a time — one prompt, one transition.
 - `autodrive.failed` — written only when a line was rejected, and consumed
   when you are told about it at your next prompt.
 - `autodrive.swept` — one line for each transition file the prompt-time sweep
