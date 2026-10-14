@@ -19,3 +19,7 @@ Choices the contract fixes for `drive-take.sh`:
 - Malformed: file removed, `kind` is `null`, lists empty, message is the old
   `autodrive malformed — <DRIVE_ERR>; discarded, transition not armed.`
   Exit 0. The malformed check precedes the state gate.
+- No session id given and the file `armed`: file left as it is, `kind` is
+  `null`, lists empty, `failFile` as always, and the message says the turn
+  ended with no session id (`no-session.json`). The mod writes `failFile` on
+  it, as for a rejected line, so the next prompt reports it.

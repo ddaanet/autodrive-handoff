@@ -115,11 +115,13 @@ take() {
     [ "$(cat "$tmp/.claude/autodrive")" = "$(printf '%s\n' "armed sess-owner" clear "/rename A Title" "/clear" "resume")" ]
 }
 
-@test "drive-take (no session id given: takes nothing)" {
+# A Stop with no session id cannot tell this session's file from another's:
+# nothing is taken, but an armed file is said so rather than left in silence.
+@test "drive-take (no session id given: takes nothing, says so)" {
     seed "$tmp" "armed sess-hook-test" compact "/compact" "continue with task 3"
     take "$tmp" ""
     [ "$status" -eq 0 ]
-    [ "$output" = "" ]
+    [ "$output" = "$(expected "$tmp" no-session.json)" ]
     [ "$(head -n1 "$tmp/.claude/autodrive")" = "armed sess-hook-test" ]
 }
 

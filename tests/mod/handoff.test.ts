@@ -183,3 +183,15 @@ test('a rejected continuation prompt is recorded the same way', async ($, on) =>
   ])
   expect(r.writes[0].text).toContain('continue with task 3')
 })
+
+// A Stop with no session id drives nothing (drive-take.sh cannot tell whose
+// file it is), but says so on the rejected-line path: failFile written, toast.
+test('a Stop with no session id writes failFile and toasts', async ($, on) => {
+  const r = rig(on, { sentinelExists: true, stdout: fixture('no-session', CWD) })
+  await $.classic.Stop({ cwd: CWD, session_id: undefined })
+  await $.turn.complete({ turnId: 't1', answer: 'ok', durationMs: 1, isAborted: false, usage: null })
+  expect(r.processArgv[0][3]).toBe('')
+  expect(r.log).toEqual(['process.run', `fs.write ${FAIL_FILE}`])
+  expect(r.writes[0].text).toContain('no session id')
+  expect(r.toasts).toEqual([r.writes[0].text.trimEnd()])
+})

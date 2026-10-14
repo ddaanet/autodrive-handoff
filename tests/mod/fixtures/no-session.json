@@ -1,0 +1,1 @@
+{"kind":null,"before":[],"after":[],"failFile":"@ROOT@/.claude/autodrive.failed","message":"handoff: the turn ended with no session id, so the armed transition was not taken; the next prompt reports it."}

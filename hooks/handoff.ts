@@ -37,6 +37,13 @@ async function drive($: any, cwd: string, session: string) {
   if (out.stdout.trim() === '') return
   const plan = JSON.parse(out.stdout)
   $.ui.toast(plan.message)
+  // A Stop with no session id: drive-take.sh took nothing and said so. Recorded
+  // like a rejected line, so the next prompt reports it rather than it passing
+  // as a toast alone.
+  if (session === '' && plan.failFile) {
+    await $.fs.write(plan.failFile, `${plan.message}\n`)
+    return
+  }
 
   for (const line of [...plan.before, ...plan.after]) {
     // Parity with the old composer check: never type over a person.

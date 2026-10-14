@@ -3,7 +3,8 @@
 # print the plan the mod runs. Called by hooks/handoff.ts at turn.complete after
 # a Stop, with the Stop event's cwd and session id. Exit 0 always; empty stdout
 # means nothing was armed for this session (no file, `pending`, `held`, or
-# `armed` by another session). Otherwise one line of JSON:
+# `armed` by another session); an `armed` file with no session id given is a
+# `kind: null` plan saying so. Otherwise one line of JSON:
 # {kind, before[], after[], failFile, message}.
 #
 # The mod never touches the sentinel: this script is the one place that leaves
@@ -60,9 +61,18 @@ fi
 # sharing the root ends turns here, the background session the harness starts
 # after a `git commit` among them, and the prompt-time sweep leaves a live
 # owner's file alone, so another session's turn end would otherwise run the
-# owner's /rename and /clear in itself. No session id takes nothing.
+# owner's /rename and /clear in itself. No session id takes nothing, and says
+# so: whose file it is cannot be told, and a Stop that carried none is a host
+# fault no one would otherwise see. The plan carries the failFile, which the
+# mod writes, so the next prompt reports it and sweeps the file.
 [[ "$DRIVE_STATE" == "armed" ]] || exit 0
-[[ -n "$session_id" && "$DRIVE_OWNER" == "$session_id" ]] || exit 0
+if [[ -z "$session_id" ]]; then
+    jq -nc --arg f "$fail_file" \
+        '{kind: null, before: [], after: [], failFile: $f,
+          message: "handoff: the turn ended with no session id, so the armed transition was not taken; the next prompt reports it."}'
+    exit 0
+fi
+[[ "$DRIVE_OWNER" == "$session_id" ]] || exit 0
 
 # `rename` has no confirming SessionStart, so a pending file would never clear.
 if handoff_drive_has_source "$DRIVE_KIND"; then
