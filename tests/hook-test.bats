@@ -2358,6 +2358,21 @@ run_session_pointer() {
     [ -d "$HANDOFF_POINTER_DIR" ]
 }
 
+# Created first at session start, so its mode is the one the drift report's
+# marker_dir_ok judges: under a group-writable umask a plain `mkdir -p` makes
+# it 0775, the marker is never used and the drift note repeats every prompt.
+@test "session-pointer (creates the pointer directory 0700 under umask 002)" {
+    mkdir -p "$other/.git"
+    umask 002
+    run_session_pointer "$tmp"
+    [ "$status" -eq 0 ]
+    [ "$(python3 -c 'import os, sys; print(oct(os.stat(sys.argv[1]).st_mode & 0o777))' "$HANDOFF_POINTER_DIR")" = "0o700" ]
+    run_report_failure "$other"
+    echo "$output" | jq -e --arg c "$other" '.systemMessage | test($c)' >/dev/null
+    run_report_failure "$other"
+    [ "$output" = "" ]
+}
+
 # Nothing else removes these. The pointer outlives the session that published
 # it, the drift marker outlives the episode it recorded, and the directory they
 # share is swept by nobody. The producer sweeps its own leavings — once per

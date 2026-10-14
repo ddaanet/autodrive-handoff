@@ -21,7 +21,14 @@ set -euo pipefail
 # shellcheck source-path=SCRIPTDIR source=_lib.sh
 source "$(dirname "$0")/_lib.sh"
 
-mkdir -p "$HANDOFF_POINTER_DIR"
+# 0700, as report-drive-failure.sh creates it: its marker_dir_ok uses the
+# directory only when no one else can write it, and a plain `mkdir -p` under a
+# group-writable umask (002) would make it 0775 and the drift note repeat every
+# prompt. -m reaches the deepest directory only, by intent: its parents are not
+# this hook's to set. An existing directory is left as it is — it may not be
+# this user's to chmod.
+# shellcheck disable=SC2174
+mkdir -m 700 -p "$HANDOFF_POINTER_DIR"
 
 # Sweep what earlier sessions left behind. Neither remaining name has an owner
 # that outlives the session: the drift marker is written by the report hook
