@@ -190,6 +190,25 @@ def plan_todo(root: Path, action: str, content: str, old: str, new: str) -> File
     return FilePlan("write", half.path, content, legacy)
 
 
+def has_body_after(plan: FilePlan) -> bool:
+    """Return whether the half has a body once the plan is applied.
+
+    What the next session's loader would find at the root name: a write's
+    content, nothing after a removal, a moved legacy file's bytes, and for a
+    plan that leaves the list alone the root file as it stands. Reads only for
+    the last two, so a caller that does not ask never reads a file `keep` left
+    unread.
+    """
+    if plan.act == "write":
+        return not lib.is_empty_body(plan.body)
+    if plan.act == "remove":
+        return False
+    source = plan.legacy.path if plan.act == "move" and plan.legacy else plan.path
+    if not source.is_file():
+        return False
+    return not lib.is_empty_body(read_lenient(source.name, source))
+
+
 def apply_plan(plan: FilePlan) -> None:
     """Perform the write, unlink or move a plan names.
 

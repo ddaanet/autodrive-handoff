@@ -8,6 +8,13 @@ its calls ran at 91k-448k tokens and carried 40.6M of the 53.7M summed
 context tokens. Tool results were 680 KB; the cost was re-paying a large
 prefix, not any one read. A boundary at about 200k would have cut that tail.
 
+> **Corrected at review, 2026-10-15.** This plan fixes the continuation text
+> as `Continue per handoff`. That wording matches the trigger phrases in the
+> `handoff` skill's description (`skills/handoff/SKILL.md`), so a fresh session
+> that received it as its first prompt could take it as a request to run the
+> skill and start a second wrap-up. The constant shipped as `Continue where the
+> previous context stopped.`; the rest of the plan stands.
+
 Two changes, independent, in this order:
 
 1. **The continuation becomes a constant.** After a driven `/clear` or

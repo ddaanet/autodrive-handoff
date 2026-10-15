@@ -2,6 +2,7 @@
 // The stubs and the call log live in rig.ts; fixtures are the exact stdout of
 // scripts/drive-take.sh (tests/mod/fixtures), with @ROOT@ substituted.
 import { expect, test } from 'claude-code/testing'
+import { CONTINUATION } from './fixtures'
 import { fixture, rig, ROOT } from './rig'
 
 const CWD = ROOT
@@ -86,7 +87,7 @@ test('compact with focus: command compact + args, then the continuation prompt',
     'prompt.read',
     'command.run compact [keep the parser work]',
     'prompt.read',
-    'prompt.submit Continue per handoff asUser=true',
+    `prompt.submit ${CONTINUATION} asUser=true`,
   ])
   expect(r.toasts).toEqual(['handoff: will run /compact keep the parser work once the turn ends.'])
   expect(r.writes).toEqual([])
@@ -102,7 +103,7 @@ test('clear: rename, then clear (no args), then the continuation, in order', asy
     'prompt.read',
     'command.run clear []',
     'prompt.read',
-    'prompt.submit Continue per handoff asUser=true',
+    `prompt.submit ${CONTINUATION} asUser=true`,
   ])
   expect(r.toasts).toEqual(['handoff: will run /rename A Title once the turn ends.'])
 })
@@ -170,7 +171,7 @@ test('a rejected continuation prompt is recorded the same way', async ($, on) =>
   const r = rig(on, {
     sentinelExists: true,
     stdout: fixture('armed-compact', CWD),
-    rejectLines: { 'Continue per handoff': 'queue full' },
+    rejectLines: { [CONTINUATION]: 'queue full' },
   })
   await endTurn($)
   expect(r.log).toEqual([
@@ -178,10 +179,10 @@ test('a rejected continuation prompt is recorded the same way', async ($, on) =>
     'prompt.read',
     'command.run compact [keep the parser work]',
     'prompt.read',
-    'prompt.submit Continue per handoff asUser=true',
+    `prompt.submit ${CONTINUATION} asUser=true`,
     `fs.write ${FAIL_FILE}`,
   ])
-  expect(r.writes[0].text).toContain('Continue per handoff')
+  expect(r.writes[0].text).toContain(CONTINUATION)
 })
 
 // A Stop with no session id drives nothing (drive-take.sh cannot tell whose

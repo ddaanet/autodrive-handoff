@@ -17,6 +17,7 @@ from pathlib import Path
 
 import _checkpoint_lib as lib
 import pytest
+from checkpoint import CONTINUATION
 from conftest import (
     CHECKPOINT,
     add_sdd_ledger,
@@ -304,6 +305,58 @@ def test_legacy_todo_with_no_body_and_no_root_file_is_still_moved(
     assert read(repo / "TODO.md") == HEADINGS_ONLY
     assert not (repo / LEGACY_TODO_REL).exists()
     assert_reported(result.stdout, LEGACY_TODO_REL, "moved")
+
+
+def continuing_payload(task: object, todo: object) -> dict[str, object]:
+    """A clear that asks for the continuation, task and todo as given."""
+    payload = migration_payload(task, todo)
+    payload["clear"] = True
+    payload["continue"] = True
+    return payload
+
+
+@pytest.mark.parametrize(
+    ("root_before", "legacy_before"),
+    [
+        (None, TODO_LEGACY_BODY),
+        (HEADINGS_ONLY, TODO_LEGACY_BODY),
+        (TODO_ROOT_BODY, HEADINGS_ONLY),
+    ],
+    ids=["legacy-only", "legacy-over-bodyless-root", "root-body-over-legacy"],
+)
+def test_continue_counts_the_effective_todo_the_legacy_file_included(
+    tmp_path: Path, root_before: str | None, legacy_before: str
+) -> None:
+    repo = make_repo(tmp_path)
+    put(repo, "TODO.md", root_before)
+    put(repo, LEGACY_TODO_REL, legacy_before)
+    result = run_checkpoint(repo, continuing_payload(task_clear(), todo_keep()))
+    ok(result)
+    assert (repo / SENTINEL_REL).read_text().endswith(f"\n{CONTINUATION}\n")
+
+
+@pytest.mark.parametrize(
+    ("todo", "root_before"),
+    [
+        (todo_keep(), None),
+        (todo_keep(), HEADINGS_ONLY),
+        (todo_clear(), None),
+    ],
+    ids=["keep-legacy-bodyless", "keep-over-bodyless-root", "clear-over-legacy-body"],
+)
+def test_continue_with_only_a_bodyless_effective_todo_errors_and_moves_nothing(
+    tmp_path: Path, todo: object, root_before: str | None
+) -> None:
+    repo = make_repo(tmp_path)
+    put(repo, "TODO.md", root_before)
+    # The clear row has a legacy body that the clear would remove, not carry.
+    legacy = TODO_LEGACY_BODY if todo == todo_clear() else HEADINGS_ONLY
+    put(repo, LEGACY_TODO_REL, legacy)
+    before = snapshot(repo)
+    result = run_checkpoint(repo, continuing_payload(task_clear(), todo))
+    assert result.returncode == 2
+    assert "continue" in result.stderr
+    assert snapshot(repo) == before
 
 
 # --- 2. a root file with no body is absent, whatever sits at its path ---

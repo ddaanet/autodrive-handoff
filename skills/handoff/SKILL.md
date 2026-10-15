@@ -174,7 +174,8 @@ they are the only carrier. The continuation is a fixed prompt that points at
 them and says nothing of its own, so a fact left out of the files is gone.
 
 - **Task file** — current task state alone: in-flight threads, what needs
-  to resume.
+  to resume, and the next concrete action, what the fresh session does first
+  (not the topic): the fixed continuation names none.
 - **Todo file** — the open items of an active task list, plus open
   decisions: identifiers, commit ranges, paths a decision hinges on, the
   exact shape of an open question — everything that must survive verbatim

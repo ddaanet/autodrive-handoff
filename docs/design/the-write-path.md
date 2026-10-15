@@ -96,7 +96,10 @@ rejected upstream by a message naming the skill or the transition, and a
 per-skill check has no point to run but ahead of those, where it would
 replace their wording with a generic one. What is left for it is a key
 belonging to no skill's vocabulary, which has nothing skill-specific to say
-about it. The two
+about it. A `continue: true` at the clear boundary is refused, naming
+`continue`, when neither half would have a body after the plans (the legacy
+fallback counted), before anything is written; `precompact` is exempt, its
+summary carrying the task. The two
 `required` messages name the whole vocabulary for the same reason: that
 branch is what an out-of-date producer sending the retired
 `{"file_path": …, "content": …}` shape lands on, so it has to say what to

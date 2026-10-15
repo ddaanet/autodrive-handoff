@@ -89,6 +89,9 @@ def main() -> int:
             planning.plan_task(root, task_action, task_content),
             planning.plan_todo(root, todo_action, todo_content, todo_old, todo_new),
         ]
+        # Only under handoff: after a compaction the summary carries the task.
+        if skill == "handoff" and continuation:
+            require_something_to_continue(plans)
         for plan in plans:
             planning.apply_plan(plan)
 
@@ -100,6 +103,22 @@ def main() -> int:
     parts = compose_directives(boundary, memory, ending, plans)
     print_output(parts)
     return 0
+
+
+def require_something_to_continue(plans: list[planning.FilePlan]) -> None:
+    """Refuse the continuation when neither half would have a body.
+
+    The fixed continuation points at `TASK.md` and `TODO.md`; with both empty
+    after the plans, the next session is told there is no task frame and would
+    still be sent a prompt to continue from it. Errors, naming `continue`,
+    before anything is written.
+    """
+    if not any(planning.has_body_after(plan) for plan in plans):
+        lib.err(
+            "continue",
+            "true, but neither TASK.md nor TODO.md would have a body: there is"
+            " no task or todo for the continuation to point at",
+        )
 
 
 def hold_decision(
@@ -164,7 +183,7 @@ def compose_sentinel(
 
 
 # The fixed prompt submitted after a driven transition when `continue` is true.
-CONTINUATION = "Continue per handoff"
+CONTINUATION = "Continue where the previous context stopped."
 
 
 def check_sentinel_target(root: Path) -> None:

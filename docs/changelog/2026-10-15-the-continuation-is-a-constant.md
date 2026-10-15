@@ -26,9 +26,12 @@ elsewhere.
   focus directive) and is an error naming the field otherwise; `false` is legal
   everywhere. `null`, a string, a number and a missing key are errors, each
   naming the field.
-- When `continue` is `true` the composer writes the fixed line `Continue per
-  handoff` (`CONTINUATION` in `scripts/checkpoint.py`) where the agent's prose
-  went. The sentinel's shape and `handoff_drive_read` are unchanged, and the
+- When `continue` is `true` the composer writes the fixed line `Continue where
+  the previous context stopped.` (`CONTINUATION` in `scripts/checkpoint.py`)
+  where the agent's prose went. The text avoids the word "handoff", which is a
+  trigger phrase of the `handoff` skill: a fresh session reading `Continue per
+  handoff` could take it as an instruction to run the skill and start a second
+  wrap-up. The sentinel's shape and `handoff_drive_read` are unchanged, and the
   parser still refuses a prose line that begins with `/`, now as the bound on a
   file something other than the checkpoint wrote.
 - `require_one_line` stays for the `compact` focus directive, which is still
@@ -38,6 +41,12 @@ elsewhere.
   session carries on after the reset, and lose the prose rules and the
   examples. The seam section of `handoff` now says the files are the only
   carrier. This is a breaking change to the payload.
+- At the clear boundary `continue: true` is refused when neither `TASK.md` nor
+  `TODO.md` would have a body after the plans (the legacy fallback counted):
+  the loader would inject "No task frame or todo." and the mod would still
+  submit the continuation. The check runs before anything is written and only
+  under `handoff`; after a compaction the summary carries the task, so a
+  continuation there never points at nothing.
 - The constant is defined once. Tests import it, and a row in
   `tests/test_mod_fixtures.py` fails when a fixture submits a prose line other
   than the constant, so the mod's fixtures cannot describe a continuation the
@@ -61,6 +70,10 @@ and legal against `clear: true`, `compact: true` and a focus directive;
 `false` legal at all five; the sentinel's exact bytes for each legal
 combination, built from the imported constant; the constant itself one line,
 not beginning with `/`. Every other checkpoint test file moved its payload
-builders from `None` to `False`. `tests/test_mod_fixtures.py` carries the
+builders from `None` to `False`. The refusal has its rows in
+`tests/test_checkpoint_transition.py` (both halves bodyless in six ways, files
+byte-identical, no sentinel; accepted when either half has a body, with
+`continue: false`, and under `precompact`) and, for the legacy fallback, in
+`tests/test_checkpoint_legacy.py`. `tests/test_mod_fixtures.py` carries the
 fixture row, and `tests/mod/fixtures/armed-clear.json` and
 `armed-compact.json` carry the constant.

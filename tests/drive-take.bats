@@ -14,6 +14,10 @@ setup() {
     tmp="$BATS_TEST_TMPDIR/proj"
     mkdir -p "$tmp/.claude"
     export CLAUDE_PROJECT_DIR="$tmp"
+
+    # The composer's one definition, so no row retypes the continuation line.
+    CONTINUATION="$(python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); from checkpoint import CONTINUATION; print(CONTINUATION)' "$repo_root/scripts")"
+    [ -n "$CONTINUATION" ]
 }
 
 # Linked-worktree layout, as in hook-test.bats: .git is a file pointing under
@@ -51,7 +55,7 @@ take() {
 }
 
 @test "drive-take (armed compact: prints the plan, file becomes pending)" {
-    seed "$tmp" "armed sess-hook-test" compact "/compact keep the parser work" "Continue per handoff"
+    seed "$tmp" "armed sess-hook-test" compact "/compact keep the parser work" "$CONTINUATION"
     take "$tmp"
     [ "$status" -eq 0 ]
     [ "$output" = "$(expected "$tmp" armed-compact.json)" ]
@@ -59,13 +63,13 @@ take() {
 }
 
 @test "drive-take (owned armed clear: before and after in order, file becomes an ownerless pending)" {
-    seed "$tmp" "armed sess-hook-test" clear "/rename A Title" "/clear" "Continue per handoff"
+    seed "$tmp" "armed sess-hook-test" clear "/rename A Title" "/clear" "$CONTINUATION"
     take "$tmp"
     [ "$status" -eq 0 ]
     [ "$output" = "$(expected "$tmp" armed-clear.json)" ]
     [ "$(head -n1 "$tmp/.claude/autodrive")" = "pending" ]
     # Only line 1 changes: the loader still parses the rest.
-    [ "$(tail -n +2 "$tmp/.claude/autodrive")" = "$(printf '%s\n' clear "/rename A Title" "/clear" "Continue per handoff")" ]
+    [ "$(tail -n +2 "$tmp/.claude/autodrive")" = "$(printf '%s\n' clear "/rename A Title" "/clear" "$CONTINUATION")" ]
 }
 
 # `rename` has no loader, so nothing would ever clear a pending armed for it.
@@ -88,11 +92,11 @@ take() {
 }
 
 @test "drive-take (pending: empty stdout, file untouched)" {
-    seed "$tmp" pending compact "/compact" "Continue per handoff"
+    seed "$tmp" pending compact "/compact" "$CONTINUATION"
     take "$tmp"
     [ "$status" -eq 0 ]
     [ "$output" = "" ]
-    [ "$(cat "$tmp/.claude/autodrive")" = "$(printf '%s\n' pending compact "/compact" "Continue per handoff")" ]
+    [ "$(cat "$tmp/.claude/autodrive")" = "$(printf '%s\n' pending compact "/compact" "$CONTINUATION")" ]
 }
 
 @test "drive-take (held: empty stdout, file untouched)" {
@@ -118,7 +122,7 @@ take() {
 # A Stop with no session id cannot tell this session's file from another's:
 # nothing is taken, but an armed file is said so rather than left in silence.
 @test "drive-take (no session id given: takes nothing, says so)" {
-    seed "$tmp" "armed sess-hook-test" compact "/compact" "Continue per handoff"
+    seed "$tmp" "armed sess-hook-test" compact "/compact" "$CONTINUATION"
     take "$tmp" ""
     [ "$status" -eq 0 ]
     [ "$output" = "$(expected "$tmp" no-session.json)" ]
@@ -126,7 +130,7 @@ take() {
 }
 
 @test "drive-take (arms once only: second take is empty)" {
-    seed "$tmp" "armed sess-hook-test" compact "/compact" "Continue per handoff"
+    seed "$tmp" "armed sess-hook-test" compact "/compact" "$CONTINUATION"
     take "$tmp"
     [ "$status" -eq 0 ]
     [ "$output" != "" ]
@@ -169,7 +173,7 @@ rename
 
 @test "drive-take (worktree cwd: takes the worktree file, failFile under the worktree)" {
     wt="$(make_worktree wtS)"
-    seed "$wt" "armed sess-hook-test" compact "/compact keep the parser work" "Continue per handoff"
+    seed "$wt" "armed sess-hook-test" compact "/compact keep the parser work" "$CONTINUATION"
     take "$wt"
     [ "$status" -eq 0 ]
     [ "$output" = "$(expected "$wt" armed-compact.json)" ]
@@ -178,7 +182,7 @@ rename
 
 @test "drive-take (worktree cwd: the project's own sentinel is not touched)" {
     wt="$(make_worktree wtT)"
-    seed "$tmp" "armed sess-hook-test" compact "/compact" "Continue per handoff"
+    seed "$tmp" "armed sess-hook-test" compact "/compact" "$CONTINUATION"
     take "$wt"
     [ "$status" -eq 0 ]
     [ "$output" = "" ]
@@ -191,7 +195,7 @@ rename
     wt="$BATS_TEST_TMPDIR/wtNL"$'\n'
     mkdir -p "$wt/.claude" "$tmp/.git/worktrees/wtNL"
     printf 'gitdir: %s\n' "$tmp/.git/worktrees/wtNL" > "$wt/.git"
-    seed "$wt" "armed sess-hook-test" compact "/compact" "Continue per handoff"
+    seed "$wt" "armed sess-hook-test" compact "/compact" "$CONTINUATION"
     take "$wt"
     [ "$status" -eq 0 ]
     jq -e --arg f "$wt/.claude/autodrive.failed" '.kind == "compact" and .failFile == $f' <<<"$output" >/dev/null
@@ -207,7 +211,7 @@ rename
     # shellcheck disable=SC2016  # the stub's own $1/$3, expanded when it runs
     printf '#!/usr/bin/env bash\ncase "$1 $3" in "-I "*O_NOFOLLOW*) exit 97 ;; esac\nexec %q "$@"\n' "$real" > "$stub/python3"
     chmod +x "$stub/python3"
-    seed "$tmp" "armed sess-hook-test" compact "/compact" "Continue per handoff"
+    seed "$tmp" "armed sess-hook-test" compact "/compact" "$CONTINUATION"
     before="$(cat "$tmp/.claude/autodrive")"
     PATH="$stub:$PATH" take "$tmp"
     [ "$status" -eq 0 ]
@@ -221,7 +225,7 @@ rename
     stub="$BATS_TEST_TMPDIR/broken-python"; mkdir -p "$stub"
     printf '#!/usr/bin/env bash\nexit 97\n' > "$stub/python3"; chmod +x "$stub/python3"
     wt="$(make_worktree wtCrash)"
-    seed "$wt" "armed sess-hook-test" compact "/compact" "Continue per handoff"
+    seed "$wt" "armed sess-hook-test" compact "/compact" "$CONTINUATION"
     PATH="$stub:$PATH" take "$wt"
     [ "$status" -eq 0 ]
     jq -e '.kind == null and .before == [] and .after == [] and (.message | test("did not resolve"))' <<<"$output" >/dev/null

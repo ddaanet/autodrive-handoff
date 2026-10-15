@@ -248,7 +248,7 @@ The standing calls, each argued in
   only.**
 - **The armed transition is one file whose body names the transition.**
 - **The transition carries its own state.**
-- **The continuation is a constant; the files are the only carrier.**
+- **The continuation is a constant; the agent authors no prompt.**
 - **A sentinel names its owner, and only the owner judges it stale.**
 - **The drive runs inline at `turn.complete`, never from `Stop`.**
 - **Observability is not gated on the happy path.**

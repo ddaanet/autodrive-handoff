@@ -181,13 +181,15 @@ checkpoint composes it, and a direct agent Write or Edit is denied outright.
 [One transition, one file, explicit
 state](../changelog/2026-08-03-one-transition-one-file.md)
 
-**The continuation is a constant; the files are the only carrier.** What
-follows a driven transition is a yes-or-no field, and `true` makes the composer
-write the fixed line `Continue per handoff`. The agent authors nothing that is
-submitted as a prompt, so there is no second channel for the task to leak into:
-anything the next session needs is in `TASK.md` or `TODO.md`, or it is gone.
-The skills no longer argue what a prompt may carry, because the schema leaves
-nothing to argue.
+**The continuation is a constant; the agent authors no prompt.** What follows
+a driven transition is a yes-or-no field, and `true` makes the composer write
+the fixed line `Continue where the previous context stopped.`. Nothing the
+agent writes is submitted as the continuation prompt, so that channel cannot
+leak the task. At a clear the files are the only carrier: anything the next
+session needs is in `TASK.md` or `TODO.md`, or it is gone, and `true` is
+refused when neither would have a body. At a compact the summary and the
+agent-written focus directive carry too. The skills no longer argue what a
+prompt may carry, because the schema leaves nothing to argue.
 [The continuation is a
 constant](../changelog/2026-10-15-the-continuation-is-a-constant.md)
 

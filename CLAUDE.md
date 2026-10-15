@@ -338,7 +338,9 @@ note in `report-drive-failure.sh`.
   file is written. A write goes through a sibling temporary file and
   `os.replace` (`write_replacing`), which swaps a link at the name rather than
   following it and keeps the replaced file's mode. `legacy_reports` returns the
-  one-line reports. It holds `HANDOFF_REL_TASK`/`HANDOFF_REL_TODO` and
+  one-line reports; `has_body_after` says whether a plan leaves its half a body,
+  which `checkpoint.py` asks of both under `handoff` to refuse `continue: true`
+  with nothing to point at. It holds `HANDOFF_REL_TASK`/`HANDOFF_REL_TODO` and
   `HANDOFF_LEGACY_REL_TASK`/`_TODO`, the Python side of the pairs in `_lib.sh`;
   errors go through `lib.err`.
 - `scripts/_checkpoint_lib.py` — `err` (the one exit for a schema or write-time
@@ -655,7 +657,10 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
     `continue` as a boolean at every boundary, driven or not (null, a string,
     an empty string, a number, a list and an object each refused with no
     sentinel written; `true` refused against a transition not carried out and
-    legal against one carried out; `false` legal everywhere); the legal
+    legal against one carried out; `false` legal everywhere); `continue: true`
+    under `handoff` refused when neither half would have a body after the plans
+    (six bodyless shapes, files byte-identical, no sentinel), legal when either
+    has one, with `false`, and under `precompact`; the legal
     combinations pinning the sentinel's exact bytes, `CONTINUATION` imported
     from `checkpoint.py` rather than restated, read back through
     `handoff_drive_read`; and the constant itself, one line that does not begin
@@ -703,7 +708,8 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
     the reports after the closing line, the legacy file unlinked ahead of the
     root write, `-C` dropped (every one of those rows red), the quoting dropped
     (the spaced and the glob roots red), a root file read on `keep` with no legacy file, the symlink check disabled, and the rename
-    replaced by a copy and an unlink.
+    replaced by a copy and an unlink; and `continue: true` counting the
+    effective todo, a legacy file included, the refusal moving nothing.
 
   The load-bearing rows are mutation-checked, as listed under each file, and
   with them `handoff-approved`'s bare-name row in `tests/checkpoint.bats`.

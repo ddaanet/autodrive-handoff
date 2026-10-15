@@ -49,12 +49,16 @@ precompact  compact:true|"…"     continue:true   compact and continue
 ```
 
 `continue` is a boolean, and `true` is a schema error against a transition that
-is not carried out, since nothing would submit the prompt. The prompt it asks
+is not carried out, since nothing would submit the prompt, and at the clear
+boundary also when neither file would have a body once the plans are applied
+(checked before any write, the legacy fallback counted; after a compaction the
+summary carries the task, so `precompact` is exempt). The prompt it asks
 for is one fixed line, `CONTINUATION` in `checkpoint.py`, that points the fresh
 context at the task and todo files. It was once a line of prose the agent
 wrote, and the agent used it to carry the task: a description of the next step,
 or the facts it hinged on, that no file held and that the next `/clear` lost.
-With the line fixed, `TASK.md` and `TODO.md` are the only carrier, and the
+With the line fixed, `TASK.md` and `TODO.md` are the only carrier at a clear
+(at a compact the summary and the focus directive carry too), and the
 skills ask one yes-or-no question of the user's request where they once asked
 for a sentence.
 [The continuation is a constant](../changelog/2026-10-15-the-continuation-is-a-constant.md)

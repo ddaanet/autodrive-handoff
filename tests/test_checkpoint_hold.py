@@ -249,7 +249,7 @@ def test_typed_transition_with_memory_gate_pending_held(tmp_path: Path) -> None:
         "clear": True,
         "continue": True,
         "task": task_clear(),
-        "todo": todo_keep(),
+        "todo": "- run the gate\n",
     }
     result = run_checkpoint(repo, payload)
     assert result.returncode == 0
@@ -288,7 +288,7 @@ def test_typed_transition_no_memory_gate_armed_no_arming_instruction(
         "clear": True,
         "continue": True,
         "task": task_clear(),
-        "todo": todo_keep(),
+        "todo": "- run the gate\n",
     }
     result = run_checkpoint(repo, payload)
     assert result.returncode == 0
