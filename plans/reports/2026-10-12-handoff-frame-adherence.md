@@ -364,6 +364,19 @@ four reasons.
      file ("a directive is correct only where in the turn it lands").
    - A reviewer that edits the file is a second writer.
 
+   > **Corrected at review, 2026-10-15.** The original counted this as a
+   > reason against: "Every mechanism crosses a standing position", the first
+   > being that "a prompt hook is judgement in a hook, against 'hooks are
+   > mechanical; anything requiring judgment is in a skill'". That reads the
+   > headline in `docs/design/decisions.md` literally, and the principle is
+   > narrower. My human partner's statement of it: a design principle to move
+   > mechanical logic out of skills (a script probes and emits the agent's
+   > instructions instead of the skill stating the condition in prose), not a
+   > bar on judgement in a hook, and no standing position outweighs measured
+   > facts. The crossings listed are design costs a gate would have to meet,
+   > `continueOnBlock` and the single-turn wrap-up chief among them, not
+   > grounds for refusing one. Reasons 1 to 3 and "not now" stand.
+
 So: not now. If the re-measurement shows a residual my human partner judges
 worth a gate, the shape the data support is narrow: a prompt hook on the
 checkpoint call with `continueOnBlock`, judging the `task` string alone (the

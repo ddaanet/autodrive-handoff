@@ -72,6 +72,13 @@ in machinery that fights the summariser.
 > the compaction is driven from `Stop`, still not from a hook that cannot
 > run an agent turn.
 
+> **Superseded 2026-10-15** (see [The mechanical principle is
+> narrowed](2026-10-15-the-mechanical-principle-is-narrowed.md)) on one ground
+> of the `PreCompact`-hook rejection below. "Hooks are mechanical and the flush
+> is judgment" is withdrawn: the standing decision never barred judgement in a
+> hook. The rejection stands on the other ground, that `PreCompact(manual)`
+> cannot run an agent turn.
+
 A manual `/compact` is a user-chosen milestone — structurally like
 `/clear` with lossy continuation instead of a reset. Testing handoff's
 wrap-up bundle against it, the components transfer unevenly:

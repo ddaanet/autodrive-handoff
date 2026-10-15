@@ -138,12 +138,23 @@ the load-bearing half of any prohibition.
 [A directive must fit where in the turn it
 lands](../changelog/2026-07-22-directive-fits-where-it-lands.md)
 
-**Hooks are mechanical; anything requiring judgment is in a skill.** A
-`PreCompact` hook cannot run an agent turn. A probe cannot see the agent's
-task list. Detection that would need a transcript scrape — activation,
-commit intent, the todo list — is either asked of the agent or not asked at
-all, because keying on tool names in JSONL is a maintenance trap the harness
-has already sprung once.
+**Mechanical logic lives in a script or hook, not in a skill's prose; the
+skill body holds judgement only.** Detection, branching and decisions that can
+be computed are computed by a script or hook, which emits a structured result
+or the agent's instructions. The typical consequence is a skill conditional
+removed: a script probes the environment and prints the procedure for the one
+cell the call is in, where the skill would state the condition in prose for the
+agent to evaluate. The principle moves mechanics out of skills. It is not a bar
+on judgement in a hook, and whether a hook may judge is weighed on the facts of
+the event: per Claude Code's hook documentation as read on 2026-10-12 (not
+run), `PreToolUse` accepts `type: "prompt"` and `type: "agent"` handlers and
+`SessionStart` accepts neither. A probe cannot see the agent's task list.
+Detection that would need a transcript scrape — activation, commit intent, the
+todo list — is either asked of the agent or not asked at all, because keying
+on tool names in JSONL is a maintenance trap the harness has already sprung
+once.
+[The mechanical principle is narrowed; a reviewer waits for a
+measurement](../changelog/2026-10-15-the-mechanical-principle-is-narrowed.md)
 
 **The armed transition is one file whose body names the transition.** One
 session, at most one transition in flight — so the invariant needs somewhere

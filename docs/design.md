@@ -244,7 +244,8 @@ The standing calls, each argued in
 - **Ask the question the request can answer.**
 - **Withholding is a mechanism.**
 - **A directive is correct only where in the turn it lands.**
-- **Hooks are mechanical; anything requiring judgment is in a skill.**
+- **Mechanical logic lives in a script or hook; the skill body holds judgement
+  only.**
 - **The armed transition is one file whose body names the transition.**
 - **The transition carries its own state.**
 - **A sentinel names its owner, and only the owner judges it stale.**
@@ -294,6 +295,7 @@ Ruled out, each argued in
 - **A `/autoname` mod command**, **a second parser of the sentinel in the mod**
 - **Per-session sentinels, locks or checksums for sessions sharing a root**,
   **recording the root in the sentinel**, **refusing a symlinked `.claude/`**
+- **A reviewer agent for the handoff task, or for memory destinations, for now**
 
 ## Non-goals
 

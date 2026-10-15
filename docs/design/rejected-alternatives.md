@@ -23,10 +23,14 @@ versionable source, which also inlined raw transcript into anything that
 committed it. The frame is assembled in memory at read time instead.
 [Read-time assembly](../changelog/2026-06-05-read-time-assembly.md)
 
-**A `PreCompact` hook for the memory flush** — hooks are mechanical and the
-flush is judgment; `PreCompact(manual)` can annotate or block a compaction
-but cannot run an agent turn.
-[Session compaction](../changelog/2026-07-12-session-compaction.md)
+**A `PreCompact` hook for the memory flush** — `PreCompact(manual)` can
+annotate or block a compaction but cannot run an agent turn, and the flush
+needs one: summarize, get approval, write the message file. It stays a skill
+the user runs before compacting, where that turn exists. Compaction threatens
+conversation state only, so the commit can wait for any later commit.
+[Session compaction](../changelog/2026-07-12-session-compaction.md),
+[The mechanical principle is narrowed; a reviewer waits for a
+measurement](../changelog/2026-10-15-the-mechanical-principle-is-narrowed.md)
 
 **Merging handoff into gitlore**, **moving the checkpoint into gitlore**
 behind a `command -v` lookup, and **gitlore superseding handoff** — distinct
@@ -265,3 +269,40 @@ attacker no capability, and Claude Code documents symlinks only for
 code.claude.com/docs/en/skills.md), not for `.claude/` as a whole, which has a
 history of bugs (anthropics/claude-code#764, anthropics/claude-code#10522).
 [Cross-session limits, documented](../changelog/2026-10-14-cross-session-limits-documented.md)
+
+**A reviewer agent for the handoff task, or for memory destinations, for now**
+— rejected on measurements, so each reading reopens on a number. For the
+handoff frame, the rates measured over 612 task versions are the rates before
+FR13, not its residual. The best estimate of what FR13 leaves is 26 to 28% per
+class among frames that already fit, and it assumes agents relocate a refused
+frame's content rather than compress it. The reviewer's own error is large: a
+Haiku reader disagreed with the hand reading on 20 to 28% of versions per
+class and with itself on 12% of sentences between runs, so a blocking check
+that wrong refuses about one compliant frame in four, and no Sonnet reading
+exists. After FR13 a miss is at most 1000 characters of redundant text per
+session start, plus a convention that reaches no approval gate; the history
+shows no session acting on a bad frame. It reopens at 100 task versions written
+under 0.16.1 or later across at least five repositories, re-measured with the
+report's scripts. If that residual warrants a gate, the shape the data support
+is narrow: a prompt-type `PreToolUse` hook on the `handoff-checkpoint` call
+with `continueOnBlock` (the default deny ends the turn, against the
+single-turn wrap-up), judging `task` alone, on a Sonnet-class model, scored
+offline against the labelled versions first so its false-refusal rate is a
+number before it can refuse anything. Not verified: timeout behaviour, whether
+the `if` filter parses a heredoc command, any limit on the input size.
+
+For memory destinations, a blind reviewer's yield was concentrated in one
+transient wave and one kind of move. Of the 26 redirected rounds in the 87
+rounds it would have run in (from 2026-08-28), 24 fall in one fortnight of
+September, after two sibling skill plugins arrived. Across all redirected
+facts, fact to skill matched 17 of 26 and fact to the tool, hook or template
+that owns the behaviour 0 of 10. It reproduced almost none of the rejections
+("nowhere" for 1 of 24 rejected facts, none of the 14 rejected rounds) and
+raised a spurious objection on about 1 approved round in 9.
+The levers belong to gitlore and were sent there as a brief: an inventory of
+the owners a fact can go to, and a per-fact existence answer in the approval
+summary. The reading changes with a second wave of redirections after the next
+growth of the skill library, measured the same way, or a rerun of the blind
+test with repository access that lifts recall on tool-bound facts above zero.
+[The mechanical principle is narrowed; a reviewer waits for a
+measurement](../changelog/2026-10-15-the-mechanical-principle-is-narrowed.md)
