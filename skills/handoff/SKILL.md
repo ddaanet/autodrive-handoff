@@ -31,7 +31,9 @@ them has a default: considering the question is the whole contribution.
 
 **Is the transition driven?** `clear: true` when the user asked for the
 reset to be carried out — "clear and continue", "continue in a new
-session", "pick this up in a new chat". `clear: false` when they are
+session", "pick this up in a new chat", and a bare "continue" after the
+handoff ("handoff and continue", "handoff, commit, continue"): there is no
+continuing this side of a clear. `clear: false` when they are
 preparing one they will run themselves — "save handoff", "before I clear",
 "wrap up". A request that asks for the clear **is** the authorization to
 clear; do not ask whether to proceed.

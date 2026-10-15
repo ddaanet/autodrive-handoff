@@ -1,0 +1,3 @@
+## Current task
+
+Preparing autodrive-handoff for the Claude plugin directory. The rename (plugin, GitHub repo, memory repo), the dist allowlist with LICENSE, the 512 px icon, the README trimmed to a listing page with its "What the plugin runs and writes" disclosure, and the root injector no longer returning a permission decision are done. Next: get my human partner's go and version for the release (0.18.0 proposed, since the rename makes existing installs reinstall), then run `just release`, which creates the `dist` branch and publishes the renamed marketplace entry still uncommitted in claude-plugins (the release sets its `source.ref` to `dist`). If the release refuses the dirty marketplace repo, commit the entry there first and re-run.

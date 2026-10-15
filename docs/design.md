@@ -341,7 +341,12 @@ summariser (75–150 line markdown document intended for pasting into a new
 web conversation). It is SOTA family #2, manual structured handoff.
 
 This plugin is narrower: Claude Code-only, `/clear`-focused, mechanical
-extraction + minimal judgment. Non-overlapping. Both can coexist.
+extraction + minimal judgment. Non-overlapping in what they produce: this
+plugin keeps a local task frame and re-injects it verbatim, `ddaa-handoff`
+(and its French `ddaa-passation`) writes a full end-of-session summary,
+delivered to Notion when available. The trigger phrases are shared on purpose,
+so the same words work whichever is installed, which is also why a project
+enables exactly one handoff provider: with both, one phrase reaches both.
 
 ## Changelog
 
