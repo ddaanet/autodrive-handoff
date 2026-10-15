@@ -26,7 +26,7 @@ sentinel carries agent-authored prose; the parser's rule that a prose line may
 not begin with `/` stays as the bound on a file written by anything else.
 `/restart` is not a kind: it is a Claude Code built-in, and a relaunch with
 `--resume` carries the conversation over whole, so nothing here has a frame or
-a continuation to add to it. `/handoff:autoname` stays a skill; its checkpoint
+a continuation to add to it. `/autodrive-handoff:autoname` stays a skill; its checkpoint
 call composes a `rename` sentinel and rides the same drive.
 [The plugin becomes a mod](../changelog/2026-10-08-the-plugin-becomes-a-mod.md)
 

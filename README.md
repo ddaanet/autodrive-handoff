@@ -1,4 +1,4 @@
-# handoff
+# autodrive-handoff
 
 A task snapshot that survives a context reset in Claude Code — whether
 that reset is a `/clear` or a `/compact`. Designed as a narrow
@@ -11,16 +11,16 @@ Two skills sit on that seam, one per boundary:
 
 | | skill |
 |---|---|
-| **before `/clear`** | `/handoff:handoff` |
-| **before `/compact`** | `/handoff:precompact` |
+| **before `/clear`** | `/autodrive-handoff:handoff` |
+| **before `/compact`** | `/autodrive-handoff:precompact` |
 
 Each one either prepares and stops — putting the open work on disk and
 leaving you to run the command — or carries the transition out for you: the plugin's mod
 runs the command and submits a fixed prompt that resumes the work from the
 files on the far side, once your turn ends. Which one you get is decided by what you ask
-for. `/handoff:autoname` is a third skill: the rename alone, for a session
+for. `/autodrive-handoff:autoname` is a third skill: the rename alone, for a session
 worth a title while the main thread stays live.
-`/handoff:pending` is a fourth: it lists the pending items — open decisions
+`/autodrive-handoff:pending` is a fourth: it lists the pending items — open decisions
 and remaining todos — from the task frame injected at session start or
 after a compact, with no tool calls.
 
@@ -34,8 +34,11 @@ Install the plugin:
 
 ```
 /plugin marketplace add ddaanet/claude-plugins
-/plugin install handoff@ddaanet
+/plugin install autodrive-handoff@ddaanet
 ```
+
+This plugin was called `handoff` before; if you installed it under that name,
+run `/plugin uninstall handoff@ddaanet` first, then install the new name.
 
 That's it. No per-project setup step. A `SessionStart(startup|clear)`
 hook assembles the handoff frame in memory at session start — stamping
@@ -84,7 +87,7 @@ Before `/clear`, ask the agent to save a handoff:
 - "wrap up"
 - "I'm done"
 
-Or invoke explicitly with `/handoff:handoff`. That prepares and stops —
+Or invoke explicitly with `/autodrive-handoff:handoff`. That prepares and stops —
 it saves the frame and tells you what the boundary is ready for, and you
 type `/clear` yourself.
 
@@ -100,7 +103,7 @@ summarisation cost — the task frame is what crosses.
 
 To name the session *without* a handoff — a `/btw` side conversation, or
 any session worth a title while the main thread stays live — invoke
-`/handoff:autoname`. It derives a title from the conversation and renames
+`/autodrive-handoff:autoname`. It derives a title from the conversation and renames
 the session (the plugin's mod runs `/rename` when your turn ends); it
 writes no task file and touches no memory.
 
@@ -179,7 +182,7 @@ rather than sampling it once at session start. And if the session's working
 directory ever leaves the repo it was launched in, the next prompt says so,
 once per episode.
 
-In a gitlore-managed repository, handoff also offers to commit your memory:
+In a gitlore-managed repository, this plugin also offers to commit your memory:
 when the memory submodule has uncommitted changes, it drafts a commit message
 for them, asks you to approve (or edit) it, and commits via gitlore — so durable
 learnings land instead of waiting for your next commit. When a commit is going
@@ -292,7 +295,7 @@ Nothing outside the current project is modified.
 ## Uninstall
 
 ```
-/plugin uninstall handoff@ddaanet
+/plugin uninstall autodrive-handoff@ddaanet
 ```
 
 ## Further reading

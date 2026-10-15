@@ -117,7 +117,7 @@ checkpoint call, and its output is one part, naming the line to end on.
 - Writing `.claude/autodrive` directly. The checkpoint composes it from the
   payload; a hand-written one is a second writer of the same channel.
 - A `rename` field in the checkpoint payload. A rename is
-  `/handoff:autoname`'s job when wanted, and the checkpoint rejects it here.
+  `/autodrive-handoff:autoname`'s job when wanted, and the checkpoint rejects it here.
 - A `task` field in the checkpoint payload. The summary is the task's
   carrier at this boundary, and the checkpoint rejects the key.
 - Forcing a memory write to have something to show. An empty flush is the

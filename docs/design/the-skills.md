@@ -6,8 +6,8 @@ One skill per boundary, plus the rename:
 
 | boundary | skill | transition field |
 |---|---|---|
-| compaction | `/handoff:precompact` | `compact`: `false` \| `true` \| `"<directive>"` |
-| clear | `/handoff:handoff` | `clear`: `false` \| `true` |
+| compaction | `/autodrive-handoff:precompact` | `compact`: `false` \| `true` \| `"<directive>"` |
+| clear | `/autodrive-handoff:handoff` | `clear`: `false` \| `true` |
 
 The two differ in one content field. `handoff` carries a `task`, because a
 `/clear` leaves nothing else to say what was in hand. `precompact` takes none
@@ -18,7 +18,7 @@ There is no restart skill: Claude Code's own `/restart` relaunches with
 `--resume`, which carries the conversation over whole, so there is no
 boundary for this plugin to cross and no frame to carry.
 
-`/handoff:pending` is a fourth skill with no design surface at all: it reports
+`/autodrive-handoff:pending` is a fourth skill with no design surface at all: it reports
 the `## Current task`, `## Open decisions` and `## Remaining` sections of the
 frame already injected into context, making no tool call and writing no file.
 It appears nowhere else in the design because there is nothing else to say
@@ -76,7 +76,7 @@ the question is at least always asked; and the prepare-only wording is the
 larger half of both descriptions, since that is the reading a bare
 "handoff" or "precompact" should get.
 
-- **`/handoff:autoname`** — rename only, neither boundary. Decides a title
+- **`/autodrive-handoff:autoname`** — rename only, neither boundary. Decides a title
   and calls the checkpoint with `{"skill": "autoname", "rename": …}`, the
   whole payload. Every other field is a schema error under it, and no
   directive is composed — its description promises no memory write, and a

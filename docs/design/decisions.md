@@ -267,7 +267,7 @@ gitlore seam must preserve both halves.
 
 **A context-size nudge was tried and dropped.** `PostToolBatch` fired once a
 session's prompt crossed a fixed threshold, injecting a directive naming
-`/handoff:precompact`. Dropped rather than fixed: it fired too early on a
+`/autodrive-handoff:precompact`. Dropped rather than fixed: it fired too early on a
 prompt that was already large for legitimate reasons, and once right after a
 driven compaction against a context the boundary had just shrunk. Sometimes
 followed, sometimes ignored — the net was more trouble than the nudge earned.

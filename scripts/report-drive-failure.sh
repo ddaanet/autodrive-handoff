@@ -59,7 +59,7 @@ if [[ "$HANDOFF_ROOT_BRANCH" == "unresolved" ]]; then
         systemMessage: ($lead + "handoff: " + $m + "; drift, failure and sweep checks skipped."),
         hookSpecificOutput: {
             hookEventName: "UserPromptSubmit",
-            additionalContext: ("The handoff plugin could not resolve this session'"'"'s root: " + $m + ". It skipped its drift, drive-failure and stale-transition checks for this turn.")
+            additionalContext: ("The autodrive-handoff plugin could not resolve this session'"'"'s root: " + $m + ". It skipped its drift, drive-failure and stale-transition checks for this turn.")
         }
     }'
     exit 0
@@ -297,7 +297,7 @@ fi
 armed_lines=""   # the armed lines, for the user to type in order
 if [[ "$drive_state" == "unread" ]]; then
     msgs+=("autodrive not read — $drive_err; left in place")
-    notes+=("The handoff plugin could not read .claude/autodrive ($drive_err). The file was left in place and not judged; a transition it holds may still run or be swept on a later turn.")
+    notes+=("The autodrive-handoff plugin could not read .claude/autodrive ($drive_err). The file was left in place and not judged; a transition it holds may still run or be swept on a later turn.")
 fi
 if [[ -n "$drive_state" && "$drive_state" != "pending" && "$drive_state" != "held" \
       && "$drive_state" != "foreign" && "$drive_state" != "unread" ]]; then

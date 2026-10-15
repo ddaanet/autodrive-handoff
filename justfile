@@ -1,6 +1,6 @@
 import 'plugin-dev/release.just'
 
-# handoff plugin — dev recipes
+# autodrive-handoff plugin — dev recipes
 #
 # `precommit` is the gate that runs before every commit: it lints the
 # manifests + settings, syntax-checks and lint/type-checks the Python

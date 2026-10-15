@@ -1,6 +1,6 @@
 ---
 name: pending
-description: List pending tasks from the session's already-injected context — no tool calls, no file reads. Reports the current task frame's "Open decisions" and "Remaining" items as loaded. Use when the user asks "what's pending", "list pending tasks", "show pending", "pending", or "/handoff:pending".
+description: List pending tasks from the session's already-injected context — no tool calls, no file reads. Reports the current task frame's "Open decisions" and "Remaining" items as loaded. Use when the user asks "what's pending", "list pending tasks", "show pending", "pending", or "/autodrive-handoff:pending".
 ---
 
 # pending — List Pending Tasks From Context

@@ -1,4 +1,4 @@
-# Agent Instructions — handoff plugin
+# Agent Instructions — autodrive-handoff plugin
 
 Plugin development conventions. Applies when working inside this repo
 to edit the plugin's skill, hook, mod, or script.
@@ -93,7 +93,7 @@ note in `report-drive-failure.sh`.
 
 - `.claude-plugin/plugin.json` — manifest.
 - `skills/handoff/SKILL.md` — the clear boundary's protocol
-  (`/handoff:handoff`), driven or not, and the single source of truth for the
+  (`/autodrive-handoff:handoff`), driven or not, and the single source of truth for the
   markdown templates of `TASK.md`/`TODO.md` and for the seam
   between what the files carry and the fixed continuation. Three
   steps: durable learnings to memory (the only tool calls allowed ahead of the
