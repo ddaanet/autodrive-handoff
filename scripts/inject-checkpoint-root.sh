@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# PreToolUse(Bash): inject this session's root into a handoff-checkpoint or
+# handoff-approved invocation as HANDOFF_ROOT, since neither can resolve it
+# itself — both run in the agent's Bash, where CLAUDE_PROJECT_DIR is unset and
+# $PWD is wherever the session cwd has drifted to.
+#
+# Replaces a session-keyed pointer file (session-pointer.sh used to publish
+# one at SessionStart) sampled once at the one moment the cwd does not yet
+# belong to the session: SessionStart(resume) fires with the RESUMING
+# process's cwd, before the harness moves the session into its own project
+# dir. Resolving here, on every matching call, has no such moment — the value
+# is sampled when it is used. See
+# plans/2026-08-05-checkpoint-root-via-updatedinput.md.
+#
+# Matching is a loose command substring, deliberately asymmetric: a false
+# positive costs an unused env var on an unrelated command; a false negative
+# leaves HANDOFF_ROOT unset, and the two entry points refuse naming the cause.
+# NFR2: this fires on every Bash call in every session with the plugin
+# installed, so the negative path is one jq field parse and a substring test —
+# no root resolution unless the command matches.
+set -euo pipefail
+
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source-path=SCRIPTDIR source=_lib.sh
+. "$DIR/_lib.sh"
+
+payload="$(cat)"
+# One parse for both fields, each NUL-terminated and read whole: a cwd ending in
+# a newline would lose it to a `$(...)` capture.
+{ IFS= read -r -d '' command; IFS= read -r -d '' cwd; } < <(
+    jq -j '(.tool_input.command // ""), "\u0000", (.cwd // ""), "\u0000"' <<<"$payload"
+) || true
+
+case "$command" in
+    *handoff-checkpoint* | *handoff-approved*) ;;
+    *) exit 0 ;;
+esac
+
+handoff_root_read "$cwd"
+root="$HANDOFF_ROOT"
+# The command is left as it is: both entry points refuse an unset HANDOFF_ROOT
+# naming it, and the user learns why here.
+if [[ "$HANDOFF_ROOT_BRANCH" == "unresolved" ]]; then
+    jq -nc --arg m "$HANDOFF_UNRESOLVED_MSG" \
+        '{systemMessage: ("handoff: " + $m + "; HANDOFF_ROOT not injected.")}'
+    exit 0
+fi
+[ -n "$root" ] || exit 0
+
+# export …; rather than a bare VAR=… prefix, so the value survives a batched
+# command: `VAR=x a && b` would apply to `a` alone, not `b`. printf %q quotes
+# for bash specifically — the rewritten command always runs under bash (the
+# Bash tool), so this need not be POSIX-portable.
+#
+# updatedInput alone, no permissionDecision: the rewritten command then goes
+# through the full permission pipeline. An "allow" here would approve the
+# whole command on a substring match, including whatever else it chains.
+quoted_root="$(printf '%q' "$root")"
+new_command="export HANDOFF_ROOT=$quoted_root; $command"
+
+jq -c --arg cmd "$new_command" \
+    '.tool_input.command = $cmd
+     | {hookSpecificOutput: {hookEventName: "PreToolUse", updatedInput: .tool_input}}' \
+    <<<"$payload"

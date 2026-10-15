@@ -1,0 +1,30 @@
+---
+name: pending
+description: List pending tasks from the session's already-injected context — no tool calls, no file reads. Reports the current task frame's "Open decisions" and "Remaining" items as loaded. Use when the user asks "what's pending", "list pending tasks", "show pending", "pending", or "/autodrive-handoff:pending".
+---
+
+# pending — List Pending Tasks From Context
+
+Report the pending work already visible in context: the `## Open decisions`
+and `## Remaining` sections of the task frame injected at session start (or
+after a compact), which follow the `## Current task` when there is one. Make
+**no tool calls** — this is a read of what is already in context, not of
+the files on disk.
+
+## Protocol
+
+1. Find the most recent task frame already in context.
+2. List its open decisions and remaining items, grouped as they appear
+   ("Open decisions" / "Remaining"). Trim for brevity; do not re-derive
+   or editorialize beyond that.
+3. If no frame was injected this session, or it has nothing pending,
+   say so plainly rather than guessing.
+
+## Anti-patterns
+
+- Reading `TASK.md` or `TODO.md` to double-check. The point is a zero-cost
+  report of what is already loaded; a stale answer here is corrected by
+  editing `TODO.md` directly (open decisions, remaining items) or at the
+  next checkpoint (the current task), not by a file read now.
+- Treating this as a task-management action. It reports only — it never
+  edits `TASK.md`, `TODO.md`, or memory.

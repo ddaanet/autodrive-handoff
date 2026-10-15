@@ -1,0 +1,12 @@
+{
+  "name": "autodrive-handoff",
+  "version": "0.18.0",
+  "description": "Task snapshot that survives a /clear or /compact in Claude Code: the agent writes the current task to TASK.md and the open decisions and remaining todos to TODO.md, in the project root, and a SessionStart hook injects them verbatim into the next session. Also names the session and drives an attended compact-and-continue.",
+  "author": {
+    "name": "David Allouche",
+    "email": "david@allouche.net"
+  },
+  "homepage": "https://github.com/ddaanet/autodrive-handoff",
+  "repository": "https://github.com/ddaanet/autodrive-handoff",
+  "license": "MIT"
+}

@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# handoff-approved: arm the transition the checkpoint left held.
+#
+# The checkpoint writes a sentinel naming commands in state `held` when a
+# memory approval is outstanding, so the drive cannot run them at the end of a
+# turn that is about to end on that question, or when a driven transition
+# follows a commit this turn owes, so it cannot run over a commit that failed. This is
+# the one command that leaves that state, and the directive the checkpoint
+# printed is what names it.
+#
+# The whole script, not a shim over scripts/: it is short enough to read at
+# once, its only caller would be its own shim, and bin/* is already inside the
+# `shellcheck -x` line, so sourcing ../scripts/_lib.sh from here lints exactly
+# as it does from scripts/. It self-locates from $0 the way the checkpoint shim
+# does — PATH resolution hands a bare-name invocation its own absolute path.
+#
+# NFR1: no git. It rewrites one file in the agent's own worktree;
+# the transition itself is taken at turn end like any other (drive-take.sh).
+set -euo pipefail
+
+# shellcheck source-path=SCRIPTDIR source=../scripts/_lib.sh
+source "$(dirname "$0")/../scripts/_lib.sh"
+
+err() {
+    printf 'handoff-approved: %s\n' "$1" >&2
+    exit 2
+}
+
+# The same channel the checkpoint reads its root from, and the same refusal:
+# this runs in the agent's Bash, where CLAUDE_PROJECT_DIR is unset and $PWD is
+# wherever the session cwd has drifted to. scripts/inject-checkpoint-root.sh
+# (PreToolUse(Bash)) resolves it fresh on every matching call and injects it
+# into this very invocation as HANDOFF_ROOT.
+root="${HANDOFF_ROOT:-}"
+[ -n "$root" ] \
+    || err "HANDOFF_ROOT is unset — call by bare name, unmodified, so the PreToolUse(Bash) hook recognises and injects it"
+[ -d "$root" ] || err "HANDOFF_ROOT does not name a directory (got \"$root\")"
+
+# Unrelated to the root above; this is still read straight from the
+# environment, since only the session an approval was asked in may give it.
+session_id="${CLAUDE_CODE_SESSION_ID:-}"
+
+drive="$root/$HANDOFF_REL_DRIVE"
+[ -f "$drive" ] || err "no transition to arm: $HANDOFF_REL_DRIVE does not exist"
+
+handoff_drive_read "$drive" && drive_rc=0 || drive_rc=$?
+case "$drive_rc" in
+    0) ;;
+    2) err "$HANDOFF_REL_DRIVE could not be read — $DRIVE_ERR" ;;
+    *) err "$HANDOFF_REL_DRIVE is malformed — $DRIVE_ERR" ;;
+esac
+
+# Only `held` is this command's to move. An `armed` one is already this turn's
+# to fire and a `pending` one is in flight, so rewriting either would say the
+# approval released something it did not.
+[ "$DRIVE_STATE" = "held" ] \
+    || err "the transition is in state \`$DRIVE_STATE\`, not \`held\`; nothing to arm"
+
+# And only this session's. The approval this command speaks for is the one this
+# session was asked for; a held file another session left behind waits on an
+# answer that can no longer arrive, and arming it drives that session's
+# transition into this conversation.
+[ "$DRIVE_OWNER" = "$session_id" ] \
+    || err "the held transition belongs to session \`$DRIVE_OWNER\`, not this one; it is not this session's approval to give"
+
+# The owner carries over: the session that approved is the one whose turn end
+# takes the transition, and the prompt-time sweep tells its file from another
+# session's by that name.
+handoff_drive_arm "$drive" "armed $DRIVE_OWNER" \
+    || err "could not rewrite $HANDOFF_REL_DRIVE"
+
+printf 'handoff: %s armed; it runs at the end of this turn.\n\n' "$DRIVE_KIND"
+
+# The closing line for each kind a held sentinel can carry. Autoname never
+# holds, so a held rename is always an untyped handoff and a held clear or
+# compact always a driven one. Literal rather than composed in Python, so
+# this command stays one file rewrite (NFR1); it must match
+# closing_directive() in scripts/_checkpoint_lib.py byte for byte.
+# Single-quoted: the backticks are literal text, and double-quoting them would
+# open command substitution.
+# shellcheck disable=SC2016
+case "$DRIVE_KIND" in
+    rename)
+        printf '%s\n' 'Once everything above is done, end on one line: `Ready to /clear`.'
+        ;;
+    clear)
+        printf '%s\n' 'Once everything above is done, end on one line: `Clear armed — it runs when this turn ends.`'
+        ;;
+    compact)
+        printf '%s\n' 'Once everything above is done, end on one line: `Compaction armed — it runs when this turn ends.`'
+        ;;
+esac
