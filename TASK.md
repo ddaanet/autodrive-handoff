@@ -1,3 +1,0 @@
-## Current task
-
-Ship the constant continuation (step 1 of `plans/2026-10-11-handoff-continue-threshold/plan.md`, recorded in `docs/changelog/2026-10-15-the-continuation-is-a-constant.md`) together with the narrowed mechanical principle, both on dev. The sequence my human partner set: run `/code-review` at high effort on Opus over `main..dev` and fix what it confirms, then fast-forward main to dev, then `/gitlore:push`, then the `ddaa:preflight` check, then `just release` as a minor bump, because the payload's `continue` became a boolean and that change is breaking.
