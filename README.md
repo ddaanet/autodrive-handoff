@@ -36,13 +36,9 @@ Install the plugin:
 This plugin was called `handoff` before; if you installed it under that name,
 run `/plugin uninstall handoff@ddaanet` first, then install the new name.
 
-That's it. No per-project setup step. A `SessionStart(startup|clear)`
-hook assembles the handoff frame in memory at session start — stamping
-a header onto `./TASK.md` and `./TODO.md`, whichever has content — and
-injects the result into the fresh agent's context. When there is nothing to
-inject it says so (`No task frame or todo.`) rather than staying silent. No
-generated file is involved, and the transcript is never touched: the live
-working set is the harness's own git status.
+At every session start and after every `/clear`, a hook injects `TASK.md`
+and `TODO.md`, whichever has content, into the agent's context under a
+timestamp header. When neither has, it says so: `No task frame or todo.`
 
 **Upgrading from 0.15 or earlier**: the two files used to live under
 `.claude/`, and the plugin moves them for you. When the root file has no body,
