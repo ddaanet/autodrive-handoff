@@ -18,10 +18,15 @@ dotfiles).
   update never edits files outside `plugin-dev/`.
 - **`release.sh`** — the release flow itself. Validates state, bumps
   `.claude-plugin/plugin.json`, commits, tags, pushes, creates a GitHub release,
-  and bumps (or creates) the plugin's entry in `marketplace.json`. Its
+  and bumps (or creates) the plugin's entry in `marketplace.json`. A plugin with
+  a `dist.include` also publishes its `dist` branch. Its
   `--resume` mode completes a release that landed only partially — a rejected
   push, a failed `gh` call — by probing what already happened and doing only
   what is missing. It is a no-op that says so when everything already landed.
+- **`dist.sh`** — the dist branch's script, used by `release.sh` and
+  `dogfood.sh`. It reads `dist.include` and builds, checks, validates and
+  commits the tree holding only the listed paths. Not opted in, it does
+  nothing. See [The dist branch](#the-dist-branch).
 - **`check-version.sh`** — compares `plugin.json`'s version against the plugin's
   `marketplace.json` entry. Exposed as `just check-version` and run as a
   `release` pre-flight, so a release refuses to start on top of a previous one
@@ -33,8 +38,9 @@ dotfiles).
   release is the exception the Conventions below spell out, and the hook refuses
   an agent's edit there too.
 - **`dogfood.sh`** — the dogfood launcher's script, with three subcommands.
-  `sync` mirrors the plugin tree, minus git-ignored paths (a submodule's own
-  ignores included) and `.git`, into `dist/plugin/`. `pre-tool` is the
+  `sync` mirrors the plugin tree (only the `dist.include` paths, where the
+  plugin has one), minus git-ignored paths (a submodule's own ignores included)
+  and `.git`, into `dist/plugin/`. `pre-tool` is the
   `PreToolUse` hook that refuses edits into that copy, and `session-start` the
   `SessionStart` hook that warns when a session does not load it. See
   [Dogfooding](#dogfooding).
@@ -186,6 +192,65 @@ environment under `plugin-dev/` — most visibly a `plugin-dev/memory` gitlink
 that makes a bare `git submodule status` fail for the whole repo. No manual
 cleanup is needed: the first pull of a `dist-` tag deletes all of it in the same
 commit.
+
+## The dist branch
+
+The Anthropic plugin directory refuses a plugin folder that holds a gitlink, and
+a plugin shipped from its repo root cannot drop one it mounts there, a gitlore
+`memory` mount for one. A plugin can instead publish a branch, `dist`, holding
+only the paths it lists. Nothing changes for a plugin without a `dist.include`.
+
+To opt in:
+
+1. Create `dist.include` at the repo root, one path per line, relative to the
+   root: the plugin's shipped paths, for example
+
+   ```text
+   .claude-plugin
+   skills
+   hooks
+   scripts
+   README.md
+   LICENSE
+   ```
+
+   Blank lines and lines starting with `#` are skipped, and a trailing `/` is
+   allowed. `dist.include` ships only if it lists itself.
+
+2. Commit it. A release reads the list from the release commit, not the
+   worktree.
+3. Run `just release`. The first release creates `dist` as a root commit;
+   each later one adds a commit on top. Each also pushes a `dist-vX.Y.Z` tag at
+   that commit, and the marketplace entry gets `ref: dist`.
+4. Point the plugin directory submission at the `dist` branch.
+
+Opting in needs `claude` on PATH, because the release validates the tree with
+`claude plugin validate --strict` before it commits or tags anything.
+`just dogfood` then copies only the listed paths into `dist/plugin/`, so the
+session loads what the branch will hold.
+
+What each check does:
+
+- **Refuses the release** (no commit, no tag, nothing pushed): a listed path
+  that matches nothing; a symlink or gitlink inside a listed path; no
+  `.claude-plugin/plugin.json`, or one that is not JSON; `claude` missing from
+  PATH or a validation failure; `dist.include` present with `dist.sh` not
+  vendored beside `release.sh`, which `just update-plugin-dev` fixes.
+- **Refuses a line** of `dist.include`, naming it: an absolute path; a `..`, `.`
+  or `.git` component; an empty component; a leading or trailing blank; any of
+  `*`, `?`, `[`, `]` or a backslash, since paths are literal; a CRLF file.
+- **Refuses the dogfood sync**, leaving the previous copy: the same bad lines, a
+  listed path missing from the working tree, or `dist.include` present with
+  `dist.sh` missing.
+- **Warns and goes on**, saying the plugin goes to directory review rather than
+  that it is blocked: more than 512 files; a file over 256 KiB that is not an
+  image or a font; a root `README.md` under 40 words; no `LICENSE` file and no
+  `license` in `plugin.json`.
+
+A release that stopped partway is finished with `just resume-release`, which
+rebuilds the same dist commit and pushes only what is missing. A `dist-vX.Y.Z`
+tag that already points elsewhere, locally or on origin, is refused and never
+moved, and nothing is pushed.
 
 ## Dogfooding
 
@@ -349,7 +414,7 @@ version-guard:
 
 ## Requirements
 
-`bash`, `jq`, `git`, `gh`, `rsync`.
+`bash`, `jq`, `git`, `gh`, `rsync`; `claude` on PATH for a plugin that publishes a `dist` branch.
 
 ## License
 

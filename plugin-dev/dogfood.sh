@@ -41,8 +41,20 @@ usage() {
 # with no rsync; each refusal is one dogfood: line naming the path or the
 # command, exit 1, dist/ untouched. Without the rsync check, the mkdir would
 # leave an empty copy that the shim launches as a promoted one.
+#
+# With a dist.include at the root, the copy holds only the paths dist.sh paths
+# lists, still from the working tree and still minus ignored paths. dist.sh
+# writes its list to a file, never a pipe, and its status decides: 0 takes the
+# allowlist, 3 (no dist.include) syncs as above, 1 or any other status refuses
+# before dist/ is touched. The allowlisted sync hands rsync one NUL-delimited
+# filter file as a merge: the ignored-path excludes first, so an ignored file
+# inside a listed directory stays out, then a rule for each parent directory of
+# a listed path, then the path itself, or for a directory the directory and its
+# contents, then `- *` for the rest. A dist.include with no dist.sh beside this
+# script refuses the sync, since copying without the list would ship what the
+# list leaves out.
 sync_copy() {
-    local root
+    local root dist status=0 allowlisted=0
     root="$(root_dir && printf x)"
     root="${root%x}"
     require_manifest "$root"
@@ -53,9 +65,68 @@ sync_copy() {
     trap 'rm -rf "$work"' EXIT
     list_ignored "$root" "" >"$work/excludes"
     printf '%s\0' '.git' '/dist/plugin/' >>"$work/excludes"
+    dist="$(dist_path && printf x)"
+    dist="${dist%x}"
+    if [[ -f "$dist" ]]; then
+        bash "$dist" paths "$root" >"$work/listed" || status=$?
+        case "$status" in
+            0) allowlisted=1 ;;
+            3) ;;
+            # dist.sh has printed its dist: line.
+            1) exit 1 ;;
+            *)
+                printf 'dogfood: %s paths exited %s; sync refused\n' "$dist" "$status" >&2
+                exit 1
+                ;;
+        esac
+    elif [[ -e "$root/dist.include" || -L "$root/dist.include" ]]; then
+        printf 'dogfood: %s is not found, but %s/dist.include is present; sync refused\n' "$dist" "$root" >&2
+        exit 1
+    fi
+    if [[ "$allowlisted" == 1 ]]; then
+        filter_rules "$root" >"$work/filters"
+    fi
     mkdir -p "$root/dist/plugin"
-    rsync -a --delete --delete-excluded --from0 --exclude-from=- \
-        "$root/" "$root/dist/plugin/" <"$work/excludes"
+    if [[ "$allowlisted" == 1 ]]; then
+        rsync -a --delete --delete-excluded --from0 --filter=". $work/filters" \
+            "$root/" "$root/dist/plugin/"
+    else
+        rsync -a --delete --delete-excluded --from0 --exclude-from=- \
+            "$root/" "$root/dist/plugin/" <"$work/excludes"
+    fi
+}
+
+# filter_rules <root>: print the NUL-delimited filter rules of an allowlisted
+# sync, from $work/excludes and $work/listed. A listed path is literal: dist.sh
+# refused glob and escape characters. A symlink is not a directory to rsync, so
+# it takes a file rule even when it names one.
+filter_rules() {
+    local rule p parent
+    while IFS= read -r -d '' rule; do
+        printf -- '- %s\0' "$rule"
+    done <"$work/excludes"
+    while IFS= read -r -d '' p; do
+        parent="$p"
+        while [[ "$parent" == */* ]]; do
+            parent="${parent%/*}"
+            printf -- '+ /%s/\0' "$parent"
+        done
+        if [[ -d "$1/$p" && ! -L "$1/$p" ]]; then
+            printf -- '+ /%s/\0+ /%s/***\0' "$p" "$p"
+        else
+            printf -- '+ /%s\0' "$p"
+        fi
+    done <"$work/listed"
+    printf -- '- *\0'
+}
+
+# dist_path: the physical path of dist.sh beside this script, printed with no
+# trailing newline. Found the way root_dir finds the root, with the same x
+# shield; each step is chained, since errexit is off inside $(...).
+dist_path() {
+    local here
+    here="$(dirname "${BASH_SOURCE[0]}" && printf x)" &&
+        (cd -P -- "${here%?x}" && printf '%s/dist.sh' "$PWD")
 }
 
 # list_ignored <dir> <prefix>: print, NUL-terminated, the untracked ignored
