@@ -1,5 +1,5 @@
 {
-  "description": "Hooks for the handoff skill: SessionStart load, write guard (autodrive, checkpoint-only), the checkpoint channel's PreToolUse(Bash) root injection (inject-checkpoint-root.sh), SessionStart(compact|clear) sentinel consumption and frame injection, and the drive-failure report. The driven transition itself is run by the drive mod (handoff.ts). See CLAUDE.md for details.",
+  "description": "Hooks for the handoff skill: SessionStart load, write guard (autodrive, checkpoint-only), the checkpoint channel's PreToolUse(Bash) root injection (inject-checkpoint-root.sh), SessionStart(compact|clear) sentinel consumption and frame injection, and the drive-failure report. The driven transition itself is run by the drive mod (handoff.ts). See README.md for details.",
   "modules": [
     "./handoff.ts"
   ],

@@ -373,7 +373,7 @@ note in `report-drive-failure.sh`.
   file is another session's, or when the kind is not `rename|clear|compact`.
   Prints its status fact, a blank line, then the closing line (literal per
   `case` arm, byte-for-byte `closing_directive()`).
-- `scripts/gen_mod_fixtures.py` — renders `tests/mod/fixtures.ts` from
+- `tests/gen_mod_fixtures.py` — renders `tests/mod/fixtures.ts` from
   `tests/mod/fixtures/*.json`, because a hooks-module test can neither read
   files nor import JSON. `tests/test_mod_fixtures.py` fails when they disagree.
 - `plugin-dev/` — vendored claude-plugin-dev toolkit, pinned by
@@ -504,8 +504,8 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
   file check, the `armed` gate, the owner check, the cwd, the arming, keeping
   the owner on `pending`.
 - `tests/test_mod_fixtures.py` — `fixtures.ts` equals what
-  `scripts/gen_mod_fixtures.py` renders; regenerate with
-  `python3 scripts/gen_mod_fixtures.py`, never by hand. A second row ties every
+  `tests/gen_mod_fixtures.py` renders; regenerate with
+  `python3 tests/gen_mod_fixtures.py`, never by hand. A second row ties every
   prose line a fixture submits to `CONTINUATION`, so the mod's fixtures cannot
   carry a continuation the composer would never write.
 - `just mod-smoke` (`pytest -m live tests/test_mod_live.py -v -rs`, the `live`

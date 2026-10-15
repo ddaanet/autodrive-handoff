@@ -12,7 +12,7 @@ MOD_TESTS = Path(__file__).resolve().parent / "mod"
 def test_fixtures_ts_matches_the_json_fixtures() -> None:
     committed = (MOD_TESTS / "fixtures.ts").read_text(encoding="utf-8")
     assert render(MOD_TESTS / "fixtures") == committed, (
-        "regenerate with: python3 scripts/gen_mod_fixtures.py"
+        "regenerate with: python3 tests/gen_mod_fixtures.py"
     )
 
 

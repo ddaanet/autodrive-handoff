@@ -117,7 +117,9 @@ plugin's own `scripts/` and `bin/`, plus coreutils and read-only `git`.
 | Mod, at turn end | `bash <plugin>/scripts/drive-take.sh <cwd> <session-id>` | take the armed transition |
 | Agent's Bash tool | `handoff-checkpoint`, `handoff-approved` | write the files; release a held transition |
 
-The mod skips `drive-take.sh` when nothing is armed. It runs no git or
+The mod skips `drive-take.sh` only when the turn ended in the session root
+and `.claude/autodrive` does not exist. Otherwise it runs it, and it prints
+nothing when no transition is armed for this session. The mod runs no git or
 network code.
 
 `git` is read-only and runs only inside `handoff-checkpoint`, to learn whether
@@ -151,15 +153,37 @@ hook rewrites it to `export HANDOFF_ROOT=<root>; <original command>`. It makes
 no permission decision: your usual permission rules apply. Other commands are
 left alone.
 
+Because the rewritten command starts with `export`, a prefix rule for the
+command name alone does not match it, and you are prompted (a headless `-p`
+run is denied). To run the checkpoint without a prompt, allow all three in
+`.claude/settings.json`:
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(handoff-checkpoint:*)",
+      "Bash(handoff-approved:*)",
+      "Bash(export HANDOFF_ROOT=*)"
+    ]
+  }
+}
+```
+
 ### Files it writes
 
 | File | Purpose |
 |---|---|
 | `TASK.md`, `TODO.md` (project root) | the task frame; plain tracked files |
+| `.claude/` | created by `handoff-checkpoint` when absent |
 | `.claude/autodrive` | the transition to carry out; written only by `handoff-checkpoint`, direct writes denied by the `PreToolUse(Write\|Edit)` guard |
 | `.claude/autodrive.failed` | written by the mod when a line is rejected; consumed at your next prompt |
 | `.claude/autodrive.swept` | one line per stale transition file removed; last 50 kept |
+| `.claude/handoff-todo.md`, `.claude/handoff-task.md` | files from an earlier version of the plugin; `handoff-checkpoint` moves the todo to `TODO.md` or removes either, and nothing else touches them |
 | `/tmp/claude/handoff-drift-<session id>` | marker so a session-root drift note appears once; `/tmp/claude` is created mode 0700 and markers older than 7 days are deleted |
+
+`TASK.md`, `TODO.md`, `.claude/autodrive` and `.claude/autodrive.swept` are
+each written through a temporary sibling file renamed over the name.
 
 It also reads, never writes, the modification time of the owning session's
 transcript, to tell a live session from a dead one.

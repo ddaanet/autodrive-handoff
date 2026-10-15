@@ -60,9 +60,11 @@ ran without a prompt. The loose match is right for an environment-variable
 prefix and wrong for an approval.
 
 It now returns `updatedInput` alone. The rewritten command goes through the
-full permission pipeline, as the agent's own would have: a user who has allowed
-`handoff-checkpoint` sees no prompt, and one who has not is asked. The row in
-`tests/checkpoint.bats` asserts `permissionDecision` is absent.
+full permission pipeline, as the agent's own would have. A rule for
+`handoff-checkpoint` alone does not cover the rewritten command, which begins
+with the `export`; the README names the three rules that do (verified with
+`claude -p` in default mode on 2026-10-15). The row in `tests/checkpoint.bats`
+asserts `permissionDecision` is absent.
 
 ## The disclosure
 
@@ -84,8 +86,9 @@ user's permission rules.
 
 ## What stands
 
-The design of the drive, the sentinel and the write path is unchanged; the
-changelog and design nodes that call the plugin `handoff` were written when it
-was, and are not rewritten for the name. `docs/design/scoping.md` already said
-the injector acts through `updatedInput`; it now also says the hook makes no
-permission decision.
+The design of the drive, the sentinel and the write path is unchanged.
+Changelog entries and historical records keep the name `handoff` they were
+written under; design nodes name the current skills as
+`/autodrive-handoff:*`. `docs/design/scoping.md` already said the injector acts
+through `updatedInput`; it now also says the hook makes no permission
+decision.

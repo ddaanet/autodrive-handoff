@@ -310,7 +310,7 @@ Three layers, because the mod's own seams are each reachable only one way:
   API call the mod makes and asserts the exact call sequence: the deferral to
   `turn.complete`, stop-on-first-failure with the `failFile` write, the
   prompt bail, the no-op on empty stdout and on an aborted turn. It consumes
-  the same fixtures through a generated module, `scripts/gen_mod_fixtures.py`,
+  the same fixtures through a generated module, `tests/gen_mod_fixtures.py`,
   which `tests/test_mod_fixtures.py` keeps in step. Both gate `just precommit`.
 - `tests/test_mod_live.py` (`just mod-smoke`, outside precommit) drives a real
   `claude -p` in a throwaway repo with an armed sentinel and reads the session
