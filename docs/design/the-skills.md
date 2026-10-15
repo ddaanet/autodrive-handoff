@@ -18,7 +18,7 @@ There is no restart skill: Claude Code's own `/restart` relaunches with
 `--resume`, which carries the conversation over whole, so there is no
 boundary for this plugin to cross and no frame to carry.
 
-`/autodrive-handoff:pending` is a fourth skill with no design surface at all: it reports
+`/autodrive-handoff:pending` has no design surface at all: it reports
 the `## Current task`, `## Open decisions` and `## Remaining` sections of the
 frame already injected into context, making no tool call and writing no file.
 It appears nowhere else in the design because there is nothing else to say

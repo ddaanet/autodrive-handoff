@@ -7,22 +7,18 @@ complement to Claude Code's auto-memory: memory holds durable facts
 *ephemeral task frame* memory avoids — what you were doing right now,
 what decisions are still open.
 
-Two skills sit on that seam, one per boundary:
-
-| | skill |
+| skill | use it |
 |---|---|
-| **before `/clear`** | `/autodrive-handoff:handoff` |
-| **before `/compact`** | `/autodrive-handoff:precompact` |
+| `/autodrive-handoff:handoff` | before a `/clear` |
+| `/autodrive-handoff:precompact` | before a `/compact` |
+| `/autodrive-handoff:autoname` | to name the session, and nothing else |
+| `/autodrive-handoff:pending` | to list the open decisions and remaining todos already loaded, with no tool calls |
 
-Each one either prepares and stops — putting the open work on disk and
-leaving you to run the command — or carries the transition out for you: the plugin's mod
-runs the command and submits a fixed prompt that resumes the work from the
-files on the far side, once your turn ends. Which one you get is decided by what you ask
-for. `/autodrive-handoff:autoname` is a third skill: the rename alone, for a session
-worth a title while the main thread stays live.
-`/autodrive-handoff:pending` is a fourth: it lists the pending items — open decisions
-and remaining todos — from the task frame injected at session start or
-after a compact, with no tool calls.
+The two boundary skills either prepare and stop — putting the open work on
+disk and leaving you to run the command — or carry the transition out for
+you: the plugin's mod runs the command and submits a fixed prompt that
+resumes the work from the files on the far side, once your turn ends. Which
+one you get is decided by what you ask for.
 
 What they write is two plain files in your project root, `TASK.md` and
 `TODO.md`; a `SessionStart` hook injects them back, verbatim, into whatever
