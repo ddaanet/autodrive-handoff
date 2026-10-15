@@ -51,10 +51,14 @@ fi
 # command: `VAR=x a && b` would apply to `a` alone, not `b`. printf %q quotes
 # for bash specifically — the rewritten command always runs under bash (the
 # Bash tool), so this need not be POSIX-portable.
+#
+# updatedInput alone, no permissionDecision: the rewritten command then goes
+# through the full permission pipeline. An "allow" here would approve the
+# whole command on a substring match, including whatever else it chains.
 quoted_root="$(printf '%q' "$root")"
 new_command="export HANDOFF_ROOT=$quoted_root; $command"
 
 jq -c --arg cmd "$new_command" \
     '.tool_input.command = $cmd
-     | {hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "allow", permissionDecisionReason: "injected HANDOFF_ROOT for the checkpoint channel", updatedInput: .tool_input}}' \
+     | {hookSpecificOutput: {hookEventName: "PreToolUse", updatedInput: .tool_input}}' \
     <<<"$payload"

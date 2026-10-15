@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # drive-take.sh <cwd> <session-id>: take this session's armed transition and
-# print the plan the mod runs. Called by hooks/handoff.ts at turn.complete after
+# print the plan the mod runs. Called by the mod at turn.complete after
 # a Stop, with the Stop event's cwd and session id. Exit 0 always; empty stdout
 # means nothing was armed for this session (no file, `pending`, `held`, or
 # `armed` by another session); an `armed` file with no session id given is a

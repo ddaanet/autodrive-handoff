@@ -98,7 +98,8 @@ run_inject_root() {
     repo="$(make_repo)"
     run_inject_root "$repo" 'handoff-checkpoint <<<"{}"'
     [ "$status" -eq 0 ]
-    [ "$(jq -r '.hookSpecificOutput.permissionDecision' <<<"$output")" = "allow" ]
+    # No decision: the rewrite goes through the permission pipeline, not around it.
+    [ "$(jq -r '.hookSpecificOutput | has("permissionDecision")' <<<"$output")" = "false" ]
     new_cmd="$(jq -r '.hookSpecificOutput.updatedInput.command' <<<"$output")"
     [[ "$new_cmd" == "export HANDOFF_ROOT="*";"*"handoff-checkpoint"* ]]
     [[ "$new_cmd" == *"$repo"* ]]

@@ -3,7 +3,7 @@
 # and report anything that went wrong in the last one.
 #
 # 1. The drive mod's non-delivery. A rejected command or prompt in
-#    hooks/handoff.ts has no one to tell: the turn it ran after is over. Left
+#    the mod has no one to tell: the turn it ran after is over. Left
 #    alone, a line that never runs is silent, and the agent carries on believing
 #    it armed a transition. The mod writes its reason to .claude/autodrive.failed;
 #    this reads it at the first moment anything can act on it. It is written

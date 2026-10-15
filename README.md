@@ -140,7 +140,7 @@ one, is a cache of it. Finished items are dropped rather than ticked off:
 outstanding and gets redone.
 
 Carrying a transition out is done by a Claude Code mod that ships in this
-plugin (`hooks/handoff.ts`), so it **requires Claude Code 2.1.287 or newer**;
+plugin (`handoff.ts` in its `hooks` directory), so it **requires Claude Code 2.1.287 or newer**;
 the plugin manifest has no field to pin a minimum version, so an older
 install loads the rest of the plugin and silently skips the mod. The mod
 runs the lines when your turn ends, in order, and stops rather than
@@ -217,7 +217,7 @@ complement for durable context that outlives tasks.
 | Code state | the repo |
 | **Current task + open decisions across `/clear`** | **this plugin** |
 
-See [`docs/design.md`](docs/design.md) for the research and analysis behind
+See [`docs/design.md`](https://github.com/ddaanet/autodrive-handoff/blob/main/docs/design.md) for the research and analysis behind
 this split.
 
 ### Choosing a handoff provider
@@ -256,15 +256,114 @@ enclosing worktree, so each one has its own `.claude/`, `TASK.md` and
 - `python3` in `$PATH`
 - `jq` in `$PATH`
 
-## Files touched on your system
+## What the plugin runs and writes
+
+This is everything the plugin starts, submits and writes, checked against its
+code. There is no network code in it, and nothing it runs leaves your machine.
+The only thing that goes anywhere is what any file or tool output in your
+session goes to: text that reaches the conversation (the injected `TASK.md`
+and `TODO.md`, a hook's note) is part of the context Claude Code sends to the
+model, like anything else in it.
+
+### Programs it starts
+
+The plugin ships no binary. Every program is `bash`, `python3` or `jq`, over
+scripts in the plugin's own `scripts/` and `bin/`, plus the usual
+coreutils (`date`, `stat`, `find`, `mktemp`, `mkdir`, `rm`, `tr`, `awk`,
+`head`) and, read-only, `git` (see below).
+
+Hooks, each declared in the plugin's hooks manifest and run as
+`bash <plugin>/scripts/<name>`:
+
+| Event | Script | What it does |
+|---|---|---|
+| `SessionStart` (every source) | `session-pointer.sh` | creates `/tmp/claude` (mode 0700) and deletes `handoff-root-*` and `handoff-drift-*` files there older than 7 days |
+| `SessionStart` (`startup`, `clear`) | `load-handoff.sh` | injects `TASK.md` and `TODO.md`; clears a finished `clear` transition |
+| `SessionStart` (`compact`) | `load-compact.sh` | injects `TODO.md`; clears a finished `compact` transition |
+| `UserPromptSubmit` | `report-drive-failure.sh` | reports a failed or stale transition, sweeps a stale one, notes session-root drift |
+| `PreToolUse` (`Write`, `Edit`) | `write-guard.sh` | denies a write to `.claude/autodrive`; allows or ignores everything else |
+| `PreToolUse` (`Bash`) | `inject-checkpoint-root.sh` | see below |
+
+The mod, `handoff.ts` in the plugin's `hooks` directory, runs one program: at
+the end of a turn it runs `bash <plugin>/scripts/drive-take.sh <cwd>
+<session-id>`. It skips even that when the session's directory is the project
+root and no `.claude/autodrive` file exists, so a turn with nothing armed
+starts nothing. It also reads the prompt box, to see whether you have typed
+anything, shows toasts, and writes `.claude/autodrive.failed` (below). It does
+no network or git work, and it never reads `.claude/autodrive` itself:
+`drive-take.sh` does, and hands it the plan.
+
+The agent itself runs two commands from the plugin's `bin/`, from its Bash
+tool and under your normal permission rules:
+
+- `handoff-checkpoint` reads a JSON payload on stdin and writes the files
+  below. It starts `python3` and, to re-read the file it just composed, `bash`.
+- `handoff-approved` takes no input and moves a held transition to armed.
+
+`git` is run by `handoff-checkpoint` in three read-only forms, and only to
+find out whether a gitlore memory submodule has uncommitted changes:
+`git config --file .gitmodules submodule.gitlore-memory.path` on each
+`handoff` or `precompact` wrap-up (not for `autoname`), and, only when that
+submodule exists, `git -C <memory> status --porcelain` and, if it has
+changes, `git -C <root> config --get gitlore.memoryApprovalClauseFile`. None
+changes a repository. The file list `status` prints is shown to the agent in
+the checkpoint's output, so it can draft the memory commit message. Nothing
+else the plugin ships starts `git`.
+
+### What the mod submits
+
+The mod runs only what `.claude/autodrive` holds, and only when the turn that
+just ended belongs to the session whose id that file names as its owner.
+`handoff-checkpoint` composes the file in the agent's call, from a payload it
+validates, and the guard above refuses a direct `Write` or `Edit` to it. The
+lines it can hold are:
+
+- `/rename <title>`, the session title the agent chose;
+- `/clear`;
+- `/compact`, or `/compact <focus>` with the focus directive the agent chose,
+  one line;
+- one resume prompt, which is exactly this, from the `CONTINUATION` constant
+  in `scripts/checkpoint.py`:
+
+  ```
+  Continue where the previous context stopped.
+  ```
+
+That resume prompt is the only prompt the plugin ever submits, and the
+checkpoint writes it only when the request was to continue after the reset.
+The mod runs the lines in order and checks the prompt box before each one: if
+you have typed anything it stops and runs nothing more. A line the host
+rejects stops the sequence and is recorded, and you are told at your next
+prompt. The file's reader also pins each command to its place and refuses a
+prose line that begins with `/`, so a file the checkpoint did not write still
+cannot make the mod run any other slash command.
+
+### The `PreToolUse(Bash)` hook
+
+`inject-checkpoint-root.sh` looks at every Bash call the agent makes with one
+`jq` parse and a substring test. When the command contains `handoff-checkpoint`
+or `handoff-approved`, it rewrites it to `export HANDOFF_ROOT=<root>; <the
+original command>`, where `<root>` is the project root it resolved, shell-quoted.
+Those two commands cannot find the root from inside the agent's shell. The hook
+returns the rewritten command and nothing else: it makes no permission decision,
+so the rewritten command goes through your usual permission rules, the same as
+if the agent had typed it. (An earlier version also returned `allow`, which
+skips that check for any command that merely contained one of the two names; it
+no longer does.) Any other command is left alone and the hook prints nothing.
+
+### Files it writes
 
 Per project, two tracked files in the project root:
 
 - `TASK.md` — the task in hand, written by the checkpoint before a `/clear`
-  and removed by it before a `/compact`.
+  and removed by it before a `/compact`. Read by `load-handoff.sh`.
 - `TODO.md` — open decisions and the remainder of an in-flight task list,
   kept by the agent all session. Shared with any `TODO.md` the project
-  already has.
+  already has. Read by both loaders.
+
+Both are plain files that nothing stages or commits. A file left by 0.15 or
+earlier at `.claude/handoff-task.md` or `.claude/handoff-todo.md` is moved onto
+`TODO.md`, or removed, by the checkpoint (see Setup).
 
 And under `./.claude/`, three files:
 
@@ -283,14 +382,45 @@ And under `./.claude/`, three files:
   once the commit has landed; otherwise the file starts out `armed` and
   nothing is waited on. When it goes into flight at the end of your turn its
   state becomes `pending`, and it is consumed once the transition completes.
-  At most one exists at a time — one prompt, one transition.
-- `autodrive.failed` — written only when a line was rejected, and consumed
-  when you are told about it at your next prompt.
+  At most one exists at a time — one prompt, one transition. Read by
+  `drive-take.sh`, both loaders and the prompt hook.
+- `autodrive.failed` — written by the mod only when a line was rejected, and
+  consumed by the prompt hook when you are told about it at your next prompt.
 - `autodrive.swept` — one line for each transition file the prompt-time sweep
   removed (when, which session, its state, owner and age), newest first, the
   last 50 kept. Never consumed; a diagnostic for a sentinel that went missing.
 
-Nothing outside the current project is modified.
+Outside the project, in `/tmp/claude/`:
+
+- `handoff-drift-<session id>` — a marker the prompt hook writes when the
+  session's working directory has left the repository it was launched in, so
+  the note appears once and not every prompt. It holds that directory and is
+  deleted by `session-pointer.sh` when over 7 days old.
+
+When a gitlore memory submodule has uncommitted changes, the checkpoint prints
+instructions for the agent to summarise them, get your approval and write a
+message file under `.claude/` for gitlore to use; the agent writes it, not the
+plugin, and gitlore reads it. Likewise, when your request called for a commit,
+the checkpoint prints a line telling the agent to make it, with `TASK.md` and
+`TODO.md` included. These are instructions the agent may follow, printed on
+the checkpoint's output, and the commit is the agent's, made under your
+permission rules. The plugin itself never runs `git commit`, `git push` or any
+other git command that changes anything.
+
+Nothing outside the current project is modified except those markers. The
+plugin reads one file it does not write: the modification time (never the
+content) of the owning session's transcript, to tell a live session from a dead
+one.
+
+### What it does not do
+
+- It makes no network call: no script or the mod fetches, posts or opens a
+  connection, and it sends nothing anywhere.
+- It runs no git command that changes anything, and never commits or pushes
+  (the checkpoint's printed instructions above are the one place a commit
+  comes up).
+- It submits no prompt other than the one above, and runs no slash command
+  other than `/rename`, `/clear` and `/compact`.
 
 ## Uninstall
 
@@ -300,14 +430,16 @@ Nothing outside the current project is modified.
 
 ## Further reading
 
-- [`docs/design.md`](docs/design.md) — research, SOTA analysis, decisions;
-  the hub for the nodes under [`docs/design/`](docs/design/).
-- [`docs/changelog.md`](docs/changelog.md) — one line per design change,
-  linking the dated write-time record of each under `docs/changelog/`.
-- [`plans/`](plans) — prospective content: specs, design proposals,
-  implementation plans.
-- [`CLAUDE.md`](CLAUDE.md) — agent instructions for working on the
-  plugin itself.
+- [`docs/design.md`](https://github.com/ddaanet/autodrive-handoff/blob/main/docs/design.md) — research, SOTA analysis,
+  decisions; the hub for the nodes under
+  [`docs/design/`](https://github.com/ddaanet/autodrive-handoff/tree/main/docs/design).
+- [`docs/changelog.md`](https://github.com/ddaanet/autodrive-handoff/blob/main/docs/changelog.md) — one line per design
+  change, linking the dated write-time record of each under
+  [`docs/changelog/`](https://github.com/ddaanet/autodrive-handoff/tree/main/docs/changelog).
+- [`plans/`](https://github.com/ddaanet/autodrive-handoff/tree/main/plans) — prospective content: specs, design
+  proposals, implementation plans.
+- [`CLAUDE.md`](https://github.com/ddaanet/autodrive-handoff/blob/main/CLAUDE.md) — agent instructions for working on
+  the plugin itself.
 - [`skills/handoff/SKILL.md`](skills/handoff/SKILL.md) — the skill
   that the agent follows when you ask for a handoff.
 - [`skills/precompact/SKILL.md`](skills/precompact/SKILL.md) — the

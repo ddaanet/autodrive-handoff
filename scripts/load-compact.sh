@@ -4,7 +4,7 @@
 # pane-marker scraping, and it also covers a compaction that finishes too fast
 # to observe as a busy->idle transition.
 #
-# The mod (hooks/handoff.ts) ran the `/compact` and submits the continuation
+# The mod ran the `/compact` and submits the continuation
 # prompt itself once it resolves; this hook only clears the sentinel and
 # injects the frame. The hook fires for auto-compaction too, so the
 # no-transition path must be silent.

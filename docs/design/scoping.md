@@ -70,8 +70,11 @@ there, and a `$PWD` fallback is wrong in exactly the drift case. So a
 `PreToolUse(Bash)` hook (`inject-checkpoint-root.sh`) resolves the root the
 same way, at the moment a `handoff-checkpoint` or `handoff-approved`
 invocation is about to run, and injects it as `HANDOFF_ROOT` into that one
-command via `updatedInput`. An earlier design published the root once per
-session instead, at `SessionStart`, to a session-keyed pointer file the
+command via `updatedInput`. The hook makes no permission decision: the match
+is a loose substring, so an `allow` would approve any command that merely
+contains either name, and the rewritten command goes through the user's
+permission rules as the agent's own would. An earlier design published the
+root once per session instead, at `SessionStart`, to a session-keyed pointer file the
 checkpoint's Bash could address blind. That sample was taken at the one
 moment the cwd does not yet belong to the session —
 `SessionStart(resume)` fires with the *resuming* process's cwd, before the

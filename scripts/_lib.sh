@@ -31,7 +31,7 @@ HANDOFF_LEGACY_REL_TODO=".claude/handoff-todo.md"
 # shellcheck disable=SC2034
 HANDOFF_REL_DRIVE=".claude/autodrive"
 # Where the drive mod records a line it could not run (written from
-# hooks/handoff.ts at the failing line). A mod's rejection goes nowhere on its
+# the mod at the failing line). A mod's rejection goes nowhere on its
 # own, so this is the only path back to the agent; consumed and reported by
 # report-drive-failure.sh at the next UserPromptSubmit.
 # shellcheck disable=SC2034

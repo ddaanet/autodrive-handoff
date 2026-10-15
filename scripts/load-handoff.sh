@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SessionStart hook for handoff loading. Fires on `startup` and `clear`
-# (see hooks/hooks.json), and does two things:
+# (see the hooks manifest), and does two things:
 #
 #   - assembles the frame in memory — a timestamp header plus the inlined
 #     agent-authored task file and todo remainder, whichever count — and emits
@@ -9,7 +9,7 @@
 #     content size and age. A missing half, or both, is named on both channels,
 #     and so is a half read from a legacy path or a legacy file left ignored;
 #   - on `clear`, consumes a pending transition of kind `clear`. The mod
-#     (hooks/handoff.ts) ran the `/clear` and submits the continuation itself;
+#     ran the `/clear` and submits the continuation itself;
 #     the file disappearing is what leaves the sentinel clean for the next
 #     transition.
 #

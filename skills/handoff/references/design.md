@@ -1,8 +1,8 @@
 # handoff — Design Notes
 
-Condensed rationale. Full design doc is `../../../docs/design.md`; the
+Condensed rationale. Full design doc is <https://github.com/ddaanet/autodrive-handoff/blob/main/docs/design.md>; the
 dated write-time record of each design change is in
-`../../../docs/changelog/`.
+<https://github.com/ddaanet/autodrive-handoff/tree/main/docs/changelog>.
 
 ## The residual
 
@@ -67,7 +67,7 @@ redundant second capture in the one register that does the harm. The
 per-session file list is likewise dropped: the honest working set is
 the harness's own `gitStatus` block at load time, current after the
 prior session's commits landed. See
-`../../../docs/changelog/2026-07-17-task-frame-drops-transcript.md`.
+<https://github.com/ddaanet/autodrive-handoff/blob/main/docs/changelog/2026-07-17-task-frame-drops-transcript.md>.
 
 ## Why markdown template, not JSON schema
 
