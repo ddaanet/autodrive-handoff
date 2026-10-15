@@ -116,7 +116,7 @@ gitlore's trigger defers the memory commit to a parent commit's pre-commit
 hook, and a commit on the far side of a `/clear` is owed by no live session,
 so the approved summary goes unread and the next session's memory write
 stales it. The ask stops at the transition, uniformly — a compaction keeps
-the session alive, so a commit named in *its* continuation prompt would in
+the session alive, so a commit asked for on the far side of one would in
 fact have a live hook, but one sentence that holds for every mode is worth
 more than one correctly deferred memory commit.
 [Transitions become modes](../changelog/2026-08-05-transitions-become-modes.md)
@@ -180,6 +180,16 @@ wrong one writable, which is why the file has a single writer: the
 checkpoint composes it, and a direct agent Write or Edit is denied outright.
 [One transition, one file, explicit
 state](../changelog/2026-08-03-one-transition-one-file.md)
+
+**The continuation is a constant; the files are the only carrier.** What
+follows a driven transition is a yes-or-no field, and `true` makes the composer
+write the fixed line `Continue per handoff`. The agent authors nothing that is
+submitted as a prompt, so there is no second channel for the task to leak into:
+anything the next session needs is in `TASK.md` or `TODO.md`, or it is gone.
+The skills no longer argue what a prompt may carry, because the schema leaves
+nothing to argue.
+[The continuation is a
+constant](../changelog/2026-10-15-the-continuation-is-a-constant.md)
 
 **A sentinel names its owner, and only the owner judges it stale.** Every
 session sharing the root runs the same hooks and the same mod, the background

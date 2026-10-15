@@ -15,12 +15,15 @@ sequence was keystrokes in a tmux pane; the payload fields `clear` and
 | kind | runs before | runs after | confirming source |
 |---|---|---|---|
 | `rename` | `/rename <title>` | — | — |
-| `compact` | `/compact [directive]` | continuation prose, if any | `compact` |
-| `clear` | `/rename <title>`, `/clear` | continuation prose, if any | `clear` |
+| `compact` | `/compact [directive]` | the continuation line, if any | `compact` |
+| `clear` | `/rename <title>`, `/clear` | the continuation line, if any | `clear` |
 | `compact` (prepared) | — | — | `compact` |
 
 The after-line is optional on both driven kinds, because running the
 transition and submitting a prompt into what it opens are separate decisions.
+When present it is always the checkpoint's one fixed continuation line, so no
+sentinel carries agent-authored prose; the parser's rule that a prose line may
+not begin with `/` stays as the bound on a file written by anything else.
 `/restart` is not a kind: it is a Claude Code built-in, and a relaunch with
 `--resume` carries the conversation over whole, so nothing here has a frame or
 a continuation to add to it. `/handoff:autoname` stays a skill; its checkpoint

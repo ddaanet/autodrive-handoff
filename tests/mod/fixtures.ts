@@ -4,8 +4,8 @@
 // with @ROOT@ for the session root. Do not edit; tests/test_mod_fixtures.py
 // fails when this file and the JSON disagree.
 export const FIXTURES = {
-  "armed-clear": "{\"kind\":\"clear\",\"before\":[\"/rename A Title\",\"/clear\"],\"after\":[\"pick up per the task file\"],\"failFile\":\"@ROOT@/.claude/autodrive.failed\",\"message\":\"handoff: will run /rename A Title once the turn ends.\"}",
-  "armed-compact": "{\"kind\":\"compact\",\"before\":[\"/compact keep the parser work\"],\"after\":[\"continue with task 3\"],\"failFile\":\"@ROOT@/.claude/autodrive.failed\",\"message\":\"handoff: will run /compact keep the parser work once the turn ends.\"}",
+  "armed-clear": "{\"kind\":\"clear\",\"before\":[\"/rename A Title\",\"/clear\"],\"after\":[\"Continue per handoff\"],\"failFile\":\"@ROOT@/.claude/autodrive.failed\",\"message\":\"handoff: will run /rename A Title once the turn ends.\"}",
+  "armed-compact": "{\"kind\":\"compact\",\"before\":[\"/compact keep the parser work\"],\"after\":[\"Continue per handoff\"],\"failFile\":\"@ROOT@/.claude/autodrive.failed\",\"message\":\"handoff: will run /compact keep the parser work once the turn ends.\"}",
   "armed-rename": "{\"kind\":\"rename\",\"before\":[\"/rename Driven Transitions\"],\"after\":[],\"failFile\":\"@ROOT@/.claude/autodrive.failed\",\"message\":\"handoff: will run /rename Driven Transitions once the turn ends.\"}",
   "malformed": "{\"kind\":null,\"before\":[],\"after\":[],\"failFile\":\"@ROOT@/.claude/autodrive.failed\",\"message\":\"handoff: autodrive malformed — kind `clear` takes 4 or 5 lines (found 3); discarded, transition not armed.\"}",
   "no-session": "{\"kind\":null,\"before\":[],\"after\":[],\"failFile\":\"@ROOT@/.claude/autodrive.failed\",\"message\":\"handoff: the turn ended with no session id, so the armed transition was not taken; the next prompt reports it.\"}",

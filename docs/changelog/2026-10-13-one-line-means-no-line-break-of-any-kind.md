@@ -4,6 +4,12 @@
 
 ## The defect
 
+> **Superseded 2026-10-15** (see [The continuation is a constant](2026-10-15-the-continuation-is-a-constant.md))
+> on `continue`: it is a boolean and no longer a value held to one line, so
+> below, only the `compact` focus directive still goes through the check and its
+> rows; the 18-of-20 count was taken over both fields as they then were. The
+> `require_one_line` definition and the legacy-task note stand.
+
 `require_one_line` in `_checkpoint_payload.py` held `continue` and the
 `compact` focus directive to one line by rejecting `\n` and nothing else. Each
 lands on a line of `.claude/autodrive` that the mod submits with one Enter, and

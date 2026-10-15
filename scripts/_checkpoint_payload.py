@@ -221,22 +221,22 @@ def _build_precompact_transition(payload: JSONDict) -> Transition:
     raise AssertionError("unreachable")  # lib.err() always raises
 
 
-def validate_continuation(payload: JSONDict, skill: str, *, typed: bool) -> str:
-    """Return the continuation prompt, or "" when there is none."""
+def validate_continuation(payload: JSONDict, skill: str, *, typed: bool) -> bool:
+    """Return whether the continuation prompt is requested.
+
+    `continue` is a JSON boolean: true submits the fixed continuation prompt
+    after a driven transition, false requests none. It is forbidden under
+    `autoname`, which returns False without reading it.
+    """
     if skill == "autoname":
-        return ""
+        return False
     if "continue" not in payload:
-        lib.err("continue", "required, either null or one line of prose")
-    if payload["continue"] is None:
-        return ""
-    if not isinstance(payload["continue"], str):
-        lib.err("continue", "must be null or one line of prose")
+        lib.err("continue", "required, true or false")
     continuation = payload["continue"]
-    require_one_line("continue", continuation)
-    if continuation.startswith("/"):
-        lib.err("continue", "must not begin with `/`")
-    if not typed:
-        lib.err("continue", "must be null when the transition is not driven")
+    if not isinstance(continuation, bool):
+        lib.err("continue", "must be true or false")
+    if continuation and not typed:
+        lib.err("continue", "must be false when the transition is not driven")
     return continuation
 
 

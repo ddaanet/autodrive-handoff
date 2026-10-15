@@ -36,12 +36,9 @@ preparing one they will run themselves — "save handoff", "before I clear",
 "wrap up". A request that asks for the clear **is** the authorization to
 clear; do not ask whether to proceed.
 
-**Is there a continuation prompt?** `continue` is one line of prose,
-submitted into the session the clear opens, or `null` when nothing follows
-it. The seam section below decides what it carries. It is only meaningful
-alongside a driven transition — nothing would submit it otherwise, and the
-checkpoint rejects the combination. Author it **silently**: it is submitted
-visibly as the next prompt, so reprinting it in the reply shows it twice.
+**Does the session continue after the clear?** `continue` is `true` when
+the user's ask has the fresh session carry on, `false` when it stops at the
+clear. It is `true` only alongside `clear: true`.
 
 **Does the ask imply a commit?** Two answers of equal weight:
 
@@ -52,9 +49,8 @@ visibly as the next prompt, so reprinting it in the reply shows it twice.
 - **`without-commit`** — it does not. What the session learned stands on
   its own.
 
-The ask stops at the transition. A commit named in a continuation prompt is
-on the far side of it, where no live session owes it, so it is not evidence
-of `with-commit`.
+The ask stops at the transition. A commit named on the far side of it is not
+evidence of `with-commit`: no live session owes it.
 
 Then decide the content:
 
@@ -77,7 +73,7 @@ handoff-checkpoint <<'JSON'
   "commit": "<with-commit|without-commit>",
   "rename": "<session title>",
   "clear": <true|false>,
-  "continue": <"one line of prose"|null>,
+  "continue": <true|false>,
   "task": <"task content"|{"action": "clear"}>,
   "todo": <"todo content"|{"action": "clear"}|{"action": "keep"}|{"action": "edit", "old_string": "…", "new_string": "…"}>
 }
@@ -171,11 +167,11 @@ Todo file rules:
   it and strike from it with `edit` rather than rewriting it into this
   template.
 
-## The seam: files vs. continuation prompt
+## The seam: files vs. continuation
 
-Both files are re-injected verbatim on the far side of the transition. The
-continuation prompt is one line submitted as a prompt. So they carry
-different things:
+Both files are re-injected verbatim on the far side of the transition, and
+they are the only carrier. The continuation is a fixed prompt that points at
+them and says nothing of its own, so a fact left out of the files is gone.
 
 - **Task file** — current task state alone: in-flight threads, what needs
   to resume.
@@ -183,23 +179,6 @@ different things:
   decisions: identifiers, commit ranges, paths a decision hinges on, the
   exact shape of an open question — everything that must survive verbatim
   for a choice still to be made.
-- **Prompt** — a handle to that context plus the next concrete action.
-  Nothing else.
-
-The failure mode is a prompt carrying facts. `report on the driver, then
-cut the release covering 7f3c70c..a3b9cef` is wrong: that commit range is
-content, and it belongs in `TODO.md`. `pick up the release described in the
-todo file` is right. A clear does not summarise, so a fact left out of the
-files is simply gone.
-
-Write the prompt as an instruction to the agent on the far side, which will
-have the files and the repo — and, after a compaction, a summary — but not
-this conversation. Name the next action, not the topic.
-
-- Good: `continue with the parser tests per the task file`
-- Bad: `continue` / `keep going with the plugin work`
-
-It must be a **single line**: it is submitted as one prompt.
 
 ## Anti-patterns
 
@@ -221,8 +200,8 @@ It must be a **single line**: it is submitted as one prompt.
 - Extra sections in either file. Both templates are fixed.
 - Asking whether to clear, or telling the user to run `/clear`, under a
   driven transition. Both are settled by the request and the armed file.
-- Reprinting the continuation prompt, or printing the `/clear` line, as
-  something for the user to run. When the drive does not run, the
+- Printing the `/clear` line, or the continuation prompt, as something for
+  the user to run. When the drive does not run, the
   plugin prints the lines itself.
 - Writing `.claude/autodrive` directly. The checkpoint composes it from
   the payload; a hand-written one is a second writer of the same channel.

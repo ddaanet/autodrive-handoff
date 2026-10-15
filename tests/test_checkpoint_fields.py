@@ -155,7 +155,7 @@ def test_task_or_todo_action_vocabulary_errors_naming_field(
         "commit": "with-commit",
         "rename": "T",
         "clear": False,
-        "continue": None,
+        "continue": False,
         "task": task_clear(),
         "todo": todo_keep(),
     }
@@ -198,7 +198,7 @@ def test_top_level_unknown_key_errors_under_handoff(tmp_path: Path) -> None:
         "commit": "with-commit",
         "rename": "T",
         "clear": False,
-        "continue": None,
+        "continue": False,
         "task": task_clear(),
         "todo": todo_keep(),
         "bogus": "x",
@@ -217,7 +217,7 @@ def test_top_level_unknown_key_errors_under_precompact(tmp_path: Path) -> None:
         "skill": "precompact",
         "commit": "without-commit",
         "compact": False,
-        "continue": None,
+        "continue": False,
         "todo": todo_keep(),
         "bogus": "x",
     }
@@ -267,7 +267,7 @@ def test_task_or_todo_null_or_absent_errors_naming_field(
     payload: dict[str, object] = {
         "skill": skill,
         "commit": "with-commit",
-        "continue": None,
+        "continue": False,
         "todo": todo_keep(),
     }
     if skill == "handoff":

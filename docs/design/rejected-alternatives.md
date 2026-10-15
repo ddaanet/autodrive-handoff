@@ -306,3 +306,12 @@ growth of the skill library, measured the same way, or a rerun of the blind
 test with repository access that lifts recall on tool-bound facts above zero.
 [The mechanical principle is narrowed; a reviewer waits for a
 measurement](../changelog/2026-10-15-the-mechanical-principle-is-narrowed.md)
+
+**An agent-authored continuation prompt** — one line of prose the agent wrote,
+submitted after a driven transition as a handle to the files. Skill prose and a
+good-and-bad pair of examples held it to that, and nothing in the schema did:
+the prompt could carry the task or the facts a decision hinged on, which the
+next `/clear` drops, while the files stayed thin. A fixed line asks nothing of
+the agent and gives the task nowhere to go but the files.
+[The continuation is a
+constant](../changelog/2026-10-15-the-continuation-is-a-constant.md)

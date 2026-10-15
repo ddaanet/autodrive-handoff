@@ -35,7 +35,7 @@ def test_rename_only_sentinel_written_neither_file_created(tmp_path: Path) -> No
         "commit": "with-commit",
         "rename": "Two Words Title",
         "clear": False,
-        "continue": None,
+        "continue": False,
         "task": task_clear(),
         "todo": todo_keep(),
     }
@@ -56,7 +56,7 @@ def test_multiline_title_flattened_to_one_line(tmp_path: Path) -> None:
         "commit": "with-commit",
         "rename": "Two  Words\nAnd More",
         "clear": False,
-        "continue": None,
+        "continue": False,
         "task": task_clear(),
         "todo": todo_keep(),
     }
@@ -74,7 +74,7 @@ def test_whitespace_only_title_errors(tmp_path: Path) -> None:
         "commit": "with-commit",
         "rename": "   ",
         "clear": False,
-        "continue": None,
+        "continue": False,
         "task": task_clear(),
         "todo": todo_keep(),
     }
@@ -189,7 +189,7 @@ def test_rename_missing_under_autoname_errors(tmp_path: Path) -> None:
         ("todo", "body"),
         ("clear", True),
         ("compact", True),
-        ("continue", "pick up per the task file"),
+        ("continue", True),
     ],
 )
 def test_every_boundary_field_is_schema_error_under_autoname(

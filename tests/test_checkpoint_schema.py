@@ -37,7 +37,7 @@ def test_handoff_root_unset_refuses(tmp_path: Path) -> None:
         "commit": "with-commit",
         "rename": "T",
         "clear": False,
-        "continue": None,
+        "continue": False,
         "task": task_clear(),
         "todo": todo_keep(),
     }
@@ -64,7 +64,7 @@ def test_handoff_root_names_non_directory_refuses(tmp_path: Path) -> None:
         "commit": "with-commit",
         "rename": "T",
         "clear": False,
-        "continue": None,
+        "continue": False,
         "task": task_clear(),
         "todo": todo_keep(),
     }
@@ -81,7 +81,7 @@ def test_drifted_cwd_writes_injected_root_never_cwd(tmp_path: Path) -> None:
         "commit": "with-commit",
         "rename": "T",
         "clear": False,
-        "continue": None,
+        "continue": False,
         "task": "## Current task\n\nbody\n",
         "todo": todo_keep(),
     }
@@ -131,7 +131,7 @@ def test_commit_missing_errors_naming_commit(tmp_path: Path) -> None:
         "skill": "handoff",
         "rename": "T",
         "clear": False,
-        "continue": None,
+        "continue": False,
         "task": task_clear(),
         "todo": todo_keep(),
     }
@@ -147,7 +147,7 @@ def test_commit_unknown_value_errors_naming_commit(tmp_path: Path) -> None:
         "commit": "maybe",
         "rename": "T",
         "clear": False,
-        "continue": None,
+        "continue": False,
         "task": task_clear(),
         "todo": todo_keep(),
     }
@@ -162,7 +162,7 @@ def test_rename_missing_under_handoff_errors_naming_rename(tmp_path: Path) -> No
         "skill": "handoff",
         "commit": "with-commit",
         "clear": False,
-        "continue": None,
+        "continue": False,
         "task": task_clear(),
         "todo": todo_keep(),
     }
@@ -177,7 +177,7 @@ def test_each_of_two_skill_values_accepted(tmp_path: Path) -> None:
         "skill": "precompact",
         "commit": "without-commit",
         "compact": False,
-        "continue": None,
+        "continue": False,
         "todo": todo_keep(),
     }
     assert run_checkpoint(repo, payload).returncode == 0
@@ -186,7 +186,7 @@ def test_each_of_two_skill_values_accepted(tmp_path: Path) -> None:
         "commit": "without-commit",
         "rename": "T",
         "clear": False,
-        "continue": None,
+        "continue": False,
         "task": task_clear(),
         "todo": todo_keep(),
     }
@@ -200,7 +200,7 @@ def test_retired_driven_skill_names_rejected(tmp_path: Path) -> None:
             "skill": s,
             "commit": "without-commit",
             "clear": False,
-            "continue": None,
+            "continue": False,
             "task": task_clear(),
             "todo": todo_keep(),
         }
@@ -217,7 +217,7 @@ def test_rename_present_under_precompact_errors(tmp_path: Path) -> None:
         "commit": "with-commit",
         "rename": "Not Allowed",
         "compact": False,
-        "continue": None,
+        "continue": False,
         "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)
@@ -235,7 +235,7 @@ def test_empty_or_null_rename_under_precompact_errors(
         "skill": "precompact",
         "commit": "with-commit",
         "compact": False,
-        "continue": None,
+        "continue": False,
         "todo": todo_keep(),
         "rename": value,
     }
@@ -264,7 +264,7 @@ def test_task_present_under_precompact_errors(tmp_path: Path, value: object) -> 
         "skill": "precompact",
         "commit": "with-commit",
         "compact": False,
-        "continue": None,
+        "continue": False,
         "todo": todo_keep(),
         "task": value,
     }
@@ -332,7 +332,7 @@ def test_rename_not_a_string_errors(tmp_path: Path, value: object) -> None:
         "skill": "handoff",
         "commit": "with-commit",
         "clear": False,
-        "continue": None,
+        "continue": False,
         "task": task_clear(),
         "todo": todo_keep(),
         "rename": value,
@@ -349,7 +349,7 @@ def test_precompact_with_rename_omitted_accepted(tmp_path: Path) -> None:
         "skill": "precompact",
         "commit": "without-commit",
         "compact": False,
-        "continue": None,
+        "continue": False,
         "todo": todo_keep(),
     }
     assert run_checkpoint(repo, payload).returncode == 0

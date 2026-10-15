@@ -344,7 +344,7 @@ print(closing_directive('$skill', typed=$typed), end='')
 # The union's spelling, hardcoded outside the Python factories: keep in step
 # with task_clear()/todo_keep() in tests/conftest.py.
 handoff_payload() {
-    jq -nc --arg commit "$1" '{skill:"handoff", commit:$commit, rename:"Session Title", clear:false, continue:null, task:{action:"clear"}, todo:{action:"keep"}}'
+    jq -nc --arg commit "$1" '{skill:"handoff", commit:$commit, rename:"Session Title", clear:false, continue:false, task:{action:"clear"}, todo:{action:"keep"}}'
 }
 
 @test "shim: bin/handoff-checkpoint execs the checkpoint, forwards stdin" {

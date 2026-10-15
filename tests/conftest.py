@@ -264,7 +264,7 @@ def frame_payload(task: object, todo: object = None) -> dict[str, object]:
         "commit": "with-commit",
         "rename": "T",
         "clear": False,
-        "continue": None,
+        "continue": False,
         "task": task,
         "todo": todo_keep() if todo is None else todo,
     }
@@ -282,7 +282,7 @@ def handoff_payload(commit: str) -> dict[str, object]:
         "commit": commit,
         "rename": "Session Title",
         "clear": False,
-        "continue": None,
+        "continue": False,
         "task": task_clear(),
         "todo": todo_keep(),
     }
@@ -293,6 +293,6 @@ def precompact_payload(commit: str, todo: object = None) -> dict[str, object]:
         "skill": "precompact",
         "commit": commit,
         "compact": False,
-        "continue": None,
+        "continue": False,
         "todo": todo_keep() if todo is None else todo,
     }

@@ -16,8 +16,8 @@ Two skills sit on that seam, one per boundary:
 
 Each one either prepares and stops — putting the open work on disk and
 leaving you to run the command — or carries the transition out for you: the plugin's mod
-runs the command and submits a one-line prompt that resumes the work on the
-far side, once your turn ends. Which one you get is decided by what you ask
+runs the command and submits a fixed prompt that resumes the work from the
+files on the far side, once your turn ends. Which one you get is decided by what you ask
 for. `/handoff:autoname` is a third skill: the rename alone, for a session
 worth a title while the main thread stays live.
 `/handoff:pending` is a fourth: it lists the pending items — open decisions
@@ -95,7 +95,7 @@ To have the reset carried out instead, ask for the continuation:
 - "clear and continue"
 
 It does everything the prepare-only path does, then names the session,
-clears it, and submits a one-line prompt into the fresh one. No
+clears it, and submits a fixed continuation prompt into the fresh one. No
 summarisation cost — the task frame is what crosses.
 
 To name the session *without* a handoff — a `/btw` side conversation, or
@@ -117,7 +117,7 @@ and you run `/compact` yourself; `TODO.md` is still re-injected when it
 finishes, because the skill marked the compaction as expected. Ask for it to
 be carried out — "compact and continue" — and the plugin's mod runs
 `/compact` once your turn ends, and once it finishes, `TODO.md` is
-re-injected and a one-line continuation prompt is submitted. You do not run
+re-injected and a fixed continuation prompt is submitted. You do not run
 `/compact` yourself, and you do not have to type anything to resume.
 
 The two boundaries differ in one thing. Before a `/clear`, the skill writes

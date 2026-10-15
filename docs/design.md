@@ -248,6 +248,7 @@ The standing calls, each argued in
   only.**
 - **The armed transition is one file whose body names the transition.**
 - **The transition carries its own state.**
+- **The continuation is a constant; the files are the only carrier.**
 - **A sentinel names its owner, and only the owner judges it stale.**
 - **The drive runs inline at `turn.complete`, never from `Stop`.**
 - **Observability is not gated on the happy path.**
@@ -296,6 +297,7 @@ Ruled out, each argued in
 - **Per-session sentinels, locks or checksums for sessions sharing a root**,
   **recording the root in the sentinel**, **refusing a symlinked `.claude/`**
 - **A reviewer agent for the handoff task, or for memory destinations, for now**
+- **An agent-authored continuation prompt**
 
 ## Non-goals
 

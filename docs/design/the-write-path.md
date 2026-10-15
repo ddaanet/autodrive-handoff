@@ -68,7 +68,7 @@ Both wrap-up skills decide their content and then make exactly one Bash
 call: `handoff-checkpoint`, a PATH-resident shim (`bin/`) over
 `scripts/checkpoint.py`, taking the whole wrap-up as a schema-validated
 JSON payload on stdin — `skill`, `commit`, the boundary's transition field,
-`continue`, `rename` at the clear boundary, and `task` / `todo` as a tagged
+`continue` (a boolean), `rename` at the clear boundary, and `task` / `todo` as a tagged
 union: the file's content directly as a string, or an object naming an
 action. `task` takes `{"action": "clear"}`; `todo` also takes
 `{"action": "keep"}` and `{"action": "edit", "old_string": …,

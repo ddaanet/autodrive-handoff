@@ -40,20 +40,15 @@ which is what the todo's re-injection is gated on. Without it the
 compaction re-injects nothing and the summariser's paraphrase is all that
 survives of the list just written.
 
-**Is there a continuation prompt?** `continue` is one line of prose,
-submitted into the compacted context, or `null` when nothing follows it.
-It is only meaningful alongside a driven transition — nothing would submit it
-otherwise, and the checkpoint rejects the combination. Author it
-**silently**: it is submitted visibly as the next prompt and lands in
-scrollback, so reprinting it in the reply shows the same text twice with
-no veto value.
+**Does the session continue after the compaction?** `continue` is `true`
+when the user's ask has the compacted session carry on, `false` when it
+stops at the compaction. It is `true` only alongside a driven transition.
 
 **Does the ask imply a commit?** Two answers of equal weight:
 **`with-commit`** — the request this call serves implies a commit, a test
 of interpretation rather than of keywords — and **`without-commit`** — it
-does not. The ask stops at the transition: a commit named in a
-continuation prompt is on the far side of it, so it is not evidence of
-`with-commit`.
+does not. The ask stops at the transition: a commit named on the far side
+of it is not evidence of `with-commit`.
 
 Then decide the todo content, when open decisions or a task list with
 open items are in play — `## Open decisions`, when any remain, plus
@@ -69,7 +64,7 @@ it. Whatever must survive verbatim goes in the todo file or in the
 `compact` focus directive.
 
 The `handoff` skill holds the full templates, the rules behind them, and
-the seam between what belongs in a file and what belongs in a prompt, in
+the seam between what the files carry and the fixed continuation, in
 the `SKILL.md` beside this one — `../handoff/SKILL.md`, relative to this
 skill's own directory. Read that file when the rules matter.
 
@@ -84,7 +79,7 @@ handoff-checkpoint <<'JSON'
   "skill": "precompact",
   "commit": "<with-commit|without-commit>",
   "compact": <true|false|"focus directive">,
-  "continue": <"one line of prose"|null>,
+  "continue": <true|false>,
   "todo": <"todo content"|{"action": "clear"}|{"action": "keep"}|{"action": "edit", "old_string": "…", "new_string": "…"}>
 }
 JSON
@@ -114,11 +109,11 @@ checkpoint call, and its output is one part, naming the line to end on.
 
 - Running `/compact` yourself, or telling the user to run it under a driven
   transition. Both are settled by the request and the armed file.
-- Reprinting the continuation prompt, or printing the `/compact` line, as
-  something for the user to run. When the drive does not run, the plugin
+- Printing the `/compact` line, or the continuation prompt, as something for
+  the user to run. When the drive does not run, the plugin
   prints the lines itself.
-- Authoring a continuation prompt for a prepared compaction. Nothing submits
-  it, and the checkpoint rejects it.
+- `"continue": true` for a prepared compaction. Nothing submits it, and the
+  checkpoint rejects it.
 - Writing `.claude/autodrive` directly. The checkpoint composes it from the
   payload; a hand-written one is a second writer of the same channel.
 - A `rename` field in the checkpoint payload. A rename is

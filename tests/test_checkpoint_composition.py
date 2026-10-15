@@ -82,7 +82,7 @@ def test_each_boundary_composes_own_directive_not_the_others(
             "commit": "without-commit",
             "rename": "T",
             "clear": False,
-            "continue": None,
+            "continue": False,
             "task": task_clear(),
             "todo": todo_keep(),
         }
@@ -91,7 +91,7 @@ def test_each_boundary_composes_own_directive_not_the_others(
             "skill": skill,
             "commit": "without-commit",
             "compact": False,
-            "continue": None,
+            "continue": False,
             "todo": todo_keep(),
         }
     result = run_checkpoint(repo, payload)

@@ -9,6 +9,7 @@ tests/conftest.py.
 from pathlib import Path
 
 import pytest
+from checkpoint import CONTINUATION
 from conftest import (
     make_repo,
     read_back_drive,
@@ -31,7 +32,7 @@ def test_clear_missing_under_handoff_errors(tmp_path: Path) -> None:
         "skill": "handoff",
         "commit": "with-commit",
         "rename": "T",
-        "continue": None,
+        "continue": False,
         "task": task_clear(),
         "todo": todo_keep(),
     }
@@ -47,7 +48,7 @@ def test_clear_not_boolean_errors(tmp_path: Path) -> None:
         "commit": "with-commit",
         "rename": "T",
         "clear": "yes",
-        "continue": None,
+        "continue": False,
         "task": task_clear(),
         "todo": todo_keep(),
     }
@@ -63,7 +64,7 @@ def test_clear_present_under_precompact_errors(tmp_path: Path) -> None:
         "commit": "with-commit",
         "clear": True,
         "compact": False,
-        "continue": None,
+        "continue": False,
         "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)
@@ -76,7 +77,7 @@ def test_compact_missing_under_precompact_errors(tmp_path: Path) -> None:
     payload = {
         "skill": "precompact",
         "commit": "with-commit",
-        "continue": None,
+        "continue": False,
         "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)
@@ -92,7 +93,7 @@ def test_compact_present_under_handoff_errors(tmp_path: Path) -> None:
         "rename": "T",
         "clear": False,
         "compact": True,
-        "continue": None,
+        "continue": False,
         "task": task_clear(),
         "todo": todo_keep(),
     }
@@ -107,7 +108,7 @@ def test_compact_neither_boolean_nor_string_errors(tmp_path: Path) -> None:
         "skill": "precompact",
         "commit": "with-commit",
         "compact": ["focus"],
-        "continue": None,
+        "continue": False,
         "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)
@@ -121,7 +122,7 @@ def test_empty_compact_directive_errors(tmp_path: Path) -> None:
         "skill": "precompact",
         "commit": "with-commit",
         "compact": "",
-        "continue": None,
+        "continue": False,
         "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)
@@ -135,7 +136,7 @@ def test_multiline_compact_directive_errors(tmp_path: Path) -> None:
         "skill": "precompact",
         "commit": "with-commit",
         "compact": "keep the parser\nand the tests",
-        "continue": None,
+        "continue": False,
         "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)
@@ -168,98 +169,87 @@ def test_continue_missing_errors_at_either_boundary(tmp_path: Path) -> None:
     assert "continue" in result.stderr
 
 
-def test_continuation_against_untyped_transition_errors(tmp_path: Path) -> None:
+def test_the_continuation_is_one_line_the_drive_will_not_run_as_a_command() -> None:
+    assert CONTINUATION
+    assert CONTINUATION.strip() == CONTINUATION
+    assert len(CONTINUATION.splitlines()) == 1
+    assert not CONTINUATION.startswith("/")
+
+
+# --- `continue` is a boolean; `true` needs a carried-out transition ---
+
+# Every boundary the checkpoint knows, driven or not.
+BOUNDARIES: dict[str, dict[str, object]] = {
+    "clear": {"skill": "handoff", "rename": "T", "clear": True},
+    "no-clear": {"skill": "handoff", "rename": "T", "clear": False},
+    "compact": {"skill": "precompact", "compact": True},
+    "compact-focus": {"skill": "precompact", "compact": "keep the parser work"},
+    "no-compact": {"skill": "precompact", "compact": False},
+}
+DRIVEN = ["clear", "compact", "compact-focus"]
+NOT_DRIVEN = ["no-clear", "no-compact"]
+
+
+def boundary_payload(boundary: str, cont: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "commit": "without-commit",
+        "continue": cont,
+        "todo": todo_keep(),
+        **BOUNDARIES[boundary],
+    }
+    if payload["skill"] == "handoff":
+        payload["task"] = task_clear()
+    return payload
+
+
+@pytest.mark.parametrize("boundary", BOUNDARIES)
+@pytest.mark.parametrize(
+    "value",
+    [None, CONTINUATION, "", "pick up per the task file", 0, 1, 1.5, [], {}],
+    ids=["null", "string", "empty", "prose", "zero", "one", "float", "list", "object"],
+)
+def test_continue_that_is_not_a_boolean_errors(
+    tmp_path: Path, boundary: str, value: object
+) -> None:
     repo = make_repo(tmp_path)
-    payload = {
-        "skill": "handoff",
-        "commit": "with-commit",
-        "rename": "T",
-        "clear": False,
-        "continue": "pick up per the task file",
-        "task": task_clear(),
-        "todo": todo_keep(),
-    }
-    result = run_checkpoint(repo, payload)
+    result = run_checkpoint(repo, boundary_payload(boundary, value))
     assert result.returncode == 2
     assert "continue" in result.stderr
-
-    payload = {
-        "skill": "precompact",
-        "commit": "with-commit",
-        "compact": False,
-        "continue": "pick up per the task file",
-        "todo": todo_keep(),
-    }
-    result = run_checkpoint(repo, payload)
-    assert result.returncode == 2
-    assert "continue" in result.stderr
+    assert not (repo / ".claude" / "autodrive").exists()
 
 
-def test_multiline_continuation_errors(tmp_path: Path) -> None:
+@pytest.mark.parametrize("boundary", NOT_DRIVEN)
+def test_continue_true_against_a_transition_not_carried_out_errors(
+    tmp_path: Path, boundary: str
+) -> None:
     repo = make_repo(tmp_path)
-    payload = {
-        "skill": "handoff",
-        "commit": "with-commit",
-        "rename": "T",
-        "clear": True,
-        "continue": "first line\nsecond line",
-        "task": task_clear(),
-        "todo": todo_keep(),
-    }
-    result = run_checkpoint(repo, payload)
+    result = run_checkpoint(repo, boundary_payload(boundary, cont=True))
     assert result.returncode == 2
     assert "continue" in result.stderr
+    assert not (repo / ".claude" / "autodrive").exists()
 
 
-def test_continuation_beginning_with_slash_errors(tmp_path: Path) -> None:
+@pytest.mark.parametrize("boundary", [*DRIVEN, *NOT_DRIVEN])
+def test_continue_false_is_legal_at_every_boundary(
+    tmp_path: Path, boundary: str
+) -> None:
     repo = make_repo(tmp_path)
-    payload = {
-        "skill": "handoff",
-        "commit": "with-commit",
-        "rename": "T",
-        "clear": True,
-        "continue": "/resume the work",
-        "task": task_clear(),
-        "todo": todo_keep(),
-    }
-    result = run_checkpoint(repo, payload)
-    assert result.returncode == 2
-    assert "continue" in result.stderr
+    result = run_checkpoint(repo, boundary_payload(boundary, cont=False))
+    assert result.returncode == 0, result.stderr
+    assert read_back_drive(repo / ".claude" / "autodrive")
 
 
-def test_whitespace_only_continuation_errors(tmp_path: Path) -> None:
+@pytest.mark.parametrize("boundary", DRIVEN)
+def test_continue_true_is_legal_when_the_transition_is_carried_out(
+    tmp_path: Path, boundary: str
+) -> None:
     repo = make_repo(tmp_path)
-    payload = {
-        "skill": "handoff",
-        "commit": "with-commit",
-        "rename": "T",
-        "clear": True,
-        "continue": "   ",
-        "task": task_clear(),
-        "todo": todo_keep(),
-    }
-    result = run_checkpoint(repo, payload)
-    assert result.returncode == 2
-    assert "continue" in result.stderr
+    result = run_checkpoint(repo, boundary_payload(boundary, cont=True))
+    assert result.returncode == 0, result.stderr
+    assert read_back_drive(repo / ".claude" / "autodrive")
 
 
-def test_continue_neither_null_nor_string_errors(tmp_path: Path) -> None:
-    repo = make_repo(tmp_path)
-    payload = {
-        "skill": "handoff",
-        "commit": "with-commit",
-        "rename": "T",
-        "clear": True,
-        "continue": True,
-        "task": task_clear(),
-        "todo": todo_keep(),
-    }
-    result = run_checkpoint(repo, payload)
-    assert result.returncode == 2
-    assert "continue" in result.stderr
-
-
-# --- the six legal combinations ---
+# --- the legal combinations and the sentinel's bytes ---
 
 
 def test_handoff_clear_true_no_continuation(tmp_path: Path) -> None:
@@ -269,7 +259,7 @@ def test_handoff_clear_true_no_continuation(tmp_path: Path) -> None:
         "commit": "without-commit",
         "rename": "A Title",
         "clear": True,
-        "continue": None,
+        "continue": False,
         "task": task_clear(),
         "todo": todo_keep(),
     }
@@ -288,15 +278,14 @@ def test_handoff_clear_true_with_continuation(tmp_path: Path) -> None:
         "commit": "without-commit",
         "rename": "A Title",
         "clear": True,
-        "continue": "pick up per the task file",
+        "continue": True,
         "task": task_clear(),
         "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)
     assert result.returncode == 0
     assert (repo / ".claude" / "autodrive").read_text() == (
-        "armed sess-checkpoint\nclear\n/rename A Title\n/clear\n"
-        "pick up per the task file\n"
+        f"armed sess-checkpoint\nclear\n/rename A Title\n/clear\n{CONTINUATION}\n"
     )
     assert read_back_drive(repo / ".claude" / "autodrive")
 
@@ -307,7 +296,7 @@ def test_precompact_compact_false_two_line_marker(tmp_path: Path) -> None:
         "skill": "precompact",
         "commit": "without-commit",
         "compact": False,
-        "continue": None,
+        "continue": False,
         "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)
@@ -323,7 +312,7 @@ def test_precompact_compact_true_no_continuation_bare_compact(tmp_path: Path) ->
         "skill": "precompact",
         "commit": "without-commit",
         "compact": True,
-        "continue": None,
+        "continue": False,
         "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)
@@ -331,6 +320,40 @@ def test_precompact_compact_true_no_continuation_bare_compact(tmp_path: Path) ->
     assert (
         repo / ".claude" / "autodrive"
     ).read_text() == "armed sess-checkpoint\ncompact\n/compact\n"
+    assert read_back_drive(repo / ".claude" / "autodrive")
+
+
+def test_precompact_compact_true_with_continuation(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    payload = {
+        "skill": "precompact",
+        "commit": "without-commit",
+        "compact": True,
+        "continue": True,
+        "todo": todo_keep(),
+    }
+    result = run_checkpoint(repo, payload)
+    assert result.returncode == 0
+    assert (repo / ".claude" / "autodrive").read_text() == (
+        f"armed sess-checkpoint\ncompact\n/compact\n{CONTINUATION}\n"
+    )
+    assert read_back_drive(repo / ".claude" / "autodrive")
+
+
+def test_precompact_focus_directive_no_continuation(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    payload = {
+        "skill": "precompact",
+        "commit": "without-commit",
+        "compact": "keep the parser work",
+        "continue": False,
+        "todo": todo_keep(),
+    }
+    result = run_checkpoint(repo, payload)
+    assert result.returncode == 0
+    assert (repo / ".claude" / "autodrive").read_text() == (
+        "armed sess-checkpoint\ncompact\n/compact keep the parser work\n"
+    )
     assert read_back_drive(repo / ".claude" / "autodrive")
 
 
@@ -342,14 +365,14 @@ def test_precompact_focus_directive_and_continuation_both_carried(
         "skill": "precompact",
         "commit": "without-commit",
         "compact": "keep the parser work",
-        "continue": "continue with task 3",
+        "continue": True,
         "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)
     assert result.returncode == 0
     assert (repo / ".claude" / "autodrive").read_text() == (
-        "armed sess-checkpoint\ncompact\n/compact keep the parser work\n"
-        "continue with task 3\n"
+        f"armed sess-checkpoint\ncompact\n/compact keep the parser work\n"
+        f"{CONTINUATION}\n"
     )
     assert read_back_drive(repo / ".claude" / "autodrive")
 
@@ -372,31 +395,13 @@ LINE_BREAKS = {
 
 
 @pytest.mark.parametrize("brk", LINE_BREAKS.values(), ids=LINE_BREAKS.keys())
-def test_continuation_with_any_line_break_errors(tmp_path: Path, brk: str) -> None:
-    repo = make_repo(tmp_path)
-    payload = {
-        "skill": "handoff",
-        "commit": "with-commit",
-        "rename": "T",
-        "clear": True,
-        "continue": f"first line{brk}second line",
-        "task": task_clear(),
-        "todo": todo_keep(),
-    }
-    result = run_checkpoint(repo, payload)
-    assert result.returncode == 2
-    assert "continue" in result.stderr
-    assert not (repo / ".claude" / "autodrive").exists()
-
-
-@pytest.mark.parametrize("brk", LINE_BREAKS.values(), ids=LINE_BREAKS.keys())
 def test_compact_directive_with_any_line_break_errors(tmp_path: Path, brk: str) -> None:
     repo = make_repo(tmp_path)
     payload = {
         "skill": "precompact",
         "commit": "with-commit",
         "compact": f"keep the parser{brk}and the tests",
-        "continue": None,
+        "continue": False,
         "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)

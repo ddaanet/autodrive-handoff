@@ -247,7 +247,7 @@ def test_typed_transition_with_memory_gate_pending_held(tmp_path: Path) -> None:
         "commit": "without-commit",
         "rename": "A Title",
         "clear": True,
-        "continue": "pick up per the task file",
+        "continue": True,
         "task": task_clear(),
         "todo": todo_keep(),
     }
@@ -266,7 +266,7 @@ def test_held_sentinel_names_the_session_that_holds_it(tmp_path: Path) -> None:
         "commit": "without-commit",
         "rename": "A Title",
         "clear": True,
-        "continue": None,
+        "continue": False,
         "task": task_clear(),
         "todo": todo_keep(),
     }
@@ -286,7 +286,7 @@ def test_typed_transition_no_memory_gate_armed_no_arming_instruction(
         "commit": "without-commit",
         "rename": "A Title",
         "clear": True,
-        "continue": "pick up per the task file",
+        "continue": True,
         "task": task_clear(),
         "todo": todo_keep(),
     }
@@ -305,7 +305,7 @@ def test_untyped_handoff_still_types_rename_so_it_holds_too(tmp_path: Path) -> N
         "commit": "without-commit",
         "rename": "A Title",
         "clear": False,
-        "continue": None,
+        "continue": False,
         "task": task_clear(),
         "todo": todo_keep(),
     }
@@ -327,7 +327,7 @@ def test_sentinel_typing_nothing_arms_even_with_memory_gate_pending(
         "skill": "precompact",
         "commit": commit,
         "compact": False,
-        "continue": None,
+        "continue": False,
         "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)

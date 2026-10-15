@@ -42,11 +42,13 @@ nudge for compact). Only `handoff` carries `task`, bounded by FR13 (at most
 1000 characters of prose, no list item); `precompact` forbids the key and
 removes `TASK.md`, because the summary carries the task. Both carry `todo`,
 the durable side of the seam: content that must survive verbatim, while the
-continuation prompt is only a handle to it. Whether the transition is carried
-out is a **field of the payload**:
+continuation is a fixed prompt that points at it and carries nothing. Whether
+the transition is carried out is a **field of the payload**:
 `clear` (bool) at one boundary, `compact` (bool or focus directive) at the
-other, plus `continue` (null or one line of prose) at both, all required with
-no default — the code calls a carried-out transition `typed`, a name from when
+other, plus `continue` (bool) at both, all required with
+no default — `true` is legal only when the transition is carried out, and the
+composer then writes the fixed line `CONTINUATION` (`checkpoint.py`) as the
+after-line; the code calls a carried-out transition `typed`, a name from when
 it was keystrokes. `checkpoint.py` composes `.claude/autodrive` from those
 fields and reads it back through `handoff_drive_read`, so the composer and the
 parser cannot drift; `compact: false` still writes the two-line expectation
@@ -93,7 +95,7 @@ note in `report-drive-failure.sh`.
 - `skills/handoff/SKILL.md` — the clear boundary's protocol
   (`/handoff:handoff`), driven or not, and the single source of truth for the
   markdown templates of `TASK.md`/`TODO.md` and for the seam
-  between what belongs in a file and what in a continuation prompt. Three
+  between what the files carry and the fixed continuation. Three
   steps: durable learnings to memory (the only tool calls allowed ahead of the
   checkpoint); decide the three fields the payload cannot derive — driven or
   not, continuation or not, **does the ask this call serves imply a commit** —
@@ -501,7 +503,9 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
   the owner on `pending`.
 - `tests/test_mod_fixtures.py` — `fixtures.ts` equals what
   `scripts/gen_mod_fixtures.py` renders; regenerate with
-  `python3 scripts/gen_mod_fixtures.py`, never by hand.
+  `python3 scripts/gen_mod_fixtures.py`, never by hand. A second row ties every
+  prose line a fixture submits to `CONTINUATION`, so the mod's fixtures cannot
+  carry a continuation the composer would never write.
 - `just mod-smoke` (`pytest -m live tests/test_mod_live.py -v -rs`, the `live`
   marker, deselected from `precommit`) — boots a real `claude -p --model haiku`
   with this repo as `--plugin-dir` and a fixed `--session-id` in a throwaway git
@@ -645,12 +649,17 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
     rejected by name, and no directive against a dirty memory submodule).
   - `tests/test_checkpoint_transition.py` — the transition fields: the
     transition matrix (each of `clear`/`compact`/`continue` missing, mistyped,
-    the other boundary's field present, an empty or multi-line `compact`, a
-    `continue` that is multi-line, whitespace-only, starts with `/` or stands
-    against a non-driven transition; both fields refused on each of the line
-    breaks `str.splitlines` knows, CR, VT, FF, FS, GS, RS, NEL, LS and PS as
-    well as LF, with no sentinel written); the six legal combinations pinning the
-    sentinel's exact bytes, read back through `handoff_drive_read`.
+    the other boundary's field present, an empty or multi-line `compact`, which
+    is also refused on each of the line breaks `str.splitlines` knows, CR, VT,
+    FF, FS, GS, RS, NEL, LS and PS as well as LF, with no sentinel written);
+    `continue` as a boolean at every boundary, driven or not (null, a string,
+    an empty string, a number, a list and an object each refused with no
+    sentinel written; `true` refused against a transition not carried out and
+    legal against one carried out; `false` legal everywhere); the legal
+    combinations pinning the sentinel's exact bytes, `CONTINUATION` imported
+    from `checkpoint.py` rather than restated, read back through
+    `handoff_drive_read`; and the constant itself, one line that does not begin
+    with `/`.
   - `tests/test_checkpoint_directives.py` — the memory directive, the commit act
     (present under `with-commit` and absent without), the order of the parts
     and the ledger-liveness matrix; and the harness's own isolation, `make_repo`

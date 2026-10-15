@@ -35,6 +35,13 @@ everything downstream deterministic. The transition is that shape again.
 
 ## The contract
 
+> **Superseded 2026-10-15** (see [The continuation is a constant](2026-10-15-the-continuation-is-a-constant.md))
+> on the type of `continue`: it is a required boolean, and `true` makes the
+> composer write one fixed line in place of agent-authored prose, so the table
+> row and the matrix below read `continue: false` for `null` and `true` for
+> a line of prose, and the single-line, leading-`/` validation is gone for
+> `continue`. The two axes and their six combinations stand.
+
 `rename` stays required under `handoff` and forbidden under `precompact`,
 which is what still makes a `handoff` call that forgot its title an error
 rather than a silent non-rename. Two new fields join it, both **required**
@@ -73,6 +80,11 @@ by a stop was always reachable by typing `/compact` by hand. `compact:true
 continue:null` makes it expressible, and the claim goes.
 
 ## Commit awareness narrows
+
+> **Superseded 2026-10-15** (see [The continuation is a constant](2026-10-15-the-continuation-is-a-constant.md))
+> on where a commit could be named: there is no agent-authored continuation
+> prompt to name one, so "a commit named in the continuation prompt" describes
+> a case that no longer arises. The ask stopping at the transition stands.
 
 `with-commit` becomes: **the ask this checkpoint serves implies a commit.**
 

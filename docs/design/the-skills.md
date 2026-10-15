@@ -25,8 +25,8 @@ It appears nowhere else in the design because there is nothing else to say
 about it.
 
 The judgment is per-boundary, not per-drive-mode: commit awareness, memory
-capture, the drafting rules and the file-vs-prompt seam are
-identical whether or not the plugin runs the command afterwards. So whether
+capture, the drafting rules and the seam between the files and the
+continuation are identical whether or not the plugin runs the command afterwards. So whether
 the transition is driven (the code's `typed`) is a **field of the payload**, decided the way
 `commit` already is — one fact the agent supplies, everything downstream
 deterministic — rather than a skill of its own.
@@ -40,13 +40,24 @@ line shapes stated twice in prose), and expressiveness: driving a transition
 treated the prompt as intrinsic. The fields cover the cross product:
 
 ```
-handoff     clear:false          continue:null   prepare only
-handoff     clear:true           continue:null   clear, then stop
-handoff     clear:true           continue:"…"    clear and continue
-precompact  compact:false        continue:null   prepare only
-precompact  compact:true|"…"     continue:null   compact, then stop
-precompact  compact:true|"…"     continue:"…"    compact and continue
+handoff     clear:false          continue:false  prepare only
+handoff     clear:true           continue:false  clear, then stop
+handoff     clear:true           continue:true   clear and continue
+precompact  compact:false        continue:false  prepare only
+precompact  compact:true|"…"     continue:false  compact, then stop
+precompact  compact:true|"…"     continue:true   compact and continue
 ```
+
+`continue` is a boolean, and `true` is a schema error against a transition that
+is not carried out, since nothing would submit the prompt. The prompt it asks
+for is one fixed line, `CONTINUATION` in `checkpoint.py`, that points the fresh
+context at the task and todo files. It was once a line of prose the agent
+wrote, and the agent used it to carry the task: a description of the next step,
+or the facts it hinged on, that no file held and that the next `/clear` lost.
+With the line fixed, `TASK.md` and `TODO.md` are the only carrier, and the
+skills ask one yes-or-no question of the user's request where they once asked
+for a sentence.
+[The continuation is a constant](../changelog/2026-10-15-the-continuation-is-a-constant.md)
 
 The transition field is named after the command it runs, and its value is
 that command's argument: `/clear` takes none, so it is a bool; `/compact`

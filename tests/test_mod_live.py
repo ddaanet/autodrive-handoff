@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from checkpoint import CONTINUATION
 from conftest import run_git
 
 pytestmark = pytest.mark.live
@@ -40,7 +41,6 @@ REPO = Path(__file__).resolve().parent.parent
 MODEL = os.environ.get("HANDOFF_MOD_SMOKE_MODEL", "haiku")
 RUN_TIMEOUT = 240.0
 TITLE = "mod-smoke-title"
-CONTINUATION = "Reply with exactly the word CONTINUED"
 FOCUS = "keep the word PINEAPPLE"
 
 

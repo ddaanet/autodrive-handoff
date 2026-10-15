@@ -86,7 +86,7 @@ test('compact with focus: command compact + args, then the continuation prompt',
     'prompt.read',
     'command.run compact [keep the parser work]',
     'prompt.read',
-    'prompt.submit continue with task 3 asUser=true',
+    'prompt.submit Continue per handoff asUser=true',
   ])
   expect(r.toasts).toEqual(['handoff: will run /compact keep the parser work once the turn ends.'])
   expect(r.writes).toEqual([])
@@ -102,7 +102,7 @@ test('clear: rename, then clear (no args), then the continuation, in order', asy
     'prompt.read',
     'command.run clear []',
     'prompt.read',
-    'prompt.submit pick up per the task file asUser=true',
+    'prompt.submit Continue per handoff asUser=true',
   ])
   expect(r.toasts).toEqual(['handoff: will run /rename A Title once the turn ends.'])
 })
@@ -170,7 +170,7 @@ test('a rejected continuation prompt is recorded the same way', async ($, on) =>
   const r = rig(on, {
     sentinelExists: true,
     stdout: fixture('armed-compact', CWD),
-    rejectLines: { 'continue with task 3': 'queue full' },
+    rejectLines: { 'Continue per handoff': 'queue full' },
   })
   await endTurn($)
   expect(r.log).toEqual([
@@ -178,10 +178,10 @@ test('a rejected continuation prompt is recorded the same way', async ($, on) =>
     'prompt.read',
     'command.run compact [keep the parser work]',
     'prompt.read',
-    'prompt.submit continue with task 3 asUser=true',
+    'prompt.submit Continue per handoff asUser=true',
     `fs.write ${FAIL_FILE}`,
   ])
-  expect(r.writes[0].text).toContain('continue with task 3')
+  expect(r.writes[0].text).toContain('Continue per handoff')
 })
 
 // A Stop with no session id drives nothing (drive-take.sh cannot tell whose

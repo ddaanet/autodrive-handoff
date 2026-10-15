@@ -92,7 +92,9 @@ def main() -> int:
         for plan in plans:
             planning.apply_plan(plan)
 
-    compose_sentinel(root, transition, continuation, owner=owner, held=held)
+    compose_sentinel(
+        root, transition, continuation=continuation, owner=owner, held=held
+    )
     ending = Ending(held=held, typed=transition.typed)
     boundary = Boundary(skill, root, commit_mode)
     parts = compose_directives(boundary, memory, ending, plans)
@@ -119,8 +121,8 @@ def hold_decision(
 def compose_sentinel(
     root: Path,
     transition: validation.Transition,
-    continuation: str,
     *,
+    continuation: bool,
     owner: str,
     held: bool,
 ) -> None:
@@ -136,7 +138,7 @@ def compose_sentinel(
     drive_path = root / HANDOFF_REL_DRIVE
     sentinel_lines = [state, transition.kind, *transition.cmds]
     if continuation:
-        sentinel_lines.append(continuation)
+        sentinel_lines.append(CONTINUATION)
     # Renamed into place rather than written through the name: a link at the
     # sentinel is swapped for the new file, never followed onto what it names.
     # The temporary file takes the `autodrive.` prefix, which the
@@ -159,6 +161,10 @@ def compose_sentinel(
             "transition",
             f"composed a sentinel this version cannot read back — {drive_err}",
         )
+
+
+# The fixed prompt submitted after a driven transition when `continue` is true.
+CONTINUATION = "Continue per handoff"
 
 
 def check_sentinel_target(root: Path) -> None:

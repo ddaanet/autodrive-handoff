@@ -76,12 +76,34 @@ rows), `tests/mod/fixtures/*.json` and the regenerated `fixtures.ts`,
 `README.md`, `CLAUDE.md`, `docs/design/the-skills.md`,
 `docs/design/driving-the-transition.md`, `docs/design/the-write-path.md`.
 
+> **Corrected at review, 2026-10-15.** The list above says the `continue`
+> validation is in `scripts/checkpoint.py`, the rows are in
+> `tests/test_checkpoint.py`, and (in the contract) `require_one_line` goes.
+> Three things were wrong when written. `validate_continuation` is in
+> `scripts/_checkpoint_payload.py`; `scripts/checkpoint.py` holds the composer
+> and the constant. `tests/test_checkpoint.py` does not exist (`ls` finds no
+> such file): the `continue` rows are in `tests/test_checkpoint_transition.py`,
+> with the payload builders in `tests/conftest.py`, and the other
+> `tests/test_checkpoint_*.py` files carry `"continue": None` payloads that
+> became `False`. `require_one_line` is not removed: the `compact` focus
+> directive still goes through it (`scripts/_checkpoint_payload.py`); only its
+> use on `continue`, and the leading-`/` check, went. The rest of the list
+> stands, with `tests/test_mod_fixtures.py` added for the row that ties every
+> fixture prose line to the constant.
+
 Verification: pytest, bats and `claude plugin test` green; `just mod-smoke`
 shows the continuation arriving as the next session's first user prompt with
 the new text. Mutation-check: the composer writing the agent's string
 through, and the validator accepting a string.
 
 0.16.0 is unreleased and already breaking, so this rides it.
+
+> **Corrected at review, 2026-10-15.** "0.16.0 is unreleased and already
+> breaking, so this rides it" was false when step 1 landed: `git tag` lists
+> `v0.16.0` (commit dated 2026-10-11) and `v0.16.1` (2026-10-15). Step 1
+> changes the payload's `continue` field, so it is a breaking change of its own
+> and takes the next minor release, not an already-open one. The contract
+> above stands.
 
 ## Step 2: the two-tier hook
 
@@ -182,6 +204,10 @@ options; `CLAUDE.md` gets the hook, the script and the userConfig.
    tier, and reopen only when an ignored hard directive is observed in the
    marker log, as the 2026-08-01 design reasoned.
 2. Fold step 1 into 0.16.0? Default: yes, nothing is released.
+
+   > **Corrected at review, 2026-10-15.** "Default: yes, nothing is released"
+   > was wrong: 0.16.0 and 0.16.1 are tagged (`git tag`). The default was not
+   > available; step 1 ships as its own breaking change.
 3. Which boundary does the hook name once `handoff` is not what the user
    wants (a session with no task file worth keeping)? Default: always
    `handoff`; the user can run `/compact` by hand.
