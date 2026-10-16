@@ -33,14 +33,29 @@ precommit:
     pytest
     @echo "ok"
 
-# `claude plugin validate --strict`, minus two findings that cannot be fixed:
-# the warning that the repo-root CLAUDE.md is not loaded (it is this repo's own
+# `claude plugin validate --strict`, minus two findings that cannot be fixed,
+# each dropped only on the entry whose `file` is the one it belongs to: the
+# warning that the repo-root CLAUDE.md is not loaded (it is this repo's own
 # agent instructions, not context the plugin ships), and the invalid-JSON error
 # for an empty root .mcp.json, which something outside the repo creates and
-# which is gitignored. That one is dropped only while the file is empty. Any
-# other error or warning fails the gate.
+# which is gitignored. That one is dropped only while the file is empty. The
+# same finding on any other file, and any other error or warning, fails the
+# gate. The entries' paths are the validator's, absolute and physical, so the
+# root is `pwd -P` of the directory the recipe runs in.
 validate-plugin:
-    empty_mcp=$([ -f .mcp.json ] && [ ! -s .mcp.json ] && echo true || echo false); claude plugin validate --strict --json . | jq -e --argjson empty_mcp "$empty_mcp" '[.manifest, .contents[]] | map((.errors[] | select(($empty_mcp | not) or .path != "json" or (.message | startswith("Invalid JSON syntax") | not))), (.warnings[] | select(.path != "root" or (.message | startswith("CLAUDE.md at the plugin root") | not)))) | length == 0' > /dev/null
+    #!/usr/bin/env bash
+    root=$(pwd -P)
+    empty_mcp=$([ -f .mcp.json ] && [ ! -s .mcp.json ] && echo true || echo false)
+    claude plugin validate --strict --json . | jq -e --arg root "$root" --argjson empty_mcp "$empty_mcp" '
+      [.manifest, .contents[]] | map(
+        .file as $file
+        | (.errors[] | select(
+            ($empty_mcp and $file == $root + "/.mcp.json" and .path == "json"
+              and (.message | startswith("Invalid JSON syntax"))) | not)),
+          (.warnings[] | select(
+            ($file == $root + "/CLAUDE.md" and .path == "root"
+              and (.message | startswith("CLAUDE.md at the plugin root"))) | not))
+      ) | length == 0' > /dev/null
 
 # Gate the imported `release` recipe depends on
 prerelease: precommit

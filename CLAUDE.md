@@ -648,7 +648,11 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
   drift; a failed reader helper reported as unreadable, not malformed) and the `bin/handoff-checkpoint` shim, plus
   the harness row that `make_repo` and `make_gitlore_repo` (via `run_git` in
   `tests/probe-helpers.bash`, git minus `git rev-parse --local-env-vars`) leave a
-  decoy `GIT_DIR` repository byte-identical, mutation-checked. `version-guard.sh` is tested
+  decoy `GIT_DIR` repository byte-identical, mutation-checked. The `validate-plugin` rows run
+  the real recipe under a stub `claude` printing a fixture: the empty
+  `.mcp.json` error and the `CLAUDE.md` warning pass (also under a root with a
+  space), and the same finding on another entry's file, a non-empty or absent
+  `.mcp.json`, or any other finding on an exempt file fails. `version-guard.sh` is tested
   in the toolkit, not here.
 - `just py-test` — `pytest`: `tests/test_worktree_root.py` (the resolver's
   branch matrix, including the containment rule that keeps a submodule `inside`,
