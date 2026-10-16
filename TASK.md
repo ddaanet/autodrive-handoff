@@ -1,0 +1,3 @@
+## Current task
+
+Review `dev` against `main` before `main` moves. My human partner reset `main` to the last release and switched to `dev`, which carries the commits since, the queued-prompt sweep fix among them. Run `/code-review high` against `main`, and have my human partner type `/codex:adversarial-review` with `astra` (the agent cannot start it) with `--base main` and a focus file naming the artifact and what is settled. Fold verified findings, then the branch is ready for `main`. The context-threshold nudge left this project: its brief is `/Users/david/code/handoff-nudge/inbox/initial-brief.md`, and further work on it happens there.
