@@ -481,12 +481,18 @@ handoff_drive_arm() {
 # parent opened, so bash opens fd 9 on the file, `_drive_lock.py wait` takes
 # the lock on it from a child, and the lock stays with the shell's descriptor
 # after that child is gone. `create` makes the file first, 0600 and
-# O_NOFOLLOW, which bash's own redirection could not promise; `wait` checks that
-# fd 9 is still the regular file the path names. Read-write so that opening a
+# O_NOFOLLOW, which bash's own redirection could not promise, and is skipped
+# once a regular file is there (the lock file is never deleted, so after the
+# first take that is the usual case: one spawn instead of two). `wait` checks
+# that fd 9 is still the regular file the path names, which is the whole of the
+# safety `create` adds for a file already there. Read-write so that opening a
 # FIFO put there in the meantime cannot block.
 handoff_lock_take() {
-    local lock="$1" helper="${BASH_SOURCE[0]%/*}/_drive_lock.py"
-    python3 -I "$helper" create "$lock" 2>/dev/null || return 1
+    local lock="$1" helper
+    helper="$(dirname "${BASH_SOURCE[0]}")/_drive_lock.py"
+    if [[ ! -f "$lock" || -L "$lock" ]]; then
+        python3 -I "$helper" create "$lock" 2>/dev/null || return 1
+    fi
     { exec 9<>"$lock"; } 2>/dev/null || return 1
     if python3 -I "$helper" wait 9 "$lock" 2>/dev/null; then
         return 0
@@ -569,16 +575,21 @@ handoff_write_marker() {
 }
 
 # <path>. Read a per-session marker in $HANDOFF_POINTER_DIR into the caller's
-# scope, the handoff_drive_read idiom: MARKER_STATUS is `nodir` when the
-# directory fails marker_dir_ok (nothing is read), else handoff_read_regular's
-# status with `own` (`ok`, `absent`, `link`, `other`, `foreign`), or empty when
-# python3 failed; MARKER_VALUE is the bytes, NUL-terminated and read whole so a
+# scope, the handoff_drive_read idiom: MARKER_STATUS is `absent` when the
+# directory does not exist (nothing was ever written there, so there is no
+# marker), `nodir` when it exists and fails marker_dir_ok (nothing is read),
+# else handoff_read_regular's status with `own` (`ok`, `absent`, `link`,
+# `other`, `foreign`), or empty when python3 failed; MARKER_VALUE is the bytes, NUL-terminated and read whole so a
 # value holding a newline or edge whitespace survives, and is empty unless the
 # status is `ok`. Always returns 0. The drift marker and the prompt marker are
 # read through here, so neither can skip the directory test or the no-follow open.
 # shellcheck disable=SC2034  # assigned for the caller's scope
 handoff_read_marker() {
     MARKER_STATUS="" MARKER_VALUE=""
+    if [[ ! -e "$HANDOFF_POINTER_DIR" && ! -L "$HANDOFF_POINTER_DIR" ]]; then
+        MARKER_STATUS="absent"
+        return 0
+    fi
     if ! marker_dir_ok; then
         MARKER_STATUS="nodir"
         return 0

@@ -59,7 +59,7 @@ take() {
     HANDOFF_LOCK_WAIT_SECS=30 bash scripts/drive-take.sh "$tmp" sess-hook-test \
         > "$BATS_TEST_TMPDIR/take.out" 2>&1 3>&- &
     take_pid=$!
-    sleep 0.5
+    wait_until_blocked "$take_pid"
     seed "$tmp" "armed sess-other" clear "/rename Other" "/clear" "$CONTINUATION"
     release_drive_lock
     wait "$take_pid"

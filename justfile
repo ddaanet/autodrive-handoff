@@ -37,8 +37,8 @@ precommit:
 # each dropped only on the entry whose `file` is the one it belongs to: the
 # warning that the repo-root CLAUDE.md is not loaded (it is this repo's own
 # agent instructions, not context the plugin ships), and the invalid-JSON error
-# for an empty root .mcp.json, which something outside the repo creates and
-# which is gitignored. That one is dropped only while the file is empty. The
+# for an empty root .mcp.json, which the command sandbox creates as a placeholder
+# and which is gitignored. That one is dropped only while the file is empty. The
 # same finding on any other file, and any other error or warning, fails the
 # gate. The entries' paths are the validator's, absolute and physical, so the
 # root is `pwd -P` of the directory the recipe runs in.

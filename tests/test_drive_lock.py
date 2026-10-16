@@ -12,13 +12,12 @@ import stat
 import subprocess
 import sys
 import time
-from collections.abc import Iterator
-from contextlib import contextmanager
 from pathlib import Path
 
 import _drive_lock as drive_lock
 import checkpoint
 import pytest
+from lock_holder import held_elsewhere
 
 SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
 LIB = SCRIPTS / "_lib.sh"
@@ -38,34 +37,6 @@ PROBE = (
 def lock_is_free(lock: Path) -> bool:
     result = subprocess.run([sys.executable, "-I", "-c", PROBE, str(lock)], check=False)
     return result.returncode == 0
-
-
-@contextmanager
-def held_elsewhere(lock: Path, seconds: float = 60) -> Iterator[None]:
-    """Hold the lock from another process for the body, or `seconds`."""
-    holder = subprocess.Popen(
-        [
-            sys.executable,
-            "-I",
-            "-c",
-            "import fcntl, os, sys, time\n"
-            "fd = os.open(sys.argv[1], os.O_RDWR | os.O_CREAT, 0o600)\n"
-            "fcntl.flock(fd, fcntl.LOCK_EX)\n"
-            "print('held', flush=True)\n"
-            "time.sleep(float(sys.argv[2]))\n",
-            str(lock),
-            str(seconds),
-        ],
-        stdout=subprocess.PIPE,
-        text=True,
-    )
-    try:
-        assert holder.stdout is not None
-        assert holder.stdout.readline().strip() == "held"
-        yield
-    finally:
-        holder.kill()
-        holder.wait()
 
 
 def take_in_bash(lock: Path, then: str) -> subprocess.CompletedProcess[str]:
@@ -184,3 +155,32 @@ def test_the_python_constant_mirrors_the_bash_one() -> None:
         check=False,
     )
     assert result.stdout == checkpoint.HANDOFF_REL_DRIVE_LOCK
+
+
+def test_a_wait_that_finds_the_lock_held_touches_the_blocked_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The readiness signal the ordering rows wait on: touched once the wait has
+    found the lock held, and by nothing else."""
+    lock = tmp_path / "autodrive.lock"
+    blocked = tmp_path / "blocked"
+    monkeypatch.setenv(drive_lock.BLOCKED_ENV, str(blocked))
+    monkeypatch.setenv(drive_lock.WAIT_ENV, "0.2")
+    with drive_lock.locked(lock) as held:
+        assert held
+    assert not blocked.exists()
+    with held_elsewhere(lock), drive_lock.locked(lock) as held:
+        assert not held
+    assert blocked.exists()
+
+
+def test_the_blocked_file_is_touched_by_the_bash_wait_too(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lock = tmp_path / "autodrive.lock"
+    blocked = tmp_path / "blocked"
+    monkeypatch.setenv(drive_lock.BLOCKED_ENV, str(blocked))
+    monkeypatch.setenv(drive_lock.WAIT_ENV, "0.2")
+    with held_elsewhere(lock):
+        take_in_bash(lock, "")
+    assert blocked.exists()

@@ -25,6 +25,10 @@ descriptor against the path), so a link there means no lock; the lock file is
 created 0600. A link put at the name between the two bash calls is the residual:
 `wait` compares the descriptor with the path and refuses on a mismatch, but bash
 has already opened what the link named, read-write.
+
+`HANDOFF_LOCK_BLOCKED_FILE`, when set, names a file touched as soon as a wait
+finds the lock held. It exists for the tests (see `_signal_blocked`); nothing
+sets it in use.
 """
 
 from __future__ import annotations
@@ -36,6 +40,7 @@ import stat
 import sys
 import time
 from collections.abc import Iterator
+from pathlib import Path
 
 
 @contextlib.contextmanager
@@ -115,10 +120,14 @@ def _flock_within_bound(fd: int) -> bool:
     """Lock fd, polling until the bound; False on failure."""
     deadline = time.monotonic() + _wait_secs()
     delay = 0.005
+    signalled = False
     while True:
         try:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
+            if not signalled:
+                _signal_blocked()
+                signalled = True
             if time.monotonic() >= deadline:
                 return False
             time.sleep(delay)
@@ -129,6 +138,21 @@ def _flock_within_bound(fd: int) -> bool:
             return True
 
 
+def _signal_blocked() -> None:
+    """Touch the file `HANDOFF_LOCK_BLOCKED_FILE` names, if it is set.
+
+    A readiness signal for the tests and nothing else: it says that this
+    process has found the lock held and is now waiting for it, which is the
+    moment a test may change the sentinel under the holder and be sure the
+    waiter has not read it yet. A test cannot tell that from outside, and a
+    fixed sleep passes with the lock removed whenever the actor starts late.
+    """
+    path = os.environ.get(BLOCKED_ENV)
+    if path:
+        with contextlib.suppress(OSError), Path(path).open("a"):
+            pass
+
+
 def _wait_secs() -> float:
     try:
         return max(float(os.environ[WAIT_ENV]), 0.0)
@@ -137,6 +161,7 @@ def _wait_secs() -> float:
 
 
 WAIT_ENV = "HANDOFF_LOCK_WAIT_SECS"
+BLOCKED_ENV = "HANDOFF_LOCK_BLOCKED_FILE"
 DEFAULT_WAIT_SECS = 5.0
 
 

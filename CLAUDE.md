@@ -167,10 +167,12 @@ note in `report-drive-failure.sh`.
   a body (the notes of `handoff_frame_notes`, after the frame and before the
   gap note; the age is taken from the files that count, a legacy one included).
   On `clear` it consumes a `pending`
-  transition of kind `clear` first, whatever the frame holds. Spawns nothing —
-  the mod submits the continuation.
+  transition of kind `clear` first, whatever the frame holds, reading and
+  removing it under the sentinel's lock. Starts no continuation — the mod
+  submits it.
 - `scripts/load-compact.sh` — `SessionStart(compact)`: consumes a `pending`
-  `compact` (and only that state and kind, so an `armed` file is left for the
+  `compact`, its read and removal under the sentinel's lock (and only that
+  state and kind, so an `armed` file is left for the
   sweep and an overtaken `clear` is not consumed), injects the frame when
   there is one and tells the user `todo re-injected` or `No todo`, each
   followed by `; <fragment>` per legacy note, the same notes as
@@ -291,12 +293,14 @@ note in `report-drive-failure.sh`.
   over the name, so a link there is replaced and an orphan matches the marker's
   own sweep glob), shared by the drift marker and the prompt marker;
   `handoff_read_marker <path>` (`marker_dir_ok`, then the `own` read, into
-  `MARKER_STATUS` (`nodir`, `ok`, `absent`, `link`, `other`, `foreign`, or empty
-  for a failed helper) and `MARKER_VALUE`, NUL-safe, in the caller's scope:
+  `MARKER_STATUS` (`nodir` for a directory that exists and fails
+  `marker_dir_ok`, `absent` too for one that does not exist, `ok`, `link`,
+  `other`, `foreign`, or empty for a failed helper) and `MARKER_VALUE`, NUL-safe, in the caller's scope:
   both markers are read through it);
   `HANDOFF_REL_DRIVE_LOCK` and `handoff_lock_take <lockfile>` (take the
   sentinel's lock on fd 9, held until the shell exits, rc 1 when not taken,
-  which no caller treats as an error: `|| true`; see `_drive_lock.py`);
+  which no caller treats as an error: `|| true`; the `create` spawn only when
+  no regular lock file is there yet; see `_drive_lock.py`);
   `handoff_owner_live <transcript_path> <owner>` (the sweep's liveness test); `handoff_drive_has_source()` (`rename` has no
   confirming `SessionStart`; `compact` and `clear` do). Line 1 is the state
   (`held <session-id>`, `armed <session-id>`, `pending`; the owner is one id,
@@ -343,7 +347,9 @@ note in `report-drive-failure.sh`.
   commands are how bash holds it across steps through fd 9
   (`handoff_lock_take`). The wait is bounded (`HANDOFF_LOCK_WAIT_SECS`, default
   5) and a lock not taken is gone without; the file is 0600, opened
-  `O_NOFOLLOW`, and never deleted. `docs/design/sentinel-lock.md`.
+  `O_NOFOLLOW`, and never deleted. `HANDOFF_LOCK_BLOCKED_FILE`, when set, names
+  a file a wait touches once it finds the lock held: the one test-only seam,
+  which the ordering rows wait on instead of sleeping. `docs/design/sentinel-lock.md`.
 - `scripts/checkpoint.py` — the one write path (FR1). Takes its root from
   `HANDOFF_ROOT` (`validate_root`, which refuses it when unset or not a
   directory), has `_checkpoint_payload.py` validate the JSON payload, hands
@@ -353,7 +359,9 @@ note in `report-drive-failure.sh`.
   `.claude/` when absent; `check_sentinel_target` refuses a `.claude` that is
   a file or a sentinel that is a directory before anything is written) through
   `write_replacing` and reads it back, both under the sentinel's lock
-  (`_drive_lock.locked`), then prints the directive parts
+  (`_drive_lock.locked`; only the write's `OSError` is reported as `cannot write`,
+  and a read-back that fails or cannot run removes the unverified sentinel),
+  then prints the directive parts
   for a boundary skill. The legacy reports (`legacy_reports`, from the plan
   module) print ahead of the directive parts, which
   `compose_directives(boundary, memory, ending, plans)` orders; the closing
@@ -619,7 +627,8 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
   per-kind note, no lines offered and no unloaded-mod note; each beside the
   fresh-id row that sweeps as an aborted turn; an id with spaces and a trailing
   newline spared on an exact match and swept when it differs by whitespace
-  alone; no `prompt_id` swept with the typed-ahead note, and no marker swept;
+  alone; no `prompt_id` swept with the typed-ahead note, and no marker swept, with or without a pointer directory (a missing one is
+  `absent`, not unsettled);
   another session's `armed` file with a matching id left to the liveness rule,
   a `held`, `pending` or malformed file unaffected; the sweep writing no
   marker; a symlinked marker, a symlinked marker directory and a group- or
@@ -685,8 +694,10 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
   and a space linked, a `gitdir: ` line not first not),
   `tests/test_mod_fixtures.py`, `tests/test_drive_lock.py` (the lock itself,
   through `locked` and `handoff_lock_take`; each actor's ordering row is with
-  the actor, holding the lock from a background process through
-  `tests/lock-helpers.bash`) and the `tests/test_checkpoint_*.py` files,
+  the actor, holding the lock from a background process, `tests/lock_holder.py`
+  (through `tests/lock-helpers.bash` in bats), and changing the sentinel only
+  once the actor has reported through `HANDOFF_LOCK_BLOCKED_FILE` that it waits
+  on the lock; the loaders' rows are in `tests/hook-test.bats`) and the `tests/test_checkpoint_*.py` files,
   which drive `scripts/checkpoint.py` end-to-end via subprocess.
   `tests/conftest.py` holds what two or more of them use (the repository
   builders `make_repo` and `make_gitlore_repo`, the payload builders, the
@@ -773,7 +784,8 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
     armed fixture.
   - `tests/test_checkpoint_hold.py` — the arming instruction, the hold rule, the
     held state and its owner, the armed state's owner, and the check of
-    `CLAUDE_CODE_SESSION_ID` on both paths. Mutation-checked: the held/armed pair over one
+    `CLAUDE_CODE_SESSION_ID` on both paths, the sentinel's write waiting on the
+    lock, and a read-back that cannot run removing the sentinel. Mutation-checked: the held/armed pair over one
     fixture (never hold ⟹ the held row alone reds; hold whatever the sentinel
     names ⟹ the names-nothing row alone reds) and the `(driven ∧ with-commit)`
     disjunct.

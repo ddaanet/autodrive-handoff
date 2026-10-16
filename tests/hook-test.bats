@@ -3024,6 +3024,18 @@ assert_unloaded_report() {
     assert_unloaded_report "$output" "$LINES"
 }
 
+# A pointer directory that does not exist yet (nothing has ever written a
+# marker, so there is none) is `absent`, which settles the id as another turn's.
+# It is not an untrusted directory, which leaves the id unsettled.
+@test "report-drive-failure (no pointer directory at all: the marker is absent, swept without the typed-ahead phrase)" {
+    seed_armed_kind rename
+    [ ! -e "$HANDOFF_POINTER_DIR" ]
+    PROMPT_ID=first-prompt run_report_failure "$tmp"
+    [ "$status" -eq 0 ]
+    [ ! -e "$tmp/.claude/autodrive" ]
+    assert_unloaded_report "$output" "$LINES"
+}
+
 # The marker is compared whole, NUL-terminated on one side and carried by jq on
 # the other: a read that trims (`read -r`), strips trailing newlines (`$(cat)`)
 # or stops at the first line would match these pairs. Each id is the other's
@@ -3244,7 +3256,7 @@ assert_sweep_left_pending() {
     seed_armed_kind clear
     hold_drive_lock "$tmp"
     start_report_failure "$BATS_TEST_TMPDIR/sweep.out"
-    sleep 0.5
+    wait_until_blocked "$SWEEP_PID"
     become_pending clear
     release_drive_lock
     assert_sweep_left_pending
@@ -3254,7 +3266,7 @@ assert_sweep_left_pending() {
     seed_queued clear
     hold_drive_lock "$tmp"
     PROMPT_ID=arming-prompt start_report_failure "$BATS_TEST_TMPDIR/sweep.out"
-    sleep 0.5
+    wait_until_blocked "$SWEEP_PID"
     become_pending clear
     release_drive_lock
     assert_sweep_left_pending
@@ -3810,4 +3822,72 @@ find_witness_stub() {
     [ "$status" -eq 0 ]
     [ ! -e "$wt/.claude/autodrive" ]
     echo "$output" | jq -e '.systemMessage | test("stale")' >/dev/null
+}
+
+# --- the sentinel's lock: the loaders ---
+#
+# A loader reads `pending` and removes it. A checkpoint may replace the sentinel
+# in between (it replaces whatever is there), so the read and the removal are
+# one step under the lock. Another actor holds it, a loader starts and has to
+# wait, and the sentinel becomes a freshly armed one. The loader must then
+# judge that file, which is not a pending transition of its kind, and leave it:
+# an unlocked loader has already read `pending` and removes the new file.
+
+# <script> <source> <outfile> — a loader started in the background.
+start_loader() {
+    (
+        jq -nc --arg cwd "$tmp" --arg s "$2" \
+          '{cwd:$cwd, hook_event_name:"SessionStart", source:$s}' \
+        | HANDOFF_LOCK_WAIT_SECS=30 bash "scripts/$1"
+    ) > "$3" 2>&1 3>&- &
+    LOADER_PID=$!
+}
+
+# <kind> — what a checkpoint writes over the pending file.
+become_armed() {
+    if [ "$1" = compact ]; then
+        printf '%s\n' "armed $SESSION_ID" compact "/compact keep it" "next task"
+    else
+        printf '%s\n' "armed $SESSION_ID" clear "/rename Next Title" "/clear" "next task"
+    fi > "$tmp/.claude/autodrive"
+}
+
+@test "load-handoff (the pending clear is replaced while the loader waits on the lock: the new file is left alone)" {
+    seed_pending "$tmp" clear "/rename A Title" "/clear" "pick up per the task file"
+    hold_drive_lock "$tmp"
+    start_loader load-handoff.sh clear "$BATS_TEST_TMPDIR/loader.out"
+    wait_until_blocked "$LOADER_PID"
+    become_armed clear
+    release_drive_lock
+    wait "$LOADER_PID"
+    [ "$(head -n1 "$tmp/.claude/autodrive")" = "armed $SESSION_ID" ]
+}
+
+@test "load-compact (the pending compact is replaced while the loader waits on the lock: the new file is left alone)" {
+    seed_pending "$tmp" compact "/compact" "continue"
+    hold_drive_lock "$tmp"
+    start_loader load-compact.sh compact "$BATS_TEST_TMPDIR/loader.out"
+    wait_until_blocked "$LOADER_PID"
+    become_armed compact
+    release_drive_lock
+    wait "$LOADER_PID"
+    [ "$(head -n1 "$tmp/.claude/autodrive")" = "armed $SESSION_ID" ]
+}
+
+@test "load-handoff (the lock is never released: the loader consumes after the bound)" {
+    seed_pending "$tmp" clear "/rename A Title" "/clear" "pick up per the task file"
+    hold_drive_lock "$tmp"
+    HANDOFF_LOCK_WAIT_SECS=0.3 run_load_handoff "$tmp" clear
+    release_drive_lock
+    [ "$status" -eq 0 ]
+    [ ! -e "$tmp/.claude/autodrive" ]
+}
+
+@test "load-compact (the lock is never released: the loader consumes after the bound)" {
+    seed_pending "$tmp" compact "/compact" "continue"
+    hold_drive_lock "$tmp"
+    HANDOFF_LOCK_WAIT_SECS=0.3 run_load_compact "$tmp"
+    release_drive_lock
+    [ "$status" -eq 0 ]
+    [ ! -e "$tmp/.claude/autodrive" ]
 }

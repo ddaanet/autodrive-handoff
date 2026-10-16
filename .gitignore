@@ -29,5 +29,12 @@ __pycache__/
 ._*
 
 /dist/plugin/
+# The command sandbox's empty placeholder file (the validate-plugin recipe
+# tolerates it while it is empty).
 /.mcp.json
+# Claude Code's mods tooling: the generated types it writes under
+# .claude-plugin/types/, which only a host-written nested .gitignore keeps out
+# otherwise (and dist.include ships .claude-plugin whole), and the tsconfig.json
+# it creates at the root, extending them.
+/.claude-plugin/types/
 /tsconfig.json

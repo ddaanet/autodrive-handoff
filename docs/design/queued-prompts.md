@@ -47,10 +47,11 @@ With no `prompt_id` in the input (the minimum supported Claude Code may not
 send one), no marker, or a marker that differs, the file is swept as above. The
 note also names a prompt typed while the turn was still running as a possible
 cause when the input had no id, and when it had one but the marker could not
-settle it: the marker directory fails `marker_dir_ok`, or the read is a link, a
-directory or another user's file, or its helper failed (empty status). An
-`absent` marker and a differing one do settle it, as another turn's, so the
-note leaves the phrase out; the sweep and the lines are the same either way.
+settle it: the marker directory exists and fails `marker_dir_ok`, or the read
+is a link, a directory or another user's file, or its helper failed (empty
+status). An `absent` marker and a differing one do settle it, as another
+turn's, so the note leaves the phrase out; a marker directory that does not
+exist is the first of these, since nothing has ever written a marker there; the sweep and the lines are the same either way.
 `held`, `pending`, another session's file, a link, a malformed or unreadable
 one and the failure record are as before. Both markers are read through
 `handoff_read_marker` in `_lib.sh`.

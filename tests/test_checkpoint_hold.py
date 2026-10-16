@@ -7,10 +7,9 @@ The helpers shared with the other tests/test_checkpoint_*.py files are in
 tests/conftest.py.
 """
 
+import shutil
 import subprocess
-import sys
 import threading
-import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -29,6 +28,7 @@ from conftest import (
     todo_keep,
     unset_clause_file,
 )
+from lock_holder import BLOCKED_ENV, held_elsewhere, wait_until_blocked
 
 pytestmark = pytest.mark.usefixtures("_session_id")
 
@@ -365,43 +365,47 @@ def test_sentinel_write_waits_on_the_lock(
     """Another actor holds the lock; the checkpoint writes the sentinel only
     once it is free.
 
-    An unlocked write lands at once, under the other actor.
+    The row changes nothing until the checkpoint has reported that it is waiting
+    on the lock, so an unlocked write, which never waits, fails the row however
+    late it starts. Without the lock it lands at once, under the other actor.
     """
     repo = make_repo(tmp_path)
     lock = repo / ".claude" / "autodrive.lock"
-    holder = subprocess.Popen(
-        [
-            sys.executable,
-            "-I",
-            "-c",
-            "import fcntl, os, sys, time\n"
-            "fd = os.open(sys.argv[1], os.O_RDWR | os.O_CREAT, 0o600)\n"
-            "fcntl.flock(fd, fcntl.LOCK_EX)\n"
-            "print('held', flush=True)\n"
-            "time.sleep(60)\n",
-            str(lock),
-        ],
-        stdout=subprocess.PIPE,
-        text=True,
+    blocked = tmp_path / "blocked"
+    monkeypatch.setenv("HANDOFF_LOCK_WAIT_SECS", "30")
+    monkeypatch.setenv(BLOCKED_ENV, str(blocked))
+    payload = handoff_payload("without-commit")
+    result: list[subprocess.CompletedProcess[str]] = []
+    thread = threading.Thread(
+        target=lambda: result.append(run_checkpoint(repo, payload))
     )
-    try:
-        assert holder.stdout is not None
-        assert holder.stdout.readline().strip() == "held"
-        monkeypatch.setenv("HANDOFF_LOCK_WAIT_SECS", "30")
-        payload = handoff_payload("without-commit")
-        result: list[subprocess.CompletedProcess[str]] = []
-        thread = threading.Thread(
-            target=lambda: result.append(run_checkpoint(repo, payload))
-        )
+    with held_elsewhere(lock):
         thread.start()
-        time.sleep(0.5)
+        assert wait_until_blocked(blocked, thread.is_alive)
         assert not (repo / ".claude" / "autodrive").exists()
-        holder.kill()
-        holder.wait()
-        thread.join(timeout=20)
-        assert result
-        assert result[0].returncode == 0, result[0].stderr
-        assert (repo / ".claude" / "autodrive").exists()
-    finally:
-        holder.kill()
-        holder.wait()
+    thread.join(timeout=20)
+    assert result
+    assert result[0].returncode == 0, result[0].stderr
+    assert (repo / ".claude" / "autodrive").exists()
+
+
+def test_a_read_back_that_cannot_run_removes_the_sentinel_and_says_so(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The read-back is bash; with none on PATH it cannot answer.
+
+    The sentinel just written is unverified, so it must not stay on disk for the
+    mod to drive, and the error is about the read-back, not a failed write.
+    """
+    repo = make_repo(tmp_path)
+    git = shutil.which("git")
+    assert git
+    bin_dir = tmp_path / "bin-with-git-only"
+    bin_dir.mkdir()
+    (bin_dir / "git").symlink_to(git)
+    monkeypatch.setenv("PATH", str(bin_dir))
+    result = run_checkpoint(repo, handoff_payload("without-commit"))
+    assert result.returncode != 0
+    assert "cannot read back" in result.stderr
+    assert "cannot write .claude/autodrive" not in result.stderr
+    assert not (repo / ".claude" / "autodrive").exists()

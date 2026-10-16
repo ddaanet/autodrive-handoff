@@ -100,9 +100,18 @@ claude_md_entry() {
     validate_entry "$1" root 'CLAUDE.md at the plugin root is not loaded as project context. To ship context with your plugin, use a skill (skills/<name>/SKILL.md) instead.' warnings
 }
 
+# physical_dir <path> — make the directory and print its physical path. The
+# validator's entries carry physical paths (checked against the real one: `claude
+# plugin validate .` reports the realpath of the directory it runs in), and
+# $BATS_TEST_TMPDIR is not one where /var is a link, as on macOS.
+physical_dir() {
+    mkdir -p "$1" && (cd "$1" && pwd -P)
+}
+
 # validate_run <root> <entry>...: a stub `claude` printing the fixture (an
 # empty manifest plus the entries), then the real recipe with <root> as its
-# working directory. Sets $status and $output.
+# working directory (or $VALIDATE_CWD, a path that reaches it). Sets $status and
+# $output.
 validate_run() {
     local root="$1" entries; shift
     entries="$(IFS=,; echo "$*")"
@@ -116,48 +125,60 @@ cat "$FIXTURE"
 STUB
     chmod +x "$BATS_TEST_TMPDIR/stubbin/claude"
     FIXTURE="$BATS_TEST_TMPDIR/fixture.json" PATH="$BATS_TEST_TMPDIR/stubbin:$PATH" \
-        run just --justfile "$repo_root/justfile" --working-directory "$root" validate-plugin
+        PWD="${VALIDATE_CWD:-$root}" run just --justfile "$repo_root/justfile" --working-directory "${VALIDATE_CWD:-$root}" validate-plugin
 }
 
 @test "validate-plugin: an empty .mcp.json's syntax error and the CLAUDE.md warning pass" {
-    root="$BATS_TEST_TMPDIR/plugin"; mkdir -p "$root"; : > "$root/.mcp.json"
+    root="$(physical_dir "$BATS_TEST_TMPDIR/plugin")"; : > "$root/.mcp.json"
     validate_run "$root" "$(claude_md_entry "$root/CLAUDE.md")" "$(mcp_syntax_entry "$root/.mcp.json")"
     [ "$status" -eq 0 ]
 }
 
 @test "validate-plugin: a root path holding a space passes the same fixture" {
-    root="$BATS_TEST_TMPDIR/my plugin dir"; mkdir -p "$root"; : > "$root/.mcp.json"
+    root="$(physical_dir "$BATS_TEST_TMPDIR/my plugin dir")"; : > "$root/.mcp.json"
     validate_run "$root" "$(claude_md_entry "$root/CLAUDE.md")" "$(mcp_syntax_entry "$root/.mcp.json")"
     [ "$status" -eq 0 ]
 }
 
+# The recipe runs the validator on `.`, which reports the physical path of the
+# directory, so a working directory reached through a link still matches. The
+# recipe's shell inherits the link as its $PWD, as it does from a user who cd'd
+# through one, so a plain `pwd` there would name the link.
+@test "validate-plugin: a working directory reached through a symlink passes with the validator's physical paths" {
+    root="$(physical_dir "$BATS_TEST_TMPDIR/plugin")"; : > "$root/.mcp.json"
+    ln -s "$root" "$BATS_TEST_TMPDIR/plugin-link"
+    VALIDATE_CWD="$BATS_TEST_TMPDIR/plugin-link" \
+        validate_run "$root" "$(claude_md_entry "$root/CLAUDE.md")" "$(mcp_syntax_entry "$root/.mcp.json")"
+    [ "$status" -eq 0 ]
+}
+
 @test "validate-plugin: the same syntax error on hooks.json fails beside an empty .mcp.json" {
-    root="$BATS_TEST_TMPDIR/plugin"; mkdir -p "$root"; : > "$root/.mcp.json"
+    root="$(physical_dir "$BATS_TEST_TMPDIR/plugin")"; : > "$root/.mcp.json"
     validate_run "$root" "$(claude_md_entry "$root/CLAUDE.md")" \
         "$(mcp_syntax_entry "$root/hooks/hooks.json")" "$(mcp_syntax_entry "$root/.mcp.json")"
     [ "$status" -ne 0 ]
 }
 
 @test "validate-plugin: the syntax error on a non-empty .mcp.json fails" {
-    root="$BATS_TEST_TMPDIR/plugin"; mkdir -p "$root"; echo '{' > "$root/.mcp.json"
+    root="$(physical_dir "$BATS_TEST_TMPDIR/plugin")"; echo '{' > "$root/.mcp.json"
     validate_run "$root" "$(claude_md_entry "$root/CLAUDE.md")" "$(mcp_syntax_entry "$root/.mcp.json")"
     [ "$status" -ne 0 ]
 }
 
 @test "validate-plugin: the syntax error with no .mcp.json at all fails" {
-    root="$BATS_TEST_TMPDIR/plugin"; mkdir -p "$root"
+    root="$(physical_dir "$BATS_TEST_TMPDIR/plugin")"
     validate_run "$root" "$(claude_md_entry "$root/CLAUDE.md")" "$(mcp_syntax_entry "$root/.mcp.json")"
     [ "$status" -ne 0 ]
 }
 
 @test "validate-plugin: the CLAUDE.md warning on another entry's file fails" {
-    root="$BATS_TEST_TMPDIR/plugin"; mkdir -p "$root"; : > "$root/.mcp.json"
+    root="$(physical_dir "$BATS_TEST_TMPDIR/plugin")"; : > "$root/.mcp.json"
     validate_run "$root" "$(claude_md_entry "$root/skills/x/SKILL.md")" "$(mcp_syntax_entry "$root/.mcp.json")"
     [ "$status" -ne 0 ]
 }
 
 @test "validate-plugin: an unrelated finding on an exempt file still fails" {
-    root="$BATS_TEST_TMPDIR/plugin"; mkdir -p "$root"; : > "$root/.mcp.json"
+    root="$(physical_dir "$BATS_TEST_TMPDIR/plugin")"; : > "$root/.mcp.json"
     validate_run "$root" "$(claude_md_entry "$root/CLAUDE.md")" \
         "$(validate_entry "$root/.mcp.json" servers 'bad server')"
     [ "$status" -ne 0 ]
@@ -476,7 +497,7 @@ pick up per the task file" ]
     (cd "$repo" && HANDOFF_ROOT="$repo" HANDOFF_LOCK_WAIT_SECS=30 bash "$APPROVED") \
         > "$BATS_TEST_TMPDIR/approved.out" 2>&1 3>&- &
     approved_pid=$!
-    sleep 0.5
+    wait_until_blocked "$approved_pid"
     printf '%s\n' "held sess-someone-else" clear "/rename A Title" /clear \
         > "$repo/.claude/autodrive"
     release_drive_lock

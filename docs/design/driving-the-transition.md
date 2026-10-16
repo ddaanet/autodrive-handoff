@@ -187,8 +187,11 @@ harness itself writes.
 `SessionStart(clear)` fires for a mod-run `/clear`, and `SessionStart(compact)`
 for a mod-run `/compact`, exactly as for a hand-typed one.
 `load-handoff.sh` and `load-compact.sh` each remove a `pending` file of their
-own kind and inject the frame; neither spawns anything, because the mod
-submits the continuation itself once the command resolves. Each consumes only
+own kind and inject the frame; neither starts the continuation, because the mod
+submits it itself once the command resolves. The read of `pending` and its
+removal are one step under [the sentinel's lock](sentinel-lock.md): a
+checkpoint replaces whatever sentinel is there, so a loader must not remove a
+file it never read. Each consumes only
 its own kind in state `pending`: an `armed` file is left for the sweep, and a
 `clear` armed in this session and overtaken by a threshold auto-compaction is
 not consumed by the compact loader. The consume comes first and does not
@@ -301,7 +304,7 @@ The sweep and the take can interleave: the host does not order a new prompt's
 `UserPromptSubmit` against the mod's `turn.complete`, which runs the take, so
 a sweep that read `armed` could delete the `pending` file the take had just
 armed. Every actor of the sentinel, the checkpoint, `handoff-approved`,
-`drive-take.sh` and the sweep, holds an advisory lock
+`drive-take.sh`, the sweep and the two loaders, holds an advisory lock
 (`.claude/autodrive.lock`) across its read-decide-write, with a bounded wait
 that fails open. The mechanism and its bounds are in [The sentinel's
 lock](sentinel-lock.md).

@@ -42,6 +42,16 @@ notes=()   # systemMessage fragments from the transition, if any
 drive="$cwd/$HANDOFF_REL_DRIVE"
 # `-L` as well as `-f`: a link at the sentinel, dangling or not, is refused by
 # the reader and removed here, never read as no file and left in place.
+#
+# The read and the removal are one step under the sentinel's lock
+# (_drive_lock.py, held until this script exits): a checkpoint replaces whatever
+# sentinel is there, so without it one could land between the two and be removed
+# unread. A lock that cannot be taken (the bound, HANDOFF_LOCK_WAIT_SECS) is
+# gone without, as before the lock. The second test is for a file removed while
+# this waited.
+if [[ "$hook_source" == "clear" && ( -L "$drive" || -f "$drive" ) ]]; then
+    handoff_lock_take "$cwd/$HANDOFF_REL_DRIVE_LOCK" || true
+fi
 if [[ "$hook_source" == "clear" && ( -L "$drive" || -f "$drive" ) ]]; then
     read_rc=0
     handoff_drive_read "$drive" || read_rc=$?
