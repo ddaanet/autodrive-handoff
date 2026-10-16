@@ -4,6 +4,15 @@
 #   # shellcheck source-path=SCRIPTDIR source=_lib.sh
 #   source "$(dirname "$0")/_lib.sh"
 
+# The directory this file is in, computed once when it is sourced so no helper
+# forks `dirname` for it: the scripts it runs (`_checkpoint_lib.py`,
+# `_drive_lock.py`, `worktree_root.py`) are beside it. `.` when BASH_SOURCE has
+# no slash.
+case "${BASH_SOURCE[0]}" in
+    */*) HANDOFF_LIB_DIR="${BASH_SOURCE[0]%/*}"; : "${HANDOFF_LIB_DIR:=/}" ;;
+    *) HANDOFF_LIB_DIR="." ;;
+esac
+
 # Canonical relative paths inside the project. Changing these is a
 # breaking change (see CLAUDE.md conventions).
 # shellcheck disable=SC2034  # consumed by sourcing scripts
@@ -92,7 +101,7 @@ HANDOFF_POINTER_DIR="${HANDOFF_POINTER_DIR:-/tmp/claude}"
 handoff_frame() {
     local task="$1" todo="$2" legacy_task="${3:-}" legacy_todo="${4:-}" lib
     local task_src todo_src
-    lib="$(dirname "${BASH_SOURCE[0]}")/_checkpoint_lib.py"
+    lib="$HANDOFF_LIB_DIR/_checkpoint_lib.py"
     # Any of the four paths that is a symlink, dangling or not, is treated as
     # absent: never tested, read or counted as shadowing or shadowed. The
     # checkpoint refuses a symlink at each, naming the field (a dangling
@@ -489,7 +498,7 @@ handoff_drive_arm() {
 # FIFO put there in the meantime cannot block.
 handoff_lock_take() {
     local lock="$1" helper
-    helper="$(dirname "${BASH_SOURCE[0]}")/_drive_lock.py"
+    helper="$HANDOFF_LIB_DIR/_drive_lock.py"
     if [[ ! -f "$lock" || -L "$lock" ]]; then
         python3 -I "$helper" create "$lock" 2>/dev/null || return 1
     fi
@@ -579,10 +588,11 @@ handoff_write_marker() {
 # directory does not exist (nothing was ever written there, so there is no
 # marker), `nodir` when it exists and fails marker_dir_ok (nothing is read),
 # else handoff_read_regular's status with `own` (`ok`, `absent`, `link`,
-# `other`, `foreign`), or empty when python3 failed; MARKER_VALUE is the bytes, NUL-terminated and read whole so a
-# value holding a newline or edge whitespace survives, and is empty unless the
-# status is `ok`. Always returns 0. The drift marker and the prompt marker are
-# read through here, so neither can skip the directory test or the no-follow open.
+# `other`, `foreign`), or empty when python3 failed; MARKER_VALUE is the bytes,
+# NUL-terminated and read whole so a value holding a newline or edge whitespace
+# survives, and is empty unless the status is `ok`. Always returns 0. The drift
+# marker and the prompt marker are read through here, so neither can skip the
+# directory test or the no-follow open.
 # shellcheck disable=SC2034  # assigned for the caller's scope
 handoff_read_marker() {
     MARKER_STATUS="" MARKER_VALUE=""
@@ -635,7 +645,7 @@ handoff_root_read() {
     # a newline would be cut by a line-wise read.
     HANDOFF_ROOT="" HANDOFF_ROOT_BRANCH=""
     { IFS= read -r -d '' HANDOFF_ROOT; IFS= read -r -d '' HANDOFF_ROOT_BRANCH; } < <(
-        python3 "$(dirname "${BASH_SOURCE[0]}")/worktree_root.py" "$1" "$project"
+        python3 "$HANDOFF_LIB_DIR/worktree_root.py" "$1" "$project"
     ) || true
     # A process substitution's exit status is out of reach in bash 3.2, so the
     # answer is judged instead: a resolver that crashed printed nothing, or not

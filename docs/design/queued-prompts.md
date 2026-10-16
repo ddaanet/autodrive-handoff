@@ -63,8 +63,9 @@ as stale again, the earlier behaviour. The marker read's `own` check has no
 test, because a marker owned by another user cannot be made without privilege.
 The cancel note is a directive, and the agent's compliance is not pinned.
 
-A marker write that failed silently, a full `/tmp` say, with a `prompt_id`
-present leaves the marker `absent`, which settles nothing as unsettled: a
+A marker write that failed silently, a full `/tmp` say, or a pointer directory
+that could not be created (a missing directory reads `absent`), with a
+`prompt_id` present leaves the marker `absent`, which settles nothing as unsettled: a
 queued prompt then sweeps as stale, with the lines and without the phrase.
 
 `inject-checkpoint-root.sh` writes the marker at `PreToolUse`, on a loose

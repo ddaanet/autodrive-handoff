@@ -298,7 +298,8 @@ note in `report-drive-failure.sh`.
   `other`, `foreign`, or empty for a failed helper) and `MARKER_VALUE`, NUL-safe, in the caller's scope:
   both markers are read through it);
   `HANDOFF_REL_DRIVE_LOCK` and `handoff_lock_take <lockfile>` (take the
-  sentinel's lock on fd 9, held until the shell exits, rc 1 when not taken,
+  sentinel's lock on fd 9, held until the shell exits or closes fd 9, rc 1
+  when not taken,
   which no caller treats as an error: `|| true`; the `create` spawn only when
   no regular lock file is there yet; see `_drive_lock.py`);
   `handoff_owner_live <transcript_path> <owner>` (the sweep's liveness test); `handoff_drive_has_source()` (`rename` has no

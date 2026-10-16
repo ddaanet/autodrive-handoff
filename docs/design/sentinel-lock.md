@@ -25,11 +25,13 @@ share). The checkpoint holds it over the sentinel's write and read-back,
 `handoff-approved` from its read to its rewrite, `drive-take.sh` from its read
 to its exit, the sweep from its read to its exit, so `record_sweep` and the
 failure branch's removal of a stranded `pending` are inside it, and each loader
-from its read of `pending` to its removal of it. Python takes
+from its read of `pending` to its removal of it, letting go before it assembles
+the frame. Python takes
 it with a context manager. Bash holds it across many steps because a lock lives
 on an open file description a child shares with its parent's descriptor: the
 shell opens fd 9 on the file (`handoff_lock_take` in `_lib.sh`), a child takes
-the lock on it, and the shell keeps it until it exits. The sweep, the take and
+the lock on it, and the shell keeps it until it exits or closes fd 9 (the loaders close it once the
+sentinel is consumed). The sweep, the take and
 the loaders lock only when a sentinel is on disk, so an ordinary prompt forks
 nothing, and the file is created by a first spawn only when it is not there
 yet.

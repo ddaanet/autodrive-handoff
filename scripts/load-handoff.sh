@@ -44,29 +44,30 @@ drive="$cwd/$HANDOFF_REL_DRIVE"
 # the reader and removed here, never read as no file and left in place.
 #
 # The read and the removal are one step under the sentinel's lock
-# (_drive_lock.py, held until this script exits): a checkpoint replaces whatever
-# sentinel is there, so without it one could land between the two and be removed
-# unread. A lock that cannot be taken (the bound, HANDOFF_LOCK_WAIT_SECS) is
-# gone without, as before the lock. The second test is for a file removed while
-# this waited.
+# (_drive_lock.py): a checkpoint replaces whatever sentinel is there, so without
+# it one could land between the two and be removed unread. The lock is let go
+# once the file is consumed, ahead of the frame assembly. A lock that cannot be
+# taken (the bound, HANDOFF_LOCK_WAIT_SECS) is gone without, as before the lock.
+# The inner test is for a file removed while this waited.
 if [[ "$hook_source" == "clear" && ( -L "$drive" || -f "$drive" ) ]]; then
     handoff_lock_take "$cwd/$HANDOFF_REL_DRIVE_LOCK" || true
-fi
-if [[ "$hook_source" == "clear" && ( -L "$drive" || -f "$drive" ) ]]; then
-    read_rc=0
-    handoff_drive_read "$drive" || read_rc=$?
-    if (( read_rc == 2 )); then
-        # The reader could not run, which says nothing about the file: kept.
-        notes+=("autodrive not read — $DRIVE_ERR; left in place")
-    elif (( read_rc != 0 )); then
-        rm -f "$drive"
-        notes+=("autodrive malformed — $DRIVE_ERR; not resuming")
-    elif [[ "$DRIVE_STATE" == "pending" && "$DRIVE_KIND" == "clear" ]]; then
-        # Only a transition in flight, and only our own kind: a compact armed in
-        # the outgoing session is left for SessionStart(compact), and an armed
-        # file — one whose Stop never fired — is left for the sweep.
-        rm -f "$drive"
+    if [[ -L "$drive" || -f "$drive" ]]; then
+        read_rc=0
+        handoff_drive_read "$drive" || read_rc=$?
+        if (( read_rc == 2 )); then
+            # The reader could not run, which says nothing about the file: kept.
+            notes+=("autodrive not read — $DRIVE_ERR; left in place")
+        elif (( read_rc != 0 )); then
+            rm -f "$drive"
+            notes+=("autodrive malformed — $DRIVE_ERR; not resuming")
+        elif [[ "$DRIVE_STATE" == "pending" && "$DRIVE_KIND" == "clear" ]]; then
+            # Only a transition in flight, and only our own kind: a compact armed
+            # in the outgoing session is left for SessionStart(compact), and an
+            # armed file — one whose Stop never fired — is left for the sweep.
+            rm -f "$drive"
+        fi
     fi
+    { exec 9>&-; } 2>/dev/null
 fi
 
 # The frame is the header plus the agent-authored files that count, inlined

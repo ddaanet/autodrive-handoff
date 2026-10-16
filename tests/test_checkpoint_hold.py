@@ -14,6 +14,9 @@ from collections.abc import Callable
 from pathlib import Path
 
 import _checkpoint_lib as lib
+import _checkpoint_payload as validation
+import _drive_lock as drive_lock
+import checkpoint
 import pytest
 from conftest import (
     add_sdd_ledger,
@@ -28,7 +31,7 @@ from conftest import (
     todo_keep,
     unset_clause_file,
 )
-from lock_holder import BLOCKED_ENV, held_elsewhere, wait_until_blocked
+from lock_holder import held_elsewhere, wait_until_blocked
 
 pytestmark = pytest.mark.usefixtures("_session_id")
 
@@ -373,7 +376,7 @@ def test_sentinel_write_waits_on_the_lock(
     lock = repo / ".claude" / "autodrive.lock"
     blocked = tmp_path / "blocked"
     monkeypatch.setenv("HANDOFF_LOCK_WAIT_SECS", "30")
-    monkeypatch.setenv(BLOCKED_ENV, str(blocked))
+    monkeypatch.setenv(drive_lock.BLOCKED_ENV, str(blocked))
     payload = handoff_payload("without-commit")
     result: list[subprocess.CompletedProcess[str]] = []
     thread = threading.Thread(
@@ -408,4 +411,67 @@ def test_a_read_back_that_cannot_run_removes_the_sentinel_and_says_so(
     assert result.returncode != 0
     assert "cannot read back" in result.stderr
     assert "cannot write .claude/autodrive" not in result.stderr
+    assert not (repo / ".claude" / "autodrive").exists()
+
+
+def _stub_reader(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, body: str) -> None:
+    """Put a `bash` ahead of the real one that runs `body`, in place of the
+    sentinel read-back (the one `bash` the checkpoint spawns)."""
+    bin_dir = tmp_path / "stub-bin"
+    bin_dir.mkdir()
+    stub = bin_dir / "bash"
+    stub.write_text(f"#!/bin/sh\n{body}\n")
+    stub.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}:{Path('/usr/bin')}:/bin")
+
+
+def test_a_reader_that_fails_silently_still_gives_the_message_a_reason(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A reader that exits non-zero with empty stderr leaves no dangling
+    dash."""
+    repo = make_repo(tmp_path)
+    _stub_reader(tmp_path, monkeypatch, "exit 1")
+    result = run_checkpoint(repo, handoff_payload("without-commit"))
+    assert result.returncode != 0
+    assert "cannot read back" in result.stderr
+    assert not result.stderr.rstrip().endswith("—")
+    assert "with no reason" in result.stderr
+    assert not (repo / ".claude" / "autodrive").exists()
+
+
+def test_a_reader_whose_stderr_does_not_decode_leaves_no_sentinel(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Any failure of the read-back, not only an OSError, removes the sentinel.
+
+    Invalid UTF-8 on the reader's stderr is one that is not an OSError: the
+    unverified `armed` file must not stay on disk for the mod to drive.
+    """
+    repo = make_repo(tmp_path)
+    _stub_reader(tmp_path, monkeypatch, "printf '\\377bad' >&2; exit 1")
+    result = run_checkpoint(repo, handoff_payload("without-commit"))
+    assert result.returncode != 0
+    assert "cannot read back" in result.stderr
+    assert "Traceback" not in result.stderr
+    assert not (repo / ".claude" / "autodrive").exists()
+
+
+def test_an_unexpected_read_back_failure_removes_the_sentinel(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Whatever the read-back raises, the sentinel it was to verify goes
+    first."""
+    repo = make_repo(tmp_path)
+    (repo / ".claude").mkdir(exist_ok=True)
+
+    def boom(_drive_path: Path) -> tuple[bool, str]:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(checkpoint, "_read_back_drive", boom)
+    transition = validation.Transition(kind="rename", cmds=[], typed=False)
+    with pytest.raises(RuntimeError):
+        checkpoint.compose_sentinel(
+            repo, transition, continuation=False, owner="sess-x", held=False
+        )
     assert not (repo / ".claude" / "autodrive").exists()

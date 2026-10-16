@@ -210,7 +210,13 @@ def compose_sentinel(
             )
         except OSError as e:
             _cannot_write(e)
-        ok, drive_err = _read_back_drive(drive_path)
+        try:
+            ok, drive_err = _read_back_drive(drive_path)
+        except BaseException:
+            # Whatever the read-back raised, the file is unverified: gone
+            # before the error propagates.
+            drive_path.unlink(missing_ok=True)
+            raise
         if not ok:
             # Unverified and `armed` is a transition the mod would drive.
             try:
@@ -271,11 +277,16 @@ def _read_back_drive(drive_path: Path) -> tuple[bool, str]:
     )
     try:
         result = subprocess.run(
-            ["bash", "-c", script], capture_output=True, text=True, check=False
+            ["bash", "-c", script], capture_output=True, check=False
         )
     except OSError as e:
         return False, f"the read-back could not run: {e.strerror or e}"
-    return result.returncode == 0, result.stderr
+    # Bytes, decoded here: a reader's stderr is a message, never a reason for the
+    # read-back to raise.
+    reason = result.stderr.decode("utf-8", errors="replace")
+    if result.returncode == 0:
+        return True, reason
+    return False, reason or f"the reader exited {result.returncode} with no reason"
 
 
 class Ending(NamedTuple):

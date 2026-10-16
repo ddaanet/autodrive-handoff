@@ -28,7 +28,6 @@ from contextlib import contextmanager
 from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
-BLOCKED_ENV = "HANDOFF_LOCK_BLOCKED_FILE"
 
 
 @contextmanager

@@ -32,11 +32,11 @@ drive="$cwd/$HANDOFF_REL_DRIVE"
 [[ -L "$drive" || -f "$drive" ]] || exit 0
 
 # The read and the removal below are one step under the sentinel's lock
-# (_drive_lock.py, held until this script exits): a checkpoint replaces whatever
-# sentinel is there, so without it one could land between the two and be removed
-# unread. A lock that cannot be taken (the bound, HANDOFF_LOCK_WAIT_SECS) is
-# gone without, as before the lock. The second test is for a file removed while
-# this waited.
+# (_drive_lock.py): a checkpoint replaces whatever sentinel is there, so without
+# it one could land between the two and be removed unread. The lock is let go
+# once the file is consumed; the early exits below let it go by exiting. A lock
+# that cannot be taken (the bound, HANDOFF_LOCK_WAIT_SECS) is gone without, as
+# before the lock. The second test is for a file removed while this waited.
 handoff_lock_take "$cwd/$HANDOFF_REL_DRIVE_LOCK" || true
 [[ -L "$drive" || -f "$drive" ]] || exit 0
 
@@ -63,6 +63,7 @@ fi
 
 # Consume unconditionally: a transition is taken at most once.
 rm -f "$drive"
+{ exec 9>&-; } 2>/dev/null
 
 # The todo remainder carries the content across the compaction; the
 # continuation prompt is only a handle to it. Inject the frame here so the handle
