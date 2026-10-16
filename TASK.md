@@ -1,0 +1,3 @@
+## Current task
+
+Start on the queued-prompt sweep bug, the `TODO.md` item about a prompt typed during a turn that has already armed a transition. Nothing is written for it yet. First reproduce it: a prompt submitted after `handoff-checkpoint` and before `Stop`, in the stub rig (`tests/mod/rig.ts`) or through `just mod-smoke` driven by tmux, and confirm that `report-drive-failure.sh` sweeps the owner's own `armed` file before `turn.complete` drives it. Only then decide what tells an aborted turn from a running one without a lock, and put that choice to my human partner before writing the fix.

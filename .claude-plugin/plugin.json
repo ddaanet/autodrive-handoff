@@ -8,5 +8,8 @@
   },
   "homepage": "https://github.com/ddaanet/autodrive-handoff",
   "repository": "https://github.com/ddaanet/autodrive-handoff",
+  "documentationUrl": "https://github.com/ddaanet/autodrive-handoff#readme",
+  "termsOfServiceUrl": "https://github.com/ddaanet/autodrive-handoff/blob/main/LICENSE",
+  "privacyPolicyUrl": "https://github.com/ddaanet/autodrive-handoff#privacy",
   "license": "MIT"
 }

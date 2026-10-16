@@ -200,6 +200,13 @@ transcript, to tell a live session from a dead one.
 - No prompt other than the one above, and no slash command other than
   `/rename`, `/clear` and `/compact`.
 
+## Privacy
+
+The plugin collects no data, makes no network calls and pushes nothing. It
+writes only local files, chiefly `TASK.md` and `TODO.md` in your project, and
+they stay until you or the next checkpoint clear them. [What the plugin runs
+and writes](#what-the-plugin-runs-and-writes) lists every file.
+
 ## Uninstall
 
 ```
