@@ -27,6 +27,7 @@ the drift the single-parser design exists to prevent.
 
 from __future__ import annotations
 
+import os
 import shlex
 import subprocess
 import sys
@@ -52,7 +53,7 @@ def main() -> int:
     print them.
     """
     payload = validation.read_payload()
-    root = validation.validate_root()
+    root = validate_root()
     skill = validation.validate_skill(payload)
     validation.validate_top_level_keys(payload)
 
@@ -74,7 +75,7 @@ def main() -> int:
     # Resolved before anything is written (task/todo/sentinel): every call
     # composes a sentinel, held or armed, and both name their owner on line 1,
     # so there is nothing this run could do with it unset.
-    owner = validation.require_session_id(
+    owner = require_session_id(
         "transition", "cannot compose a sentinel naming the session that owns it"
     )
     check_sentinel_target(root)
@@ -103,6 +104,33 @@ def main() -> int:
     parts = compose_directives(boundary, memory, ending, plans)
     print_output(parts)
     return 0
+
+
+def validate_root() -> Path:
+    """Return HANDOFF_ROOT from the environment.
+
+    Injected by inject-checkpoint-root.sh into the very command that invokes
+    this.
+    """
+    root = os.environ.get("HANDOFF_ROOT", "")
+    if not root:
+        lib.err(
+            "root",
+            "HANDOFF_ROOT is unset — call via the handoff-checkpoint shim on PATH, "
+            "unmodified, so the PreToolUse(Bash) hook recognises and injects it",
+        )
+    path = Path(root)
+    if not path.is_dir():
+        lib.err("root", f'HANDOFF_ROOT does not name a directory (got "{root}")')
+    return path
+
+
+def require_session_id(field: str, reason: str) -> str:
+    """Return CLAUDE_CODE_SESSION_ID, or error naming field with reason."""
+    session_id = os.environ.get("CLAUDE_CODE_SESSION_ID", "")
+    if not session_id:
+        lib.err(field, f"CLAUDE_CODE_SESSION_ID is unset — {reason}")
+    return session_id
 
 
 def require_something_to_continue(plans: list[planning.FilePlan]) -> None:

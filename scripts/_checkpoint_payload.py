@@ -4,9 +4,7 @@ Each validate_* function narrows one field of the JSON payload read on stdin, or
 exits 2 through lib.err naming the offending field. build_transition turns the
 boundary fields into the Transition the sentinel is composed from; validate_task
 and validate_todo return the task/todo tagged union as plain tuples that
-_checkpoint_plan.py resolves into file plans. validate_root and
-require_session_id read the environment rather than the payload, but answer the
-same way: a value, or an error naming the field.
+_checkpoint_plan.py resolves into file plans.
 
 checkpoint.py imports this module as `validation`; nothing here writes a file.
 """
@@ -14,10 +12,8 @@ checkpoint.py imports this module as `validation`; nothing here writes a file.
 from __future__ import annotations
 
 import json
-import os
 import re
 import sys
-from pathlib import Path
 from typing import Any, NamedTuple, cast
 
 import _checkpoint_lib as lib
@@ -39,25 +35,6 @@ def read_payload() -> JSONDict:
 # not by static typing — every value is Any until a validate_* function
 # narrows it.
 JSONDict = dict[str, Any]
-
-
-def validate_root() -> Path:
-    """Return HANDOFF_ROOT from the environment.
-
-    Injected by inject-checkpoint-root.sh into the very command that invokes
-    this.
-    """
-    root = os.environ.get("HANDOFF_ROOT", "")
-    if not root:
-        lib.err(
-            "root",
-            "HANDOFF_ROOT is unset — call via the handoff-checkpoint shim on PATH, "
-            "unmodified, so the PreToolUse(Bash) hook recognises and injects it",
-        )
-    path = Path(root)
-    if not path.is_dir():
-        lib.err("root", f'HANDOFF_ROOT does not name a directory (got "{root}")')
-    return path
 
 
 def validate_skill(payload: JSONDict) -> str:
@@ -256,14 +233,6 @@ def require_one_line(field: str, value: str) -> None:
             "must be a single line, with no line break (LF, CR, VT, FF, FS, GS, "
             "RS, NEL, LS or PS)",
         )
-
-
-def require_session_id(field: str, reason: str) -> str:
-    """Return CLAUDE_CODE_SESSION_ID, or error naming field with reason."""
-    session_id = os.environ.get("CLAUDE_CODE_SESSION_ID", "")
-    if not session_id:
-        lib.err(field, f"CLAUDE_CODE_SESSION_ID is unset — {reason}")
-    return session_id
 
 
 def validate_task(payload: JSONDict, skill: str) -> tuple[str, str]:

@@ -289,9 +289,10 @@ note in `report-drive-failure.sh`.
   and rewrites it to `export HANDOFF_ROOT=<quoted>; <original>` via
   `updatedInput`, since neither entry point can resolve the root itself. NFR2:
   the negative path is one jq parse and a substring test.
-- `scripts/checkpoint.py` — the one write path (FR1). Has
-  `_checkpoint_payload.py` take its root from `HANDOFF_ROOT` and validate the
-  JSON payload, hands the `task`/`todo` tagged union (content, or `clear`;
+- `scripts/checkpoint.py` — the one write path (FR1). Takes its root from
+  `HANDOFF_ROOT` (`validate_root`, which refuses it when unset or not a
+  directory), has `_checkpoint_payload.py` validate the JSON payload, hands
+  the `task`/`todo` tagged union (content, or `clear`;
   `keep` and `edit` on `todo` alone) to `_checkpoint_plan.py` to be resolved
   into `FilePlan`s and applied, composes `.claude/autodrive` (creating
   `.claude/` when absent; `check_sentinel_target` refuses a `.claude` that is
@@ -300,8 +301,9 @@ note in `report-drive-failure.sh`.
   for a boundary skill. The legacy reports (`legacy_reports`, from the plan
   module) print ahead of the directive parts, which
   `compose_directives(boundary, memory, ending, plans)` orders; the closing
-  line stays last. Every call needs `CLAUDE_CODE_SESSION_ID`, checked before
-  anything is written, since line 1 names the owner either way. The state is
+  line stays last. Every call needs `CLAUDE_CODE_SESSION_ID`, checked
+  (`require_session_id`) before anything is written, since line 1 names the
+  owner either way. The state is
   `held <session>` iff `(sentinel names a command ∧ memory directive emitted) ∨
   (driven ∧ with-commit)`, else `armed <session>` (`hold_decision`, one value that also
   picks the arming instruction or the closing line). NFR1: no git work; the git
@@ -310,11 +312,11 @@ note in `report-drive-failure.sh`.
   same relative paths).
 - `scripts/_checkpoint_payload.py` — the payload validation (FR2), which
   `checkpoint.py` imports as `validation`. `read_payload` parses stdin,
-  `validate_root` refuses `HANDOFF_ROOT` when unset or not a directory, and one
-  `validate_*` per field narrows it or exits through `lib.err` naming it; the
-  key set is closed (`validate_top_level_keys`). `build_transition` turns the
-  boundary fields into the `Transition` the sentinel is composed from, and
-  `require_session_id` reads `CLAUDE_CODE_SESSION_ID` for a held one.
+  and one `validate_*` per field narrows it or exits through `lib.err` naming
+  it; the key set is closed (`validate_top_level_keys`). `build_transition`
+  turns the boundary fields into the `Transition` the sentinel is composed
+  from. It reads the payload only: the two functions that read the environment
+  rather than the payload live in `checkpoint.py`.
   `validate_task` and `validate_todo` return the tagged union as tuples for the
   plan layer. `task` is required under `handoff`, where `validate_task_shape`
   holds it to 1000 characters of body and no list item (FR13), and forbidden
