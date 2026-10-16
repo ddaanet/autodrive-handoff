@@ -177,9 +177,10 @@ note in `report-drive-failure.sh`.
   line), reports it on both channels and clears a transition stranded in
   `pending`. It sweeps a sentinel still `armed` — never taken, because the turn
   ended on Esc or the mod did not load — with a note naming the unloaded mod
-  (`--safe-mode`, Claude Code older than 2.1.287) and printing the lines for the
-  user to run. A file that does not parse is swept without lines, a link at
-  the sentinel as its own `link` state, unread; a reader whose `python3` helper
+  (`--safe-mode`, Claude Code older than 2.1.287, or an organization-managed
+  Claude Code whose managed settings do not list the plugin) and printing the
+  lines for the user to run. A file that does not parse is swept without lines,
+  a link at the sentinel as its own `link` state, unread; a reader whose `python3` helper
   failed is `unread`, reported and never swept. `held` is exempt whoever owns
   it: it waits on a human, and a dead owner's is replaced by the next
   checkpoint. An `armed` file owned by another session is left untouched and

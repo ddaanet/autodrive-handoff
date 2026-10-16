@@ -2764,7 +2764,8 @@ STUB
 }
 
 # The armed sentinel that survived to the next prompt never ran. One cause is a
-# drive mod that did not load (--safe-mode, or Claude Code older than 2.1.287),
+# drive mod that did not load (--safe-mode, Claude Code older than 2.1.287, or an
+# organization-managed one that does not list the plugin in managed settings),
 # in which case nothing will ever run it: the report names that cause and prints
 # the lines the file held, before then after, one per line, for the user to type.
 @test "report-drive-failure (stale armed autodrive: names the mod and prints the lines to type)" {
@@ -2776,6 +2777,7 @@ STUB
     echo "$output" | jq -e '.hookSpecificOutput.additionalContext | test("drive mod")' >/dev/null
     echo "$output" | jq -e '.hookSpecificOutput.additionalContext | test("safe-mode")' >/dev/null
     echo "$output" | jq -e '.hookSpecificOutput.additionalContext | test("2.1.287")' >/dev/null
+    echo "$output" | jq -e '.hookSpecificOutput.additionalContext | test("managed settings")' >/dev/null
     # shellcheck disable=SC2016
     expected='/rename Fix "the  $HOME" bug & more
 /clear

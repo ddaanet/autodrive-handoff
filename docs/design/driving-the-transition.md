@@ -246,9 +246,12 @@ replaces it.
 
 For the owner's own `armed` file, or another's whose owner is not live, there are
 two causes the hook cannot tell apart: an aborted turn, and **the mod not being loaded** —
-`--safe-mode`, or a Claude Code older than 2.1.287. The mod needs that version
-and the plugin manifest has no field to pin a minimum, so this note is where
-the requirement surfaces: it names the mod as the likely cause, discards the
+`--safe-mode`, a Claude Code older than 2.1.287, or an organization-managed
+Claude Code that does not list the plugin in managed settings (Claude Code
+2.1.301: there, `classic.Stop` hooks pass over the plugins a person installs,
+and the mod learns the turn ended only through that event). The mod needs
+2.1.287 and the plugin manifest has no field to pin a minimum, so this note is
+where the requirement surfaces: it names the mod as the likely cause, discards the
 file so it cannot fire into unrelated work days later, and prints the lines it
 held for the user to run in order. A file that will not parse is swept too,
 without lines — it describes no transition anyone can complete. `held` is

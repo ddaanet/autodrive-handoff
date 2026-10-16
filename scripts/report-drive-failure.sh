@@ -16,11 +16,12 @@
 #    `pending` or removes it, so one still in state `armed` when a later turn
 #    begins never ran. Two causes: that turn ended abnormally (Esc — Stop does
 #    not fire on an interrupt — or a crash, or a quit), or the drive mod did not
-#    load at all (--safe-mode, or a Claude Code older than 2.1.287). Left on disk
-#    it would be taken by a later turn end, days later and possibly in an
-#    unrelated session, driving a stale transition into work it was never
-#    written for. The owner's own UserPromptSubmit is the exact discriminator:
-#    it cannot fire between the write and that turn's own end. Another
+#    load at all (--safe-mode, a Claude Code older than 2.1.287, or an
+#    organization-managed one that does not list the plugin in managed
+#    settings). Left on disk it would be taken by a later turn end, days later
+#    and possibly in an unrelated session, driving a stale transition into work
+#    it was never written for. The owner's own UserPromptSubmit is the exact
+#    discriminator: it cannot fire between the write and that turn's own end. Another
 #    session's can — every session sharing the root runs this hook, the
 #    background session the harness starts after a `git commit` included — so
 #    the file names its owner, and one owned by another session is swept only
@@ -305,7 +306,7 @@ if [[ -n "$drive_state" && "$drive_state" != "pending" && "$drive_state" != "hel
     rm -f "$drive"
     if [[ "$drive_state" == "armed" ]]; then
         msgs+=("stale autodrive discarded — the drive mod did not run it")
-        notes+=("A .claude/autodrive file was still armed when this turn began, so the transition it described did not run. Most likely the drive mod did not load (--safe-mode, or a Claude Code older than 2.1.287); an interrupt or crash that ended the turn before it was taken leaves the same trace. The file has been discarded, so it cannot fire into unrelated work later.")
+        notes+=("A .claude/autodrive file was still armed when this turn began, so the transition it described did not run. Most likely the drive mod did not load (--safe-mode, a Claude Code older than 2.1.287, or an organization-managed Claude Code that does not list the plugin in managed settings); an interrupt or crash that ended the turn before it was taken leaves the same trace. The file has been discarded, so it cannot fire into unrelated work later.")
         # The lines are offered only to the session that wrote them. Another
         # session's, swept because its owner is not live, would be replayed into
         # this conversation.

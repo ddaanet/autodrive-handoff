@@ -74,7 +74,8 @@ before any clear or compact.
 
 **When it does not run.** If the transition could not run, you are told at
 your next prompt, with the commands to run by hand. That happens on Claude
-Code older than 2.1.287 or under `--safe-mode`.
+Code older than 2.1.287, under `--safe-mode`, or where an organization manages
+Claude Code and does not list the plugin in managed settings.
 
 **Finishing.** Run the handoff again with nothing outstanding to clear both
 files. They are ordinary tracked files and ride your next commit.
@@ -95,6 +96,9 @@ compaction.
 ## Requirements
 
 - Claude Code 2.1.287 or newer (the plugin's mod runs the transition)
+- Where an organization manages Claude Code, the transitions run only if the
+  organization lists the plugin in managed settings. Without that, the files
+  and their injection still work; clear and compact are left to you
 - `python3` and `jq` in `$PATH`
 
 ## What the plugin runs and writes
