@@ -230,8 +230,8 @@ through the same single `O_NOFOLLOW` open, never a test followed by a read.
 
 The hook also sweeps a sentinel still `armed`. `drive-take.sh` leaves it
 `pending` or removes it at the end of the turn that wrote it, so one still
-`armed` when a prompt arrives has not run, and unless that prompt was typed
-into the arming turn it never will ([A prompt queued into the arming
+`armed` when a prompt arrives has not been taken, and unless that prompt was
+typed into the arming turn it never will ([A prompt queued into the arming
 turn](queued-prompts.md)). Another session's prompt can arrive while the
 owning turn is still running too. For a file owned by another session the hook
 asks whether that session
@@ -295,13 +295,24 @@ The owner's own prompt can fire this hook inside the arming turn, before its
 marker that carries the id and the bounds are in
 [A prompt queued into the arming turn](queued-prompts.md).
 
+## The sentinel's lock
+
+The sweep and the take can interleave: the host does not order a new prompt's
+`UserPromptSubmit` against the mod's `turn.complete`, which runs the take, so
+a sweep that read `armed` could delete the `pending` file the take had just
+armed. Every actor of the sentinel, the checkpoint, `handoff-approved`,
+`drive-take.sh` and the sweep, holds an advisory lock
+(`.claude/autodrive.lock`) across its read-decide-write, with a bounded wait
+that fails open. The mechanism and its bounds are in [The sentinel's
+lock](sentinel-lock.md).
+
 ## Sessions sharing a root
 
 The owner keeps one session from running or sweeping another live session's
 transition. It does not make a root safe for two sessions at once, and the
-rest is a known limit rather than a defect: making it safe needs locks,
-per-session sentinels or checksums, out of proportion to a setup a worktree
-per session avoids (see [Rejected alternatives](rejected-alternatives.md)).
+rest is a known limit rather than a defect: making it safe needs per-session
+sentinels or checksums, out of proportion to a setup a worktree per session
+avoids (see [Rejected alternatives](rejected-alternatives.md)).
 
 - **Checkpoint against checkpoint.** The checkpoint renames its sentinel over
   whatever is there. A later checkpoint in the root replaces an earlier
@@ -309,10 +320,6 @@ per session avoids (see [Rejected alternatives](rejected-alternatives.md)).
   owns and takes nothing, silently.
 - **`TASK.md` and `TODO.md` are last-writer-wins.** Each checkpoint writes what
   it is given.
-- **The take is two steps.** `drive-take.sh` reads the sentinel and checks
-  state and owner, then `handoff_drive_arm` rewrites line 1 over the lines it
-  reads again at that moment. A checkpoint landing between the two is turned
-  `pending`, or removed for `rename`, under the earlier plan.
 - **A `.claude/` shared between roots**, by symlink or otherwise, is
   unsupported. `pending` is ownerless by necessity — the session after a
   `/clear` has a new id, so the file cannot name it — and the other root's

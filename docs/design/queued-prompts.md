@@ -44,10 +44,16 @@ carry it across a `/compact`. Running the skill again after the answer
 puts the prompt's outcome into the files first.
 
 With no `prompt_id` in the input (the minimum supported Claude Code may not
-send one), no marker, or a marker that differs, the file is swept as above and,
-when the input had no id, the note also names a prompt typed while the turn was
-still running as a possible cause. `held`, `pending`, another session's file, a
-link, a malformed or unreadable one and the failure record are as before.
+send one), no marker, or a marker that differs, the file is swept as above. The
+note also names a prompt typed while the turn was still running as a possible
+cause when the input had no id, and when it had one but the marker could not
+settle it: the marker directory fails `marker_dir_ok`, or the read is a link, a
+directory or another user's file, or its helper failed (empty status). An
+`absent` marker and a differing one do settle it, as another turn's, so the
+note leaves the phrase out; the sweep and the lines are the same either way.
+`held`, `pending`, another session's file, a link, a malformed or unreadable
+one and the failure record are as before. Both markers are read through
+`handoff_read_marker` in `_lib.sh`.
 [A prompt queued into the arming turn](../changelog/2026-10-16-a-prompt-queued-into-the-arming-turn.md)
 
 **Residual bounds.** That a queued prompt carries the arming turn's id is
@@ -55,3 +61,17 @@ observed on one version, not documented; if it stops, a queued prompt is swept
 as stale again, the earlier behaviour. The marker read's `own` check has no
 test, because a marker owned by another user cannot be made without privilege.
 The cancel note is a directive, and the agent's compliance is not pinned.
+
+A marker write that failed silently, a full `/tmp` say, with a `prompt_id`
+present leaves the marker `absent`, which settles nothing as unsettled: a
+queued prompt then sweeps as stale, with the lines and without the phrase.
+
+`inject-checkpoint-root.sh` writes the marker at `PreToolUse`, on a loose
+substring match of `handoff-checkpoint` or `handoff-approved`, before the
+permission decision and whether or not the command runs or succeeds. That is
+harmless: the marker is read only for an `armed` file this session owns, which
+was written in the current turn, and a stamp from a command that did not run
+carries the same id a successful checkpoint would. Unverified: a subagent's
+Bash call in the same session that matches the substring with a different
+`prompt_id` would overwrite the marker, degrading a later queued prompt to the
+stale sweep.

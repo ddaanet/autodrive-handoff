@@ -9,7 +9,7 @@ the raw hook-input `.cwd` (drifts with `cd` and `/add-dir`) and never
 `CLAUDE_PROJECT_DIR` directly (pinned to the main tree in a worktree
 session). So a worktree session owns its own `.claude/`, `TASK.md` and
 `TODO.md`, which is also the supported way to run sessions in parallel: two
-sessions in one root share those files unlocked, and a `.claude/` shared
+sessions in one root share those files without any ordering of intent, and a `.claude/` shared
 between roots, by symlink or otherwise, is unsupported, since the ownerless
 `pending` sentinel can be consumed by the other root (see [Sessions sharing a
 root](driving-the-transition.md#sessions-sharing-a-root)). No symlinked

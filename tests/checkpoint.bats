@@ -22,6 +22,7 @@ setup() {
     APPROVED="$repo_root/bin/handoff-approved"
     INJECT_ROOT="$repo_root/scripts/inject-checkpoint-root.sh"
     load probe-helpers
+    load lock-helpers
 
     export CLAUDE_CODE_SESSION_ID="sess-checkpoint"
 
@@ -461,6 +462,29 @@ clear
 /rename A Title
 /clear
 pick up per the task file" ]
+}
+
+# The sentinel's lock. Another actor holds it, an approval starts and has to
+# wait, and a checkpoint of another session replaces the held file under the
+# lock. The approval must then judge that file: an unlocked one has already read
+# the first and armed it.
+@test "handoff-approved: the held file is replaced while the approval waits on the lock -> it judges the new file, exit 2" {
+    repo="$(make_repo)"
+    printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" clear "/rename A Title" /clear \
+        "pick up per the task file" > "$repo/.claude/autodrive"
+    hold_drive_lock "$repo"
+    (cd "$repo" && HANDOFF_ROOT="$repo" HANDOFF_LOCK_WAIT_SECS=30 bash "$APPROVED") \
+        > "$BATS_TEST_TMPDIR/approved.out" 2>&1 3>&- &
+    approved_pid=$!
+    sleep 0.5
+    printf '%s\n' "held sess-someone-else" clear "/rename A Title" /clear \
+        > "$repo/.claude/autodrive"
+    release_drive_lock
+    approved_rc=0
+    wait "$approved_pid" || approved_rc=$?
+    [ "$approved_rc" -eq 2 ]
+    [[ "$(cat "$BATS_TEST_TMPDIR/approved.out")" == *"session"* ]]
+    [ "$(head -n1 "$repo/.claude/autodrive")" = "held sess-someone-else" ]
 }
 
 # The approval this command speaks for is the one *this* session was asked for.

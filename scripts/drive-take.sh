@@ -35,6 +35,18 @@ fail_file="$root/$HANDOFF_REL_DRIVE_FAILED"
 # A link, dangling or not, reaches the reader, which refuses it.
 [[ -L "$drive" || -f "$drive" ]] || exit 0
 
+# The read and the move out of `armed` are one step under the sentinel's lock
+# (_drive_lock.py), held until this script exits. The prompt-time sweep judges
+# and removes the same file, and the host does not order its hook against this
+# take: without the lock the sweep could read `armed`, lose the race to the
+# arm below and then delete the `pending` file of a transition about to run,
+# telling the user the mod never ran it. A checkpoint or an approval writing the
+# file waits the same way. A lock that cannot be taken (the bound,
+# HANDOFF_LOCK_WAIT_SECS) is gone without, as before the lock. The second test is
+# for a file the sweep removed while this waited.
+handoff_lock_take "$root/$HANDOFF_REL_DRIVE_LOCK" || true
+[[ -L "$drive" || -f "$drive" ]] || exit 0
+
 read_rc=0
 handoff_drive_read "$drive" || read_rc=$?
 if (( read_rc == 2 )); then

@@ -37,11 +37,15 @@ from typing import NamedTuple
 import _checkpoint_lib as lib
 import _checkpoint_payload as validation
 import _checkpoint_plan as planning
+import _drive_lock as drive_lock
 
 # Mirrors _lib.sh's HANDOFF_REL_DRIVE. Changing either side is a breaking
 # change (see CLAUDE.md conventions); kept in sync by hand rather than sourced,
 # since _lib.sh stays bash.
 HANDOFF_REL_DRIVE = ".claude/autodrive"
+# Mirrors _lib.sh's HANDOFF_REL_DRIVE_LOCK, the lock every actor holds across
+# its own read-decide-write of the sentinel (_drive_lock.py).
+HANDOFF_REL_DRIVE_LOCK = ".claude/autodrive.lock"
 
 _LIB_SH = Path(__file__).resolve().parent / "_lib.sh"
 
@@ -191,19 +195,27 @@ def compose_sentinel(
     # The temporary file takes the `autodrive.` prefix, which the
     # `.claude/autodrive*` ignore covers, so one orphaned by a kill is never
     # committed.
+    #
+    # The write and the read-back are one step under the sentinel's lock, so a
+    # take or a sweep acting on the file runs before or after both and never
+    # between them. A lock that cannot be taken (the bound,
+    # HANDOFF_LOCK_WAIT_SECS) is gone without.
+    ok, drive_err = False, ""
     try:
         drive_path.parent.mkdir(exist_ok=True)
-        planning.write_replacing(
-            drive_path,
-            "\n".join(sentinel_lines) + "\n",
-            prefix=f"{drive_path.name}.",
-        )
+        with drive_lock.locked(root / HANDOFF_REL_DRIVE_LOCK):
+            planning.write_replacing(
+                drive_path,
+                "\n".join(sentinel_lines) + "\n",
+                prefix=f"{drive_path.name}.",
+            )
+            ok, drive_err = _read_back_drive(drive_path)
+            if not ok:
+                drive_path.unlink()
     except OSError as e:
         lib.err("transition", f"cannot write {HANDOFF_REL_DRIVE}: {e.strerror or e}")
 
-    ok, drive_err = _read_back_drive(drive_path)
     if not ok:
-        drive_path.unlink()
         lib.err(
             "transition",
             f"composed a sentinel this version cannot read back — {drive_err}",

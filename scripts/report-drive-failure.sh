@@ -85,29 +85,22 @@ notes=()
 # Once per episode: the marker holds the destination last announced, so a
 # second turn in the same place is silent and a move somewhere else is not
 # swallowed. It is cleared on the way back in, so a re-drift is a new episode
-# rather than a repeat.
+# rather than a repeat. A marker directory that fails marker_dir_ok has no
+# marker, and drift is reported every turn instead of once.
 marker="$HANDOFF_POINTER_DIR/handoff-drift-$session_id"
-
-# The drift marker: the destination last announced. marker_dir_ok, and the
-# no-follow read and the replacing write, are the shared helpers in _lib.sh; a
-# directory that fails marker_dir_ok has no marker, and drift is reported every
-# turn instead of once.
 
 case "$HANDOFF_ROOT_BRANCH" in
     foreign | unrelated)
         # NUL-terminated and read whole: a cwd holding a newline compared by
         # its first line would never match, and re-announce every turn.
-        last="" marker_status=""
+        last=""
         # -m on the deepest directory only, by intent: it is the one the
         # marker lives in, and its parents are not this hook's to set.
         # shellcheck disable=SC2174
         mkdir -m 700 -p "$HANDOFF_POINTER_DIR" 2>/dev/null || true
-        if marker_dir_ok; then
-            { IFS= read -r marker_status || true
-              if [[ "$marker_status" == ok ]]; then
-                  IFS= read -r -d '' last || true
-              fi
-            } < <(handoff_read_regular "$marker" own)
+        handoff_read_marker "$marker"
+        if [[ "$MARKER_STATUS" == ok ]]; then
+            last="$MARKER_VALUE"
         fi
         if [[ "$last" != "$hook_cwd" ]]; then
             if marker_dir_ok; then
@@ -195,6 +188,18 @@ drive_owner=""
 drive_kind=""
 drive_lines=()   # the lines an armed file held, before then after
 drive_err=""
+# The sentinel's other actors, the take at a turn's end among them, judge it
+# and rewrite or remove it under the lock, and the host does not order this
+# hook against them. So from the read to the exit, the sweep's decision and the
+# removal it makes are one step: a take that ran first leaves `pending` for the
+# sweep to find, and one that runs after waits for the sweep. This includes
+# record_sweep and the failure branch's removal of a stranded `pending`. A lock
+# that cannot be taken (the bound, HANDOFF_LOCK_WAIT_SECS) is gone without, as
+# before the lock. Taken only for a file that is there, so the ordinary prompt
+# forks nothing; the second test is for one removed while this waited.
+if [[ -L "$drive" || -f "$drive" ]]; then
+    handoff_lock_take "$cwd/$HANDOFF_REL_DRIVE_LOCK" || true
+fi
 if [[ -L "$drive" || -f "$drive" ]]; then
     read_rc=0
     handoff_drive_read "$drive" || read_rc=$?
@@ -276,24 +281,29 @@ fi
 # turn's prompt_id, which handoff-checkpoint or handoff-approved recorded in the
 # session's prompt marker. Only an armed file this session owns is judged, so no other state
 # reads the marker and an ordinary prompt forks nothing here. Nothing is written.
+#
+# `marker_unsettled` is set when the input has an id and the marker could not
+# answer: its directory fails marker_dir_ok, or the read is neither `ok` nor
+# `absent` (a link, a directory, another user's file, or a helper that failed).
+# Then the prompt may be a queued one, which the sweep below cannot tell from
+# a stale file, and its note says so as it does for an input with no id.
 queued=0
+marker_unsettled=0
 prompt_marker="$HANDOFF_POINTER_DIR/handoff-prompt-$session_id"
 if [[ "$drive_state" == "armed" && "$drive_owner" == "$session_id" \
-      && -n "$session_id" && -n "$prompt_id" ]] && marker_dir_ok; then
-    prompt_status="" marked_id=""
-    { IFS= read -r prompt_status || true
-      if [[ "$prompt_status" == ok ]]; then
-          IFS= read -r -d '' marked_id || true
-      fi
-    } < <(handoff_read_regular "$prompt_marker" own)
-    if [[ "$prompt_status" == ok && "$marked_id" == "$prompt_id" ]]; then
+      && -n "$session_id" && -n "$prompt_id" ]]; then
+    handoff_read_marker "$prompt_marker"
+    if [[ "$MARKER_STATUS" == ok && "$MARKER_VALUE" == "$prompt_id" ]]; then
         queued=1
+    elif [[ "$MARKER_STATUS" != ok && "$MARKER_STATUS" != absent ]]; then
+        marker_unsettled=1
     fi
 fi
 
 # An autodrive is taken at the turn end after the turn that writes it, and that
 # take leaves it `pending` or removes it. So one still in state `armed` when a
-# prompt arrives has not run, and unless that prompt was queued it never will.
+# prompt arrives has not been taken, and no later turn end will take it unless
+# that prompt was queued into the arming turn, whose Stop is still to come.
 #
 # `held` is the exception, and the reason this is a list rather than "anything
 # but pending": a held transition is *waiting* on an approval whose answer
@@ -322,10 +332,11 @@ elif [[ -n "$drive_state" && "$drive_state" != "pending" && "$drive_state" != "h
     record_sweep
     rm -f "$drive"
     if [[ "$drive_state" == "armed" ]]; then
-        # With no prompt_id the input cannot rule out a prompt typed while the
-        # arming turn ran, so the note names it as a possible cause.
+        # With no prompt_id, or one the marker could not settle, the input
+        # cannot rule out a prompt typed while the arming turn ran, so the note
+        # names it as a possible cause.
         queued_cause=""
-        if [[ -z "$prompt_id" ]]; then
+        if [[ -z "$prompt_id" || "$marker_unsettled" == 1 ]]; then
             queued_cause=", as does a prompt typed while that turn was still running"
         fi
         msgs+=("stale autodrive discarded — the drive mod did not run it")

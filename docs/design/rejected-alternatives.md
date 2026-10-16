@@ -263,16 +263,17 @@ and the mods API has no rename or delete for the atomic `armed` → `pending`.
 The cost it would save is paid only on the rare path: the every-turn check is a
 single `exists` on the project root.
 
-**Per-session sentinels, locks or checksums for sessions sharing a root** —
-one sentinel per session, a lock around the checkpoint and the take, or a
-checksum the take compares before rewriting. Each closes one race (a later
-checkpoint replacing an earlier session's sentinel, the take's read and
-rewrite in two steps) at the cost of a second file per session, a lock with
-its own stale case to sweep, or a compare-and-swap every bash reader would
-implement, and none touches `TASK.md` and `TODO.md`, which are shared state by
+**Per-session sentinels or checksums for sessions sharing a root** — one
+sentinel per session, or a checksum the take compares before rewriting. Each
+closes one race (a later checkpoint replacing an earlier session's sentinel)
+at the cost of a second file per session or a compare-and-swap every bash
+reader would implement, and none touches `TASK.md` and `TODO.md`, which are shared state by
 design: two sessions writing one task frame conflict whatever the sentinel
 does. The complexity is out of proportion to a setup a worktree per session
-already avoids. **Recording the root in the sentinel**, checked on take, to
+already avoids. A lock was first ruled out here with them and has since been
+adopted for a narrower race, between the actors of one session's sentinel, the
+sweep and the take ([The sentinel's lock](driving-the-transition.md#the-sentinels-lock));
+it does not make a root safe for two sessions. **Recording the root in the sentinel**, checked on take, to
 catch a `.claude/` shared between roots, is more machinery and another line
 every reader parses for a setup that is unsupported. **Refusing a symlinked
 `.claude/`** adds nothing either: a project directory the user has accepted as
@@ -328,3 +329,13 @@ next `/clear` drops, while the files stayed thin. A fixed line asks nothing of
 the agent and gives the task nowhere to go but the files.
 [The continuation is a
 constant](../changelog/2026-10-15-the-continuation-is-a-constant.md)
+
+**`turn.complete` without a preceding `classic.Stop` as the aborted-turn
+signal** — instead of the `prompt_id` marker, let the mod tell the sweep that
+the turn ended without a `Stop`, an Esc, so a prompt after one is stale and any
+other is queued. Rejected: a queued prompt's `UserPromptSubmit` fires before
+the arming turn's `Stop`, so the sweep decides before the mod knows anything,
+and when the mod is not loaded nothing observes the turn at all, so the hook
+must decide alone. Whether `turn.complete` fires at all on Esc is also
+unverified.
+[A prompt queued into the arming turn](queued-prompts.md)

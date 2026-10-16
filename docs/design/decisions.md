@@ -219,6 +219,16 @@ at the checkpoint call rather than at every prompt, which would fork on each
 one. [A prompt queued into the arming turn](queued-prompts.md),
 [the change](../changelog/2026-10-16-a-prompt-queued-into-the-arming-turn.md)
 
+**The sentinel's actors hold a lock across each read-decide-write.** The host
+does not order a prompt's sweep against the mod's take, and a sweep that read
+`armed` could delete the `pending` file the take had armed meanwhile, then tell
+the user the mod never ran a transition that runs. An advisory `flock` makes
+each actor's decision and write one step, with a bounded wait that fails open,
+since a hook that waits for ever is worse than the race. The lock orders the
+actors and not the arrival of a prompt: which outcome wins is still decided by
+arrival order. [The sentinel's lock](sentinel-lock.md),
+[the change](../changelog/2026-10-16-the-sentinel-takes-a-lock.md)
+
 **Observability is not gated on the happy path.** A clean run says nothing
 about whether a dirty one would be noticed, and the failing run is exactly
 the one nobody is watching. The drive runs after the turn that armed it, so a

@@ -58,6 +58,9 @@ pytestmark = pytest.mark.usefixtures("_session_id")
 LEGACY_TASK_REL = ".claude/handoff-task.md"
 LEGACY_TODO_REL = ".claude/handoff-todo.md"
 SENTINEL_REL = ".claude/autodrive"
+# The lock file every sentinel write leaves beside it; not part of what these
+# rows compare.
+LOCK_REL = ".claude/autodrive.lock"
 
 # The action words: a rename onto the root name, an unlink of a legacy file,
 # and a legacy file left alone because the root file wins.
@@ -469,6 +472,7 @@ def test_each_ignored_legacy_file_is_reported_once(tmp_path: Path) -> None:
     ok(result)
     after = snapshot(repo)
     after.pop(SENTINEL_REL)
+    after.pop(LOCK_REL, None)
     assert after == before
     assert_reported(result.stdout, LEGACY_TASK_REL, "ignored")
     assert_reported(result.stdout, LEGACY_TODO_REL, "ignored")
@@ -1161,6 +1165,7 @@ def test_only_a_regular_file_at_the_legacy_path_counts(
     ok(result)
     after = snapshot(repo)
     after.pop(SENTINEL_REL)
+    after.pop(LOCK_REL, None)
     if kind == "file":
         assert read(repo / "TODO.md") == (root_before or TODO_LEGACY_BODY)
         assert_reported(
@@ -1275,6 +1280,7 @@ def test_autoname_leaves_legacy_files_alone_and_reports_nothing(
     ok(result)
     after = snapshot(repo)
     after.pop(SENTINEL_REL)
+    after.pop(LOCK_REL, None)
     assert after == before
     assert_not_reported(result.stdout, LEGACY_TASK_REL)
     assert_not_reported(result.stdout, LEGACY_TODO_REL)

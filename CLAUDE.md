@@ -155,7 +155,9 @@ note in `report-drive-failure.sh`.
   resolve (nothing taken, the message alone). An `armed` file with no session
   id given, or a reader whose `python3` helper failed, is left in place and
   reported with `kind: null`. Its stdout is pinned by
-  `tests/mod/fixtures/*.json`.
+  `tests/mod/fixtures/*.json`. From its read to its exit it holds the
+  sentinel's lock (`handoff_lock_take`, below), re-testing the file once it has
+  the lock.
 - `scripts/load-handoff.sh` — `SessionStart(startup|clear)`: assembles the
   frame in memory (`handoff_frame`, given the legacy paths too) and injects it
   via `additionalContext` plus a curt `systemMessage` with bytes and age. It
@@ -217,7 +219,13 @@ note in `report-drive-failure.sh`.
   reaches the agent as data; the marker directory is created 0700 and used
   only when it is no link, this user's and writable by no one else, the marker
   read no-follow and replaced through `handoff_replace`, and a prompt with no
-  marker forks nothing. Every removal it makes (`armed`, `link`,
+  marker forks nothing. The note's typed-ahead cause is also named when the
+  input has a `prompt_id` and the marker could not settle it (`marker_unsettled`:
+  `nodir`, `link`, `other`, `foreign` or an empty status from a failed helper).
+  From the sentinel's read to its exit it holds the sentinel's lock, so the
+  decision and every removal, `record_sweep` included, are one step against the
+  take, the checkpoint and the approval; taken only when a sentinel is on disk.
+  Every removal it makes (`armed`, `link`,
   malformed, and a stranded `pending` cleared with a failure report) appends
   one tab-separated line to `.claude/autodrive.swept` — UTC time,
   `sweeper=<session id>`, `state=`, `owner=` (`-` for none), `kind=`,
@@ -282,6 +290,13 @@ note in `report-drive-failure.sh`.
   (the value NUL-terminated into a `<path>.XXXXXX` `mktemp` sibling renamed
   over the name, so a link there is replaced and an orphan matches the marker's
   own sweep glob), shared by the drift marker and the prompt marker;
+  `handoff_read_marker <path>` (`marker_dir_ok`, then the `own` read, into
+  `MARKER_STATUS` (`nodir`, `ok`, `absent`, `link`, `other`, `foreign`, or empty
+  for a failed helper) and `MARKER_VALUE`, NUL-safe, in the caller's scope:
+  both markers are read through it);
+  `HANDOFF_REL_DRIVE_LOCK` and `handoff_lock_take <lockfile>` (take the
+  sentinel's lock on fd 9, held until the shell exits, rc 1 when not taken,
+  which no caller treats as an error: `|| true`; see `_drive_lock.py`);
   `handoff_owner_live <transcript_path> <owner>` (the sweep's liveness test); `handoff_drive_has_source()` (`rename` has no
   confirming `SessionStart`; `compact` and `clear` do). Line 1 is the state
   (`held <session-id>`, `armed <session-id>`, `pending`; the owner is one id,
@@ -322,6 +337,13 @@ note in `report-drive-failure.sh`.
   per prompt, which would fork on every prompt. NFR2: the negative path is one
   jq parse, now of `command`, `cwd`, `session_id` and `prompt_id`, and a
   substring test.
+- `scripts/_drive_lock.py` — the sentinel's advisory lock,
+  `.claude/autodrive.lock` (`fcntl.flock`; `flock(1)` is not on macOS). `locked`
+  is the context manager `checkpoint.py` uses; the `create` and `wait`
+  commands are how bash holds it across steps through fd 9
+  (`handoff_lock_take`). The wait is bounded (`HANDOFF_LOCK_WAIT_SECS`, default
+  5) and a lock not taken is gone without; the file is 0600, opened
+  `O_NOFOLLOW`, and never deleted. `docs/design/sentinel-lock.md`.
 - `scripts/checkpoint.py` — the one write path (FR1). Takes its root from
   `HANDOFF_ROOT` (`validate_root`, which refuses it when unset or not a
   directory), has `_checkpoint_payload.py` validate the JSON payload, hands
@@ -330,7 +352,8 @@ note in `report-drive-failure.sh`.
   into `FilePlan`s and applied, composes `.claude/autodrive` (creating
   `.claude/` when absent; `check_sentinel_target` refuses a `.claude` that is
   a file or a sentinel that is a directory before anything is written) through
-  `write_replacing` and reads it back, then prints the directive parts
+  `write_replacing` and reads it back, both under the sentinel's lock
+  (`_drive_lock.locked`), then prints the directive parts
   for a boundary skill. The legacy reports (`legacy_reports`, from the plan
   module) print ahead of the directive parts, which
   `compose_directives(boundary, memory, ending, plans)` orders; the closing
@@ -408,7 +431,8 @@ note in `report-drive-failure.sh`.
   through `handoff_drive_arm`, keeping the owner; exits 2 when it is absent or not `held`, when the held
   file is another session's, or when the kind is not `rename|clear|compact`.
   Prints its status fact, a blank line, then the closing line (literal per
-  `case` arm, byte-for-byte `closing_directive()`).
+  `case` arm, byte-for-byte `closing_directive()`). Holds the sentinel's lock
+  from its read to its rewrite.
 - `tests/gen_mod_fixtures.py` — renders `tests/mod/fixtures.ts` from
   `tests/mod/fixtures/*.json`, because a hooks-module test can neither read
   files nor import JSON. `tests/test_mod_fixtures.py` fails when they disagree.
@@ -437,7 +461,8 @@ note in `report-drive-failure.sh`.
   - `hooks/handoff.ts`, `drive-take.sh`, `load-handoff.sh`, `load-compact.sh`,
     `report-drive-failure.sh`'s sweep, `.claude/autodrive` and its states, FR-G
     → `driving-the-transition.md`; a prompt arriving while the arming turn runs,
-    the prompt marker → `queued-prompts.md`
+    the prompt marker → `queued-prompts.md`; the sentinel's lock,
+    `_drive_lock.py`, `handoff_lock_take` → `sentinel-lock.md`
   - `handoff-approved`, `closing_directive`, `ledger_path`, `held`,
     `with-commit`, the gitlore files, FR9, FR12 → `the-checkpoint-directive.md`
   - `worktree_root.py`, `handoff_root_read`, `inject-checkpoint-root.sh`,
@@ -658,7 +683,10 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
   branch matrix, including the containment rule that keeps a submodule `inside`,
   and the `.git` file read as git reads it: a project path holding a newline
   and a space linked, a `gitdir: ` line not first not),
-  `tests/test_mod_fixtures.py`, and the `tests/test_checkpoint_*.py` files,
+  `tests/test_mod_fixtures.py`, `tests/test_drive_lock.py` (the lock itself,
+  through `locked` and `handoff_lock_take`; each actor's ordering row is with
+  the actor, holding the lock from a background process through
+  `tests/lock-helpers.bash`) and the `tests/test_checkpoint_*.py` files,
   which drive `scripts/checkpoint.py` end-to-end via subprocess.
   `tests/conftest.py` holds what two or more of them use (the repository
   builders `make_repo` and `make_gitlore_repo`, the payload builders, the

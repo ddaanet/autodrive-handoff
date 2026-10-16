@@ -221,6 +221,8 @@ Where the argument lives:
 - [A prompt queued into the arming turn](design/queued-prompts.md) — What
   does the sweep do with a prompt typed while the turn that armed a transition
   is still running?
+- [The sentinel's lock](design/sentinel-lock.md) — What orders the sweep, the
+  take, the checkpoint and the approval, which all read and rewrite one file?
 - [Scoping](design/scoping.md) — Which root does a hook anchor on, and how is
   a session that drifts out of it reported?
 - [Release infrastructure](design/release-infrastructure.md) — Why is the
@@ -255,6 +257,7 @@ The standing calls, each argued in
 - **A sentinel names its owner, and only the owner judges it stale.**
 - **A prompt queued into the arming turn cancels a `clear` or `compact`, and
   spares a `rename`.**
+- **The sentinel's actors hold a lock across each read-decide-write.**
 - **The drive runs inline at `turn.complete`, never from `Stop`.**
 - **Observability is not gated on the happy path.**
 - **A foreign tool's state file is detected by liveness, not presence.**
@@ -280,7 +283,8 @@ Ruled out, each argued in
   `WorktreeCreate`/`CwdChanged`**
 - **A session-id sidecar or a recency timeout for a stale sentinel**
 - **Sparing every kind of queued prompt**, **recording each prompt's id in the
-  sweep**, **the mod reading the prompt box**
+  sweep**, **the mod reading the prompt box**, **`turn.complete` without a
+  `Stop` as the aborted-turn signal**
 - **Detecting commit awareness in the checkpoint, and defaulting the answer**
 - **Injecting the remainder at the first `UserPromptSubmit`**
 - **Accepting SDD's pre-6.2.0 flat ledger path for back-compatibility**
@@ -301,7 +305,7 @@ Ruled out, each argued in
 - **Driving the TUI through tmux**, **reading the pane to confirm an action**
 - **A `restart` kind, and identifying the exiting process**
 - **A `/autoname` mod command**, **a second parser of the sentinel in the mod**
-- **Per-session sentinels, locks or checksums for sessions sharing a root**,
+- **Per-session sentinels or checksums for sessions sharing a root**,
   **recording the root in the sentinel**, **refusing a symlinked `.claude/`**
 - **A reviewer agent for the handoff task, or for memory destinations, for now**
 - **An agent-authored continuation prompt**
@@ -326,11 +330,10 @@ Ruled out, each argued in
   Claude Code), different scope (full-session summary vs residual task
   frame). Non-overlapping.
 - **Concurrent sessions in one root.** Sessions sharing a root share
-  `TASK.md`, `TODO.md` and `.claude/autodrive`, unlocked: a later checkpoint
-  replaces an earlier session's sentinel and its transition is lost silently,
-  both files are last-writer-wins, and `drive-take.sh` reads the sentinel and
-  rewrites it in two steps, so a checkpoint landing between them is
-  overwritten. A `.claude/` shared between roots, by symlink or otherwise, is
+  `TASK.md`, `TODO.md` and `.claude/autodrive`: a later checkpoint replaces an
+  earlier session's sentinel and its transition is lost silently, and both
+  files are last-writer-wins. The sentinel's lock orders its actors, not two
+  sessions' intent. A `.claude/` shared between roots, by symlink or otherwise, is
   unsupported: the ownerless `pending` sentinel can be consumed by the other
   root, which the owner on `armed`/`held` does not cover. One session per root
   at a time, or a worktree per session (the root is worktree-scoped). What

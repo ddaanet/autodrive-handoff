@@ -7,6 +7,10 @@ The helpers shared with the other tests/test_checkpoint_*.py files are in
 tests/conftest.py.
 """
 
+import subprocess
+import sys
+import threading
+import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -18,6 +22,7 @@ from conftest import (
     drive_state,
     handoff_payload,
     make_gitlore_repo,
+    make_repo,
     precompact_payload,
     run_checkpoint,
     task_clear,
@@ -347,3 +352,56 @@ def test_autoname_arms_against_dirty_memory_having_asked_nothing(
     assert result.returncode == 0
     first_line = (repo / ".claude" / "autodrive").read_text().splitlines()[0]
     assert first_line == "armed sess-checkpoint"
+
+
+# ==========================================================================
+# The sentinel's lock
+# ==========================================================================
+
+
+def test_sentinel_write_waits_on_the_lock(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Another actor holds the lock; the checkpoint writes the sentinel only
+    once it is free.
+
+    An unlocked write lands at once, under the other actor.
+    """
+    repo = make_repo(tmp_path)
+    lock = repo / ".claude" / "autodrive.lock"
+    holder = subprocess.Popen(
+        [
+            sys.executable,
+            "-I",
+            "-c",
+            "import fcntl, os, sys, time\n"
+            "fd = os.open(sys.argv[1], os.O_RDWR | os.O_CREAT, 0o600)\n"
+            "fcntl.flock(fd, fcntl.LOCK_EX)\n"
+            "print('held', flush=True)\n"
+            "time.sleep(60)\n",
+            str(lock),
+        ],
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        assert holder.stdout is not None
+        assert holder.stdout.readline().strip() == "held"
+        monkeypatch.setenv("HANDOFF_LOCK_WAIT_SECS", "30")
+        payload = handoff_payload("without-commit")
+        result: list[subprocess.CompletedProcess[str]] = []
+        thread = threading.Thread(
+            target=lambda: result.append(run_checkpoint(repo, payload))
+        )
+        thread.start()
+        time.sleep(0.5)
+        assert not (repo / ".claude" / "autodrive").exists()
+        holder.kill()
+        holder.wait()
+        thread.join(timeout=20)
+        assert result
+        assert result[0].returncode == 0, result[0].stderr
+        assert (repo / ".claude" / "autodrive").exists()
+    finally:
+        holder.kill()
+        holder.wait()

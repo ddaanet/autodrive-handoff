@@ -14,6 +14,7 @@ setup() {
     tmp="$BATS_TEST_TMPDIR/proj"
     mkdir -p "$tmp/.claude"
     export CLAUDE_PROJECT_DIR="$tmp"
+    load lock-helpers
 
     # The composer's one definition, so no row retypes the continuation line.
     CONTINUATION="$(python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); from checkpoint import CONTINUATION; print(CONTINUATION)' "$repo_root/scripts")"
@@ -46,6 +47,36 @@ expected() {
 # event; the seeds below are owned by sess-hook-test unless a row says otherwise.
 take() {
     run bash scripts/drive-take.sh "$1" "${2-sess-hook-test}"
+}
+
+# The sentinel's lock. Another actor holds it, a take starts and has to wait,
+# and the sentinel changes under the lock as a checkpoint would change it. The
+# take must then judge what it finds once the lock is free: an unlocked take
+# has already read `armed` and run it, and prints a plan.
+@test "drive-take (the sentinel changes while a take waits on the lock: the take acts on what it finds then)" {
+    seed "$tmp" "armed sess-hook-test" clear "/rename A Title" "/clear" "$CONTINUATION"
+    hold_drive_lock "$tmp"
+    HANDOFF_LOCK_WAIT_SECS=30 bash scripts/drive-take.sh "$tmp" sess-hook-test \
+        > "$BATS_TEST_TMPDIR/take.out" 2>&1 3>&- &
+    take_pid=$!
+    sleep 0.5
+    seed "$tmp" "armed sess-other" clear "/rename Other" "/clear" "$CONTINUATION"
+    release_drive_lock
+    wait "$take_pid"
+    [ ! -s "$BATS_TEST_TMPDIR/take.out" ]
+    [ "$(head -n1 "$tmp/.claude/autodrive")" = "armed sess-other" ]
+}
+
+# The bound: a lock that is not let go does not wedge the take. After the wait
+# (HANDOFF_LOCK_WAIT_SECS) it goes ahead unlocked, as it did before the lock.
+@test "drive-take (the lock is never released: the take goes ahead after the bound)" {
+    seed "$tmp" "armed sess-hook-test" compact "/compact keep the parser work" "$CONTINUATION"
+    hold_drive_lock "$tmp"
+    HANDOFF_LOCK_WAIT_SECS=0.3 take "$tmp"
+    release_drive_lock
+    [ "$status" -eq 0 ]
+    [ "$output" = "$(expected "$tmp" armed-compact.json)" ]
+    [ "$(head -n1 "$tmp/.claude/autodrive")" = "pending" ]
 }
 
 @test "drive-take (no autodrive: empty stdout, exit 0)" {

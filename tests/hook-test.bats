@@ -31,6 +31,7 @@ TASK
     # runner's own real one.
     export HANDOFF_POINTER_DIR="$BATS_TEST_TMPDIR/pointer"
     export SESSION_ID="sess-hook-test"
+    load lock-helpers
 
     # shellcheck source-path=SCRIPTDIR source=../scripts/_lib.sh disable=SC1091
     source "$repo_root/scripts/_lib.sh"
@@ -2896,14 +2897,21 @@ assert_cancel_report() {
     [ "$CTX" = "$note" ]
 }
 
-# <output> <lines> — <output> is today's unloaded-mod report, whole, with the lines to
-# type, and says nothing of a typed-ahead prompt.
+# <output> <lines> [unsettled] — <output> is today's unloaded-mod report, whole,
+# with the lines to type. It says nothing of a typed-ahead prompt, unless the
+# third argument is `unsettled`: the input carried a prompt_id but the marker
+# could not say whether it was the arming turn's, so the note names a queued
+# prompt as a possible cause, as it does for an input with no id.
 assert_unloaded_report() {
     split_output "$1"
     [ "$MSG" = $'\033[0m'"handoff: $unloaded_msg."$'\nType in order:\n'"$2" ]
     [[ "$CTX" == *"safe-mode"* && "$CTX" == *"2.1.287"* && "$CTX" == *"managed settings"* ]]
     [[ "$CTX" == *"Present these lines to the user in a fenced code block, to type in order:"$'\n'"$2" ]]
-    [[ "$CTX" != *"$noprompt_phrase"* ]]
+    if [[ "${3-}" == unsettled ]]; then
+        [[ "$CTX" == *"$noprompt_phrase"* ]]
+    else
+        [[ "$CTX" != *"$noprompt_phrase"* ]]
+    fi
 }
 
 @test "report-drive-failure (queued prompt: an owner's armed rename is spared, nothing said or recorded)" {
@@ -3008,6 +3016,7 @@ assert_unloaded_report() {
 
 @test "report-drive-failure (no marker yet, the first prompt of the session: swept with the unloaded-mod note)" {
     seed_armed_kind rename
+    make_pointer_dir
     [ ! -e "$HANDOFF_POINTER_DIR/$prompt_marker" ]
     PROMPT_ID=first-prompt run_report_failure "$tmp"
     [ "$status" -eq 0 ]
@@ -3133,7 +3142,7 @@ assert_unloaded_report() {
     PROMPT_ID=arming-prompt run_report_failure "$tmp"
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
-    assert_unloaded_report "$output" "$LINES"
+    assert_unloaded_report "$output" "$LINES" unsettled
 }
 
 # <directory> — an armed rename, and in <directory> a marker holding the id the
@@ -3151,7 +3160,7 @@ seed_marker_in_untrusted_dir() {
     PROMPT_ID=arming-prompt run_report_failure "$tmp"
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
-    assert_unloaded_report "$output" "$LINES"
+    assert_unloaded_report "$output" "$LINES" unsettled
 }
 
 @test "report-drive-failure (a group- or world-writable marker directory is not read for the prompt marker: the file is swept)" {
@@ -3159,6 +3168,106 @@ seed_marker_in_untrusted_dir() {
     chmod 777 "$HANDOFF_POINTER_DIR"
     seed_marker_in_untrusted_dir "$HANDOFF_POINTER_DIR"
     PROMPT_ID=arming-prompt run_report_failure "$tmp"
+    [ "$status" -eq 0 ]
+    [ ! -e "$tmp/.claude/autodrive" ]
+    assert_unloaded_report "$output" "$LINES" unsettled
+}
+
+# A marker that is not a regular file, or that cannot be read at all, leaves
+# the prompt_id unsettled in the same way: the sweep and the lines are as for
+# any stale file, and the note says a queued prompt may be the cause.
+@test "report-drive-failure (a directory at the prompt marker: swept, the note names a queued prompt)" {
+    make_pointer_dir
+    mkdir "$HANDOFF_POINTER_DIR/$prompt_marker"
+    seed_armed_kind rename
+    PROMPT_ID=arming-prompt run_report_failure "$tmp"
+    [ "$status" -eq 0 ]
+    [ ! -e "$tmp/.claude/autodrive" ]
+    assert_unloaded_report "$output" "$LINES" unsettled
+}
+
+# The reader's helper fails on the marker alone (the stub, as reader_stub, but
+# only for a marker path): no answer about the marker.
+@test "report-drive-failure (the marker read fails: swept, the note names a queued prompt)" {
+    local real stub="$BATS_TEST_TMPDIR/broken-marker-reader"
+    real="$(command -v python3)"
+    mkdir -p "$stub"
+    # shellcheck disable=SC2016  # the stub's own $1/$4, expanded when it runs
+    printf '#!/usr/bin/env bash\ncase "$1 $4" in "-I "*handoff-prompt-*) exit 97 ;; esac\nexec %q "$@"\n' "$real" > "$stub/python3"
+    chmod +x "$stub/python3"
+    seed_armed_kind rename
+    seed_prompt_marker arming-prompt
+    PATH="$stub:$PATH" PROMPT_ID=arming-prompt run_report_failure "$tmp"
+    [ "$status" -eq 0 ]
+    [ ! -e "$tmp/.claude/autodrive" ]
+    assert_unloaded_report "$output" "$LINES" unsettled
+}
+
+# The pair: a marker that answers (here `absent`, the first prompt of a
+# session, or another turn's id) keeps the note without the phrase, as the rows
+# above do.
+
+# --- the sentinel's lock: the sweep and a writer or the take ---
+#
+# Another actor holds .claude/autodrive.lock, a sweep starts and has to wait,
+# and the sentinel becomes `pending` under the lock, as the take leaves it. The
+# sweep must then find `pending` and say nothing: a sweep that has already read
+# `armed` removes the file the take armed, and tells the user the mod did not
+# run a transition that is about to run.
+
+# <outfile> — run_report_failure's input and script, in the background.
+start_report_failure() {
+    (
+        jq -nc --arg cwd "$tmp" --arg sid "$SESSION_ID" --arg pid "${PROMPT_ID-}" \
+          '{cwd:$cwd, session_id:$sid, prompt:"anything"}
+           + (if $pid == "" then {} else {prompt_id:$pid} end)' \
+        | HANDOFF_LOCK_WAIT_SECS=30 bash scripts/report-drive-failure.sh
+    ) > "$1" 2>&1 3>&- &
+    SWEEP_PID=$!
+}
+
+# <kind> — the sentinel as the take leaves it, under the lock.
+become_pending() {
+    printf '%s\n' pending "$1" "/rename Queued Title" "/clear" "pick up the queued task" \
+        > "$tmp/.claude/autodrive"
+}
+
+# The sweep ended with nothing said or recorded and the file `pending`.
+assert_sweep_left_pending() {
+    wait "$SWEEP_PID"
+    [ ! -s "$BATS_TEST_TMPDIR/sweep.out" ]
+    [ ! -e "$tmp/.claude/autodrive.swept" ]
+    [ "$(head -n1 "$tmp/.claude/autodrive")" = "pending" ]
+}
+
+@test "report-drive-failure (the sentinel becomes pending while a stale sweep waits on the lock: left alone, nothing said)" {
+    seed_armed_kind clear
+    hold_drive_lock "$tmp"
+    start_report_failure "$BATS_TEST_TMPDIR/sweep.out"
+    sleep 0.5
+    become_pending clear
+    release_drive_lock
+    assert_sweep_left_pending
+}
+
+@test "report-drive-failure (the sentinel becomes pending while a queued-prompt cancel waits on the lock: left alone, nothing said)" {
+    seed_queued clear
+    hold_drive_lock "$tmp"
+    PROMPT_ID=arming-prompt start_report_failure "$BATS_TEST_TMPDIR/sweep.out"
+    sleep 0.5
+    become_pending clear
+    release_drive_lock
+    assert_sweep_left_pending
+}
+
+# The bound: a lock that is not let go does not wedge the hook. After the wait
+# (HANDOFF_LOCK_WAIT_SECS) the sweep goes ahead unlocked, as it did before.
+@test "report-drive-failure (the lock is never released: the sweep goes ahead after the bound)" {
+    seed_armed_kind clear
+    make_pointer_dir
+    hold_drive_lock "$tmp"
+    PROMPT_ID=idle-prompt HANDOFF_LOCK_WAIT_SECS=0.3 run_report_failure "$tmp"
+    release_drive_lock
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
     assert_unloaded_report "$output" "$LINES"

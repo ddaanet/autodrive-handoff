@@ -30,6 +30,12 @@ HANDOFF_LEGACY_REL_TODO=".claude/handoff-todo.md"
 # names the transition."
 # shellcheck disable=SC2034
 HANDOFF_REL_DRIVE=".claude/autodrive"
+# The advisory lock the sentinel's actors hold across a read-decide-write
+# (_drive_lock.py; docs/design/driving-the-transition.md, "The sentinel's lock").
+# Beside the sentinel, under the `.claude/autodrive*` ignore, and never removed.
+# Mirrored in checkpoint.py.
+# shellcheck disable=SC2034
+HANDOFF_REL_DRIVE_LOCK=".claude/autodrive.lock"
 # Where the drive mod records a line it could not run (written from
 # the mod at the failing line). A mod's rejection goes nowhere on its
 # own, so this is the only path back to the agent; consumed and reported by
@@ -462,6 +468,33 @@ handoff_drive_arm() {
     fi
 }
 
+# <lockfile>. Take the sentinel's lock, held until the shell exits (or closes
+# fd 9), so a script holds it across its whole read-decide-write by calling this
+# before the read. Returns 0 holding it, 1 not: a lock that cannot be taken
+# (no `.claude/`, a link at the name, python3 failing, the wait bound passed —
+# HANDOFF_LOCK_WAIT_SECS, default 5) is no reason to stop, and every caller
+# goes ahead as it did before the lock existed, so callers under `set -e` write
+# `handoff_lock_take … || true`.
+#
+# fd 9 is the lock's, and a script that calls this must not use it. A lock lives
+# on an open file description, which a child shares with the descriptor its
+# parent opened, so bash opens fd 9 on the file, `_drive_lock.py wait` takes
+# the lock on it from a child, and the lock stays with the shell's descriptor
+# after that child is gone. `create` makes the file first, 0600 and
+# O_NOFOLLOW, which bash's own redirection could not promise; `wait` checks that
+# fd 9 is still the regular file the path names. Read-write so that opening a
+# FIFO put there in the meantime cannot block.
+handoff_lock_take() {
+    local lock="$1" helper="${BASH_SOURCE[0]%/*}/_drive_lock.py"
+    python3 -I "$helper" create "$lock" 2>/dev/null || return 1
+    { exec 9<>"$lock"; } 2>/dev/null || return 1
+    if python3 -I "$helper" wait 9 "$lock" 2>/dev/null; then
+        return 0
+    fi
+    { exec 9>&-; } 2>/dev/null
+    return 1
+}
+
 # <path> [own]. Print a status line, then on `ok` the file's bytes, opened with
 # O_NOFOLLOW so the check and the read are one step: no link put at the name
 # at any moment is followed. The status is `ok`, `absent`, `link` (the last
@@ -533,6 +566,29 @@ handoff_write_marker() {
         rm -f "$tmp"
         return 1
     fi
+}
+
+# <path>. Read a per-session marker in $HANDOFF_POINTER_DIR into the caller's
+# scope, the handoff_drive_read idiom: MARKER_STATUS is `nodir` when the
+# directory fails marker_dir_ok (nothing is read), else handoff_read_regular's
+# status with `own` (`ok`, `absent`, `link`, `other`, `foreign`), or empty when
+# python3 failed; MARKER_VALUE is the bytes, NUL-terminated and read whole so a
+# value holding a newline or edge whitespace survives, and is empty unless the
+# status is `ok`. Always returns 0. The drift marker and the prompt marker are
+# read through here, so neither can skip the directory test or the no-follow open.
+# shellcheck disable=SC2034  # assigned for the caller's scope
+handoff_read_marker() {
+    MARKER_STATUS="" MARKER_VALUE=""
+    if ! marker_dir_ok; then
+        MARKER_STATUS="nodir"
+        return 0
+    fi
+    {
+        IFS= read -r MARKER_STATUS || true
+        if [[ "$MARKER_STATUS" == ok ]]; then
+            IFS= read -r -d '' MARKER_VALUE || true
+        fi
+    } < <(handoff_read_regular "$1" own)
 }
 
 # Effective project root for the handoff files of THIS session, into the
