@@ -30,3 +30,4 @@ __pycache__/
 
 /dist/plugin/
 /.mcp.json
+/tsconfig.json
