@@ -33,11 +33,14 @@ precommit:
     pytest
     @echo "ok"
 
-# `claude plugin validate --strict`, minus the one warning that cannot be
-# fixed: the repo-root CLAUDE.md is this repo's own agent instructions, not
-# context the plugin ships. Any other error or warning fails the gate.
+# `claude plugin validate --strict`, minus two findings that cannot be fixed:
+# the warning that the repo-root CLAUDE.md is not loaded (it is this repo's own
+# agent instructions, not context the plugin ships), and the invalid-JSON error
+# for an empty root .mcp.json, which something outside the repo creates and
+# which is gitignored. That one is dropped only while the file is empty. Any
+# other error or warning fails the gate.
 validate-plugin:
-    claude plugin validate --strict --json . | jq -e '[.manifest, .contents[]] | map(.errors[], (.warnings[] | select(.path != "root" or (.message | startswith("CLAUDE.md at the plugin root") | not)))) | length == 0' > /dev/null
+    empty_mcp=$([ -f .mcp.json ] && [ ! -s .mcp.json ] && echo true || echo false); claude plugin validate --strict --json . | jq -e --argjson empty_mcp "$empty_mcp" '[.manifest, .contents[]] | map((.errors[] | select(($empty_mcp | not) or .path != "json" or (.message | startswith("Invalid JSON syntax") | not))), (.warnings[] | select(.path != "root" or (.message | startswith("CLAUDE.md at the plugin root") | not)))) | length == 0' > /dev/null
 
 # Gate the imported `release` recipe depends on
 prerelease: precommit
