@@ -176,8 +176,8 @@ collided as numbers. `FR6`, `FR7` and `FR-H` are retired.
   `SessionStart(compact)` gates re-injection on — otherwise a hand-typed
   `/compact` would re-inject nothing.
 - **FR-H** — *Retired.* It re-gated a multi-line sequence on pane idleness
-  between lines. The drive awaits each command's own resolution and checks the
-  prompt for user text before each line, so there is no pane to re-gate on.
+  between lines. The drive awaits each command's own resolution and reads no
+  screen or prompt box, so there is no pane to re-gate on.
 
 **Constraints** — argued in [The write path](design/the-write-path.md) and
 [Scoping](design/scoping.md).
@@ -218,6 +218,9 @@ Where the argument lives:
 - [The checkpoint directive](design/the-checkpoint-directive.md) — What does
   the checkpoint print for the agent to do next, when is the transition held,
   and where does gitlore meet this plugin?
+- [A prompt queued into the arming turn](design/queued-prompts.md) — What
+  does the sweep do with a prompt typed while the turn that armed a transition
+  is still running?
 - [Scoping](design/scoping.md) — Which root does a hook anchor on, and how is
   a session that drifts out of it reported?
 - [Release infrastructure](design/release-infrastructure.md) — Why is the
@@ -250,6 +253,8 @@ The standing calls, each argued in
 - **The transition carries its own state.**
 - **The continuation is a constant; the agent authors no prompt.**
 - **A sentinel names its owner, and only the owner judges it stale.**
+- **A prompt queued into the arming turn cancels a `clear` or `compact`, and
+  spares a `rename`.**
 - **The drive runs inline at `turn.complete`, never from `Stop`.**
 - **Observability is not gated on the happy path.**
 - **A foreign tool's state file is detected by liveness, not presence.**
@@ -274,6 +279,8 @@ Ruled out, each argued in
 - **Trusting the raw `.cwd` field**, **recording the root via
   `WorktreeCreate`/`CwdChanged`**
 - **A session-id sidecar or a recency timeout for a stale sentinel**
+- **Sparing every kind of queued prompt**, **recording each prompt's id in the
+  sweep**, **the mod reading the prompt box**
 - **Detecting commit awareness in the checkpoint, and defaulting the answer**
 - **Injecting the remainder at the first `UserPromptSubmit`**
 - **Accepting SDD's pre-6.2.0 flat ledger path for back-compatibility**

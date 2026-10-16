@@ -77,6 +77,14 @@ your next prompt, with the commands to run by hand. That happens on Claude
 Code older than 2.1.287, under `--safe-mode`, or where an organization manages
 Claude Code and does not list the plugin in managed settings.
 
+**A prompt sent while the wrap-up turn still runs.** A prompt you send before
+that turn ends does not make the transition look stale. A pending title is
+kept and applied when the turn ends. A pending `/clear` or `/compact` is
+cancelled, since the context it would discard now holds a prompt the files do
+not: you are told `transition cancelled`, and the agent answers the prompt and
+runs the handoff again. Interrupting the turn and then sending a prompt is a
+different case, handled as in the paragraph above.
+
 **Finishing.** Run the handoff again with nothing outstanding to clear both
 files. They are ordinary tracked files and ride your next commit.
 
@@ -115,7 +123,7 @@ plugin's own `scripts/` and `bin/`, plus coreutils and read-only `git`.
 | Where | Program | Purpose |
 |---|---|---|
 | `SessionStart` hooks | `bash scripts/session-pointer.sh`, `load-handoff.sh`, `load-compact.sh` | inject the files, clean up |
-| `UserPromptSubmit` hook | `bash scripts/report-drive-failure.sh` | report a failed or stale transition, note session-root drift |
+| `UserPromptSubmit` hook | `bash scripts/report-drive-failure.sh` | report a failed or stale transition, cancel one a prompt arrived before, note session-root drift |
 | `PreToolUse(Write\|Edit)` hook | `bash scripts/write-guard.sh` | deny writes to `.claude/autodrive` |
 | `PreToolUse(Bash)` hook | `bash scripts/inject-checkpoint-root.sh` | see below |
 | Mod, at turn end | `bash <plugin>/scripts/drive-take.sh <cwd> <session-id>` | take the armed transition |
@@ -146,8 +154,8 @@ that file names as its owner. The lines it can hold:
   Continue where the previous context stopped.
   ```
 
-The mod checks the prompt box before each line and stops if you typed
-anything. A rejected line stops the sequence and is reported at your next
+The mod does not read the prompt box, and text you have typed there is left
+alone. A rejected line stops the sequence and is reported at your next
 prompt. The file's reader refuses any other slash command.
 
 ### The `PreToolUse(Bash)` rewrite
@@ -156,6 +164,11 @@ When a Bash command contains `handoff-checkpoint` or `handoff-approved`, the
 hook rewrites it to `export HANDOFF_ROOT=<root>; <original command>`. It makes
 no permission decision: your usual permission rules apply. Other commands are
 left alone.
+
+For those two commands the hook also records the id of the turn they run in,
+in `/tmp/claude/handoff-prompt-<session id>`, so that a prompt sent while that
+turn runs can be told from one sent after an interruption. A failure to write
+it changes nothing else.
 
 Because the rewritten command starts with `export`, a prefix rule for the
 command name alone does not match it, and you are prompted (a headless `-p`
@@ -185,6 +198,7 @@ run is denied). To run the checkpoint without a prompt, allow all three in
 | `.claude/autodrive.swept` | one line per stale transition file removed; last 50 kept |
 | `.claude/handoff-todo.md`, `.claude/handoff-task.md` | files from an earlier version of the plugin; `handoff-checkpoint` moves the todo to `TODO.md` or removes either, and nothing else touches them |
 | `/tmp/claude/handoff-drift-<session id>` | marker so a session-root drift note appears once; `/tmp/claude` is created mode 0700 and markers older than 7 days are deleted |
+| `/tmp/claude/handoff-prompt-<session id>` | the id of the turn that last ran `handoff-checkpoint` or `handoff-approved`; written by the `PreToolUse(Bash)` hook, read by the prompt hook, deleted after 7 days |
 
 `TASK.md`, `TODO.md`, `.claude/autodrive` and `.claude/autodrive.swept` are
 each written through a temporary sibling file renamed over the name.

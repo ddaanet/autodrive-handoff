@@ -30,12 +30,14 @@ source "$(dirname "$0")/_lib.sh"
 # shellcheck disable=SC2174
 mkdir -m 700 -p "$HANDOFF_POINTER_DIR"
 
-# Sweep what earlier sessions left behind. Neither remaining name has an owner
+# Sweep what earlier sessions left behind. No remaining name has an owner
 # that outlives the session: the drift marker is written by the report hook
-# and cleared only if the cwd comes back, and a session ends without ever
+# and cleared only if the cwd comes back, the prompt marker is rewritten by the
+# checkpoint call and cleared by nothing, and a session ends without ever
 # being told. SessionEnd would not close it, since a crash or a kill fires
 # nothing. `handoff-root-*` stays on the filter to clean up whatever the old
-# pointer left on disk; nothing publishes new ones.
+# pointer left on disk; nothing publishes new ones. `handoff-prompt-*` is the
+# prompt marker of a session that stopped checkpointing.
 #
 # So the producer sweeps, on the way in. This runs once per session start,
 # which is the only moment anything of this plugin's runs in that directory.
@@ -45,5 +47,5 @@ mkdir -m 700 -p "$HANDOFF_POINTER_DIR"
 # plugin never wrote. A week is far past any session that would still read a
 # live one.
 find "$HANDOFF_POINTER_DIR" -maxdepth 1 \
-    \( -name 'handoff-root-*' -o -name 'handoff-drift-*' \) \
+    \( -name 'handoff-root-*' -o -name 'handoff-drift-*' -o -name 'handoff-prompt-*' \) \
     -mtime +7 -delete

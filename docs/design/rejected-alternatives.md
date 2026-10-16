@@ -58,12 +58,25 @@ the most likely trigger is an Esc in the *same* session, so the id matches
 and the next `Stop` arms it anyway; a timeout is a guess about how long a
 turn may run, and a wrong guess silently drops a wanted compaction. Both stay
 rejected for the owner's own sentinel, which its next prompt sweeps
-unconditionally. Across sessions the owner rides on line 1 rather than in a
-sidecar, and what is timed is the owner's transcript, never the sentinel.
+unless that prompt was queued into the arming turn. Across sessions the owner
+rides on line 1 rather than in a sidecar, and what is timed is the owner's transcript, never the sentinel.
 [A stale autocompact is one a later turn can
 see](../changelog/2026-07-22-stale-autocompact.md),
 [The armed sentinel has an
 owner](../changelog/2026-10-13-the-armed-sentinel-has-an-owner.md)
+
+**Sparing every kind of queued prompt**, **recording each prompt's id in the
+sweep**, **the mod reading the prompt box** — a spared `clear` or `compact`
+runs cleanly, but the prompt is lost as handoff state: the files were written
+before it, its answer lives only in the context `/clear` discards, and
+`TODO.md` does not carry it across a `/compact`. Recording each prompt's
+`prompt_id` forks `find`, `mktemp` and a replace on every prompt of every
+session, for a case that matters only while an owner's `armed` file exists; the
+checkpoint call is the one place the arming turn's id is known. The prompt-box
+read protected nothing, since `command.run` and `prompt.submit` leave composer
+text untouched, and cost a transition when text was restored to the box before
+the turn ended.
+[A prompt queued into the arming turn](../changelog/2026-10-16-a-prompt-queued-into-the-arming-turn.md)
 
 **Detecting commit awareness in the checkpoint, and defaulting the answer**
 — a transcript scrape is the maintenance trap this design already refuses,

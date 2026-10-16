@@ -1,5 +1,12 @@
 # 2026-10-08 — The plugin becomes a mod
 
+> **Superseded 2026-10-16** (see [A prompt queued into the arming
+> turn](2026-10-16-a-prompt-queued-into-the-arming-turn.md))
+> on the mod reading the prompt box: it no
+> longer does. The `$.prompt.read()` check before each line is gone, because
+> `command.run` and `prompt.submit` leave composer text untouched. The rest of
+> this entry stands.
+
 The tmux walker is gone. The transition a checkpoint arms is now run by a
 Claude Code mod, `hooks/handoff.ts`, through the host's own command and prompt
 entry points, and everything that existed to type into a pane and read the

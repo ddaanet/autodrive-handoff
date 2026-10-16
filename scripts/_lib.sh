@@ -508,6 +508,33 @@ handoff_replace() {
     python3 -I -c 'import os, sys; os.replace(sys.argv[1], sys.argv[2])' "$1" "$2"
 }
 
+# The per-session markers in $HANDOFF_POINTER_DIR (the drift marker, and the
+# prompt marker the checkpoint leaves) are used only in a directory that is no
+# link, is this user's and is writable by no one else. The directory is shared
+# by every local user, so it and every name in it may be a link someone else
+# planted: each marker is read with handoff_read_regular (no link followed) and
+# written with handoff_write_marker. Where the directory fails the test there is
+# no marker at all.
+marker_dir_ok() {
+    [[ -d "$HANDOFF_POINTER_DIR" && ! -L "$HANDOFF_POINTER_DIR" && -O "$HANDOFF_POINTER_DIR" ]] \
+        && [[ -z "$(find "$HANDOFF_POINTER_DIR" -maxdepth 0 \( -perm -020 -o -perm -002 \) 2>/dev/null)" ]]
+}
+
+# <path> <value>. Write <value>, NUL-terminated, to <path>: a mktemp sibling
+# renamed over the name (handoff_replace), so a link at the name is replaced and
+# never written through. The sibling is named `<path>.XXXXXX`, which matches the
+# marker's own glob, so session-pointer.sh sweeps an orphan. Returns 1, leaving
+# no sibling behind, when any step fails.
+handoff_write_marker() {
+    local path="$1" value="$2" tmp
+    tmp="$(mktemp "$path.XXXXXX" 2>/dev/null)" || return 1
+    if ! printf '%s\0' "$value" > "$tmp" \
+        || ! handoff_replace "$tmp" "$path"; then
+        rm -f "$tmp"
+        return 1
+    fi
+}
+
 # Effective project root for the handoff files of THIS session, into the
 # caller's HANDOFF_ROOT, plus the branch that produced it in
 # HANDOFF_ROOT_BRANCH: `inside` (cwd is the project or under it), `worktree`

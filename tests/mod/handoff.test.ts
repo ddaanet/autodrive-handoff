@@ -84,9 +84,7 @@ test('compact with focus: command compact + args, then the continuation prompt',
   await endTurn($)
   expect(r.log).toEqual([
     'process.run',
-    'prompt.read',
     'command.run compact [keep the parser work]',
-    'prompt.read',
     `prompt.submit ${CONTINUATION} asUser=true`,
   ])
   expect(r.toasts).toEqual(['handoff: will run /compact keep the parser work once the turn ends.'])
@@ -98,11 +96,8 @@ test('clear: rename, then clear (no args), then the continuation, in order', asy
   await endTurn($)
   expect(r.log).toEqual([
     'process.run',
-    'prompt.read',
     'command.run rename [A Title]',
-    'prompt.read',
     'command.run clear []',
-    'prompt.read',
     `prompt.submit ${CONTINUATION} asUser=true`,
   ])
   expect(r.toasts).toEqual(['handoff: will run /rename A Title once the turn ends.'])
@@ -111,7 +106,7 @@ test('clear: rename, then clear (no args), then the continuation, in order', asy
 test('rename kind runs the single rename line', async ($, on) => {
   const r = rig(on, { sentinelExists: true, stdout: fixture('armed-rename', CWD) })
   await endTurn($)
-  expect(r.log).toEqual(['process.run', 'prompt.read', 'command.run rename [Driven Transitions]'])
+  expect(r.log).toEqual(['process.run', 'command.run rename [Driven Transitions]'])
 })
 
 test('FR-G: empty before and after toasts the message and runs nothing', async ($, on) => {
@@ -129,21 +124,7 @@ test('malformed plan toasts its message and runs nothing', async ($, on) => {
   expect(r.toasts[0]).toContain('autodrive malformed')
 })
 
-// --- bail and failure ------------------------------------------------------
-
-test('text in the prompt box before the first line bails out of everything', async ($, on) => {
-  const r = rig(on, { sentinelExists: true, stdout: fixture('armed-clear', CWD), promptTexts: ['half-typed'] })
-  await endTurn($)
-  expect(r.log).toEqual(['process.run', 'prompt.read'])
-  expect(r.writes).toEqual([])
-})
-
-test('text typed mid-sequence bails before the next line', async ($, on) => {
-  const r = rig(on, { sentinelExists: true, stdout: fixture('armed-clear', CWD), promptTexts: ['', 'half-typed'] })
-  await endTurn($)
-  expect(r.log).toEqual(['process.run', 'prompt.read', 'command.run rename [A Title]', 'prompt.read'])
-  expect(r.writes).toEqual([])
-})
+// --- failure ---------------------------------------------------------------
 
 test('first rejected line ends the sequence and writes failFile', async ($, on) => {
   const r = rig(on, {
@@ -154,7 +135,6 @@ test('first rejected line ends the sequence and writes failFile', async ($, on) 
   await endTurn($)
   expect(r.log).toEqual([
     'process.run',
-    'prompt.read',
     'command.run rename [A Title]',
     `fs.write ${FAIL_FILE}`,
   ])
@@ -176,9 +156,7 @@ test('a rejected continuation prompt is recorded the same way', async ($, on) =>
   await endTurn($)
   expect(r.log).toEqual([
     'process.run',
-    'prompt.read',
     'command.run compact [keep the parser work]',
-    'prompt.read',
     `prompt.submit ${CONTINUATION} asUser=true`,
     `fs.write ${FAIL_FILE}`,
   ])

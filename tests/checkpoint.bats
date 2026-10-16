@@ -25,6 +25,10 @@ setup() {
 
     export CLAUDE_CODE_SESSION_ID="sess-checkpoint"
 
+    # The prompt marker's directory (/tmp/claude in production); redirect it, or
+    # the suite writes into the runner's own real one.
+    export HANDOFF_POINTER_DIR="$BATS_TEST_TMPDIR/pointer"
+
     # For asserting that what handoff-approved writes is what a loader will
     # accept, and for handoff_drive_read itself in the tests below.
     # shellcheck source-path=SCRIPTDIR source=../scripts/_lib.sh disable=SC1091
@@ -179,6 +183,166 @@ STUB
     new_cmd="$(jq -r '.hookSpecificOutput.updatedInput.command' <<<"$output")"
     (cd "$repo" && bash -c "$new_cmd")
     [ "$(cat "$repo/seen")" = "$repo" ]
+}
+
+# The prompt marker. A prompt typed while the turn that ran the checkpoint is
+# still running fires UserPromptSubmit inside that turn with that turn's
+# prompt_id; report-drive-failure.sh compares its input's against this marker to
+# tell it from one typed at an idle composer (its rows are in
+# tests/hook-test.bats, where the marker is a fixture). The one writer is this
+# hook, on its matching path, so the id it records is the checkpoint call's own
+# turn's. The pointer directory is not made by the setup: the hook makes it.
+
+prompt_marker="handoff-prompt-sess-checkpoint"
+
+# <repo> <command> <session_id> <prompt_id> — run_inject_root with the ids in the
+# input. An id of `-` leaves its key out; an empty one sends it empty.
+run_inject_root_ids() {
+    local repo="$1" command="$2"
+    export CLAUDE_PROJECT_DIR="$repo"
+    run bash -c '
+        jq -nc --arg cwd "$1" --arg cmd "$2" --arg sid "$3" --arg pid "$4" \
+          "{cwd:\$cwd, hook_event_name:\"PreToolUse\", tool_name:\"Bash\", tool_input:{command:\$cmd}}
+           + (if \$sid == \"-\" then {} else {session_id:\$sid} end)
+           + (if \$pid == \"-\" then {} else {prompt_id:\$pid} end)" \
+        | bash "$5"
+    ' _ "$repo" "$command" "$3" "$4" "$INJECT_ROOT"
+}
+
+# <prompt_id> [<path>] — the marker holds the id and its NUL, exactly.
+marker_holds() {
+    cmp -s "${2-$HANDOFF_POINTER_DIR/$prompt_marker}" <(printf '%s\0' "$1")
+}
+
+@test "inject-checkpoint-root: a handoff-checkpoint call leaves the prompt_id, NUL-terminated, in a private directory" {
+    repo="$(make_repo)"
+    run_inject_root_ids "$repo" 'handoff-checkpoint <<<"{}"' sess-checkpoint arming-prompt
+    [ "$status" -eq 0 ]
+    new_cmd="$(jq -r '.hookSpecificOutput.updatedInput.command' <<<"$output")"
+    [[ "$new_cmd" == "export HANDOFF_ROOT="*";"*"handoff-checkpoint"* ]]
+    marker_holds arming-prompt
+    # The temporary sibling is gone: the marker is the directory's only entry.
+    [ "$(ls -A "$HANDOFF_POINTER_DIR")" = "$prompt_marker" ]
+    [ -n "$(find "$HANDOFF_POINTER_DIR" -maxdepth 0 -perm 700)" ]
+}
+
+@test "inject-checkpoint-root: a handoff-approved call leaves the prompt_id too" {
+    repo="$(make_repo)"
+    run_inject_root_ids "$repo" 'handoff-approved' sess-checkpoint approving-prompt
+    [ "$status" -eq 0 ]
+    new_cmd="$(jq -r '.hookSpecificOutput.updatedInput.command' <<<"$output")"
+    [[ "$new_cmd" == "export HANDOFF_ROOT="*";"*"handoff-approved"* ]]
+    marker_holds approving-prompt
+}
+
+@test "inject-checkpoint-root: a later call replaces the prompt_id, and the marker is the session's own" {
+    repo="$(make_repo)"
+    run_inject_root_ids "$repo" 'handoff-checkpoint' sess-checkpoint prompt-one
+    run_inject_root_ids "$repo" 'handoff-approved' sess-checkpoint prompt-two
+    marker_holds prompt-two
+    run_inject_root_ids "$repo" 'handoff-checkpoint' sess-other prompt-three
+    marker_holds prompt-two
+    marker_holds prompt-three "$HANDOFF_POINTER_DIR/handoff-prompt-sess-other"
+    [ "$(find "$HANDOFF_POINTER_DIR" -mindepth 1 | wc -l)" -eq 2 ]
+}
+
+@test "inject-checkpoint-root: a command that is neither call writes no marker and says nothing" {
+    repo="$(make_repo)"
+    run_inject_root_ids "$repo" 'echo hello' sess-checkpoint some-prompt
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+    [ ! -e "$HANDOFF_POINTER_DIR" ]
+}
+
+# Each of the two ids missing, and each empty: nothing to record, and the
+# rewrite is the same as without them.
+@test "inject-checkpoint-root: no marker without a session_id or without a prompt_id, the rewrite unchanged" {
+    repo="$(make_repo)"
+    local sid pid
+    for ids in "- some-prompt" "'' some-prompt" "sess-checkpoint -" "sess-checkpoint ''" "- -" "'' ''"; do
+        eval "set -- $ids"
+        sid="$1" pid="$2"
+        run_inject_root_ids "$repo" 'handoff-checkpoint' "$sid" "$pid"
+        [ "$status" -eq 0 ]
+        new_cmd="$(jq -r '.hookSpecificOutput.updatedInput.command' <<<"$output")"
+        [[ "$new_cmd" == "export HANDOFF_ROOT="*";"*"handoff-checkpoint"* ]]
+        [ ! -e "$HANDOFF_POINTER_DIR" ]
+    done
+}
+
+# Resolution comes first: a root that did not resolve leaves the command alone,
+# and the marker with it.
+@test "inject-checkpoint-root: a resolver that crashes leaves no marker either" {
+    repo="$(make_repo)"
+    stub="$BATS_TEST_TMPDIR/broken-python"; mkdir -p "$stub"
+    printf '#!/usr/bin/env bash\nexit 97\n' > "$stub/python3"; chmod +x "$stub/python3"
+    run bash -c '
+        jq -nc --arg cwd "$1/sub" --arg cmd "handoff-checkpoint" \
+          "{cwd:\$cwd, session_id:\"sess-checkpoint\", prompt_id:\"arming-prompt\", hook_event_name:\"PreToolUse\", tool_name:\"Bash\", tool_input:{command:\$cmd}}" \
+        | CLAUDE_PROJECT_DIR="$1" PATH="$2:$PATH" bash "$3"
+    ' _ "$repo" "$stub" "$INJECT_ROOT"
+    [ "$status" -eq 0 ]
+    jq -e '.hookSpecificOutput.updatedInput == null and (.systemMessage | test("did not resolve"))' <<<"$output" >/dev/null
+    [ ! -e "$HANDOFF_POINTER_DIR" ]
+}
+
+# The directory is shared by every local user, so a name in it may be a link
+# someone else planted: the link is replaced, never written through.
+@test "inject-checkpoint-root: a symlinked marker is replaced, its target untouched" {
+    repo="$(make_repo)"
+    mkdir -m 700 "$HANDOFF_POINTER_DIR"
+    ln -s "$BATS_TEST_TMPDIR/planted-target" "$HANDOFF_POINTER_DIR/$prompt_marker"
+    run_inject_root_ids "$repo" 'handoff-checkpoint' sess-checkpoint arming-prompt
+    [ "$status" -eq 0 ]
+    [ ! -e "$BATS_TEST_TMPDIR/planted-target" ]
+    [ ! -L "$HANDOFF_POINTER_DIR/$prompt_marker" ]
+    marker_holds arming-prompt
+}
+
+# A marker that cannot be written costs nothing: the hook's output is
+# byte-identical to the one where it was. The first run shows the marker is
+# written at all, so the rows after it compare against a real baseline.
+@test "inject-checkpoint-root: a marker that cannot be written leaves the output byte-identical" {
+    repo="$(make_repo)"
+    run_inject_root_ids "$repo" 'handoff-checkpoint <<<"{}"' sess-checkpoint arming-prompt
+    [ "$status" -eq 0 ]
+    marker_holds arming-prompt
+    baseline="$output"
+    pointer="$HANDOFF_POINTER_DIR"
+
+    # A parent that is a file: the directory cannot be made.
+    printf x > "$BATS_TEST_TMPDIR/not-a-dir"
+    HANDOFF_POINTER_DIR="$BATS_TEST_TMPDIR/not-a-dir/pointer" run_inject_root_ids "$repo" 'handoff-checkpoint <<<"{}"' sess-checkpoint arming-prompt
+    [ "$status" -eq 0 ]
+    [ "$output" = "$baseline" ]
+
+    # A directory open to the group or the world: not used.
+    mkdir "$BATS_TEST_TMPDIR/open-dir"; chmod 777 "$BATS_TEST_TMPDIR/open-dir"
+    HANDOFF_POINTER_DIR="$BATS_TEST_TMPDIR/open-dir" run_inject_root_ids "$repo" 'handoff-checkpoint <<<"{}"' sess-checkpoint arming-prompt
+    [ "$status" -eq 0 ]
+    [ "$output" = "$baseline" ]
+    [ -z "$(ls -A "$BATS_TEST_TMPDIR/open-dir")" ]
+
+    # A link at the directory: not followed.
+    mkdir "$BATS_TEST_TMPDIR/linked-to"
+    ln -s "$BATS_TEST_TMPDIR/linked-to" "$BATS_TEST_TMPDIR/linked-dir"
+    HANDOFF_POINTER_DIR="$BATS_TEST_TMPDIR/linked-dir" run_inject_root_ids "$repo" 'handoff-checkpoint <<<"{}"' sess-checkpoint arming-prompt
+    [ "$status" -eq 0 ]
+    [ "$output" = "$baseline" ]
+    [ -z "$(ls -A "$BATS_TEST_TMPDIR/linked-to")" ]
+    [ "$pointer" = "$HANDOFF_POINTER_DIR" ]
+}
+
+# The id is data: a space or a final newline survives the round trip, which a
+# `read -r`, a `$(...)` capture or an `echo` would not give.
+@test "inject-checkpoint-root: a prompt_id holding a space or ending in a newline round-trips into the marker" {
+    repo="$(make_repo)"
+    local pid
+    for pid in 'two words' $'ends in newline\n' $'inner\nnewline' ' leading and trailing ' $'-n\\n'; do
+        run_inject_root_ids "$repo" 'handoff-checkpoint' sess-checkpoint "$pid"
+        [ "$status" -eq 0 ]
+        marker_holds "$pid"
+    done
 }
 
 @test "inject-checkpoint-root: hooks.json dispatches PreToolUse(Bash) to it" {

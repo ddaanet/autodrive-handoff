@@ -13,24 +13,31 @@
 #
 # 2. An autodrive that outlived its turn. The file is armed by the mod's
 #    drive-take.sh at the turn end that follows the write, which leaves it
-#    `pending` or removes it, so one still in state `armed` when a later turn
-#    begins never ran. Two causes: that turn ended abnormally (Esc — Stop does
-#    not fire on an interrupt — or a crash, or a quit), or the drive mod did not
-#    load at all (--safe-mode, a Claude Code older than 2.1.287, or an
+#    `pending` or removes it, so one still in state `armed` when a prompt
+#    arrives has not run. Three causes: that turn ended abnormally (Esc — Stop
+#    does not fire on an interrupt — or a crash, or a quit); the drive mod did
+#    not load at all (--safe-mode, a Claude Code older than 2.1.287, or an
 #    organization-managed one that does not list the plugin in managed
-#    settings). Left on disk it would be taken by a later turn end, days later
-#    and possibly in an unrelated session, driving a stale transition into work
-#    it was never written for. The owner's own UserPromptSubmit is the exact
-#    discriminator: it cannot fire between the write and that turn's own end. Another
-#    session's can — every session sharing the root runs this hook, the
-#    background session the harness starts after a `git commit` included — so
-#    the file names its owner, and one owned by another session is swept only
-#    when that session is no longer live (its transcript has gone quiet); a
-#    `held` one, waiting on its owner's user, never. For
+#    settings); or the prompt was typed while the arming turn still ran, which
+#    fires this hook inside that turn, before its Stop. Left on disk a stale file
+#    would be taken by a later turn end, days later and possibly in an unrelated
+#    session, driving a stale transition into work it was never written for.
+#    The prompt_id tells the third cause apart: a prompt typed at an idle
+#    composer, an Esc included, carries a fresh one, while a queued prompt
+#    carries the arming turn's own (handoff-checkpoint and handoff-approved
+#    record it in a per-session prompt marker through
+#    inject-checkpoint-root.sh). So an owner's armed file whose prompt
+#    marker matches this input's prompt_id is a queued case, not a stale one: a
+#    rename is left for the drive to take at that turn's end, and a clear or
+#    compact is swept and said so, with no lines offered, since the transition
+#    and its continuation were composed before the prompt arrived. Another
+#    session's prompt can fire this hook too — every session sharing the root
+#    runs it, the background session the harness starts after a `git commit`
+#    included — so the file names its owner, and one owned by another session
+#    is swept only when that session is no longer live (its transcript has gone
+#    quiet); a `held` one, waiting on its owner's user, never. For
 #    an armed file the report also prints the lines it held, one per line, for
-#    the user to type in order.
-#    (Prose injected into a still-running turn is the one exception, and it
-#    fails safe — the transition is cancelled and said so, not deferred.)
+#    the user to type in order, unless the file was queued.
 #
 # 3. A session cwd that left the launch repo. Everything derived from cwd —
 #    the environment block's working directory, gitStatus, the project
@@ -49,8 +56,8 @@ source "$(dirname "$0")/_lib.sh"
 
 # NUL-terminated and read whole, as in write-guard.sh: a cwd holding a newline
 # or ending in a space would otherwise be cut or trimmed.
-{ IFS= read -r -d '' hook_cwd; IFS= read -r -d '' session_id; IFS= read -r -d '' transcript_path; } < <(
-    jq -j '(.cwd // ""), "\u0000", (.session_id // ""), "\u0000", (.transcript_path // ""), "\u0000"'
+{ IFS= read -r -d '' hook_cwd; IFS= read -r -d '' session_id; IFS= read -r -d '' transcript_path; IFS= read -r -d '' prompt_id; } < <(
+    jq -j '(.cwd // ""), "\u0000", (.session_id // ""), "\u0000", (.transcript_path // ""), "\u0000", (.prompt_id // ""), "\u0000"'
 ) || true
 handoff_root_read "$hook_cwd"
 cwd="$HANDOFF_ROOT"
@@ -81,31 +88,10 @@ notes=()
 # rather than a repeat.
 marker="$HANDOFF_POINTER_DIR/handoff-drift-$session_id"
 
-# The directory is shared by every local user, so it and every name in it may
-# be a link someone else planted. The hook creates it 0700, and the marker is
-# used only in a directory that is no link, is this user's and is writable by
-# no one else; it is read only when it is a regular file of
-# this user's, opened without following a link (handoff_read_regular, so no
-# link put there between a check and the read is followed), and written through a mktemp file renamed over the
-# name (handoff_replace), which replaces a link rather than following it. The
-# temporary name matches `handoff-drift-*`, so session-pointer.sh sweeps an
-# orphan. Where the directory fails the test there is no marker, and drift is
-# reported every turn instead of once.
-marker_dir_ok() {
-    [[ -d "$HANDOFF_POINTER_DIR" && ! -L "$HANDOFF_POINTER_DIR" && -O "$HANDOFF_POINTER_DIR" ]] \
-        && [[ -z "$(find "$HANDOFF_POINTER_DIR" -maxdepth 0 \( -perm -020 -o -perm -002 \) 2>/dev/null)" ]]
-}
-
-# Record $hook_cwd, NUL-terminated, as the marker.
-write_marker() {
-    local tmp_marker
-    tmp_marker="$(mktemp "$marker.XXXXXX" 2>/dev/null)" || return 1
-    if ! printf '%s\0' "$hook_cwd" > "$tmp_marker" \
-        || ! handoff_replace "$tmp_marker" "$marker"; then
-        rm -f "$tmp_marker"
-        return 1
-    fi
-}
+# The drift marker: the destination last announced. marker_dir_ok, and the
+# no-follow read and the replacing write, are the shared helpers in _lib.sh; a
+# directory that fails marker_dir_ok has no marker, and drift is reported every
+# turn instead of once.
 
 case "$HANDOFF_ROOT_BRANCH" in
     foreign | unrelated)
@@ -125,7 +111,7 @@ case "$HANDOFF_ROOT_BRANCH" in
         fi
         if [[ "$last" != "$hook_cwd" ]]; then
             if marker_dir_ok; then
-                write_marker || true
+                handoff_write_marker "$marker" "$hook_cwd" || true
             fi
             # Both paths enter harness text the agent reads, so each is shown
             # as quoted data: `%q` puts a newline, an escape byte or any other
@@ -286,9 +272,28 @@ elif [[ "$failed_status" == ok ]]; then
     notes+=("The handoff transition drive failed to run its line: $reason. The transition or continuation it was driving did not happen, and any lines after it in the sequence were never run.")
 fi
 
+# A prompt queued into the arming turn (the header's point 2) carries that
+# turn's prompt_id, which handoff-checkpoint or handoff-approved recorded in the
+# session's prompt marker. Only an armed file this session owns is judged, so no other state
+# reads the marker and an ordinary prompt forks nothing here. Nothing is written.
+queued=0
+prompt_marker="$HANDOFF_POINTER_DIR/handoff-prompt-$session_id"
+if [[ "$drive_state" == "armed" && "$drive_owner" == "$session_id" \
+      && -n "$session_id" && -n "$prompt_id" ]] && marker_dir_ok; then
+    prompt_status="" marked_id=""
+    { IFS= read -r prompt_status || true
+      if [[ "$prompt_status" == ok ]]; then
+          IFS= read -r -d '' marked_id || true
+      fi
+    } < <(handoff_read_regular "$prompt_marker" own)
+    if [[ "$prompt_status" == ok && "$marked_id" == "$prompt_id" ]]; then
+        queued=1
+    fi
+fi
+
 # An autodrive is taken at the turn end after the turn that writes it, and that
-# take leaves it `pending` or removes it. So one still in state `armed` when a later
-# turn begins never ran.
+# take leaves it `pending` or removes it. So one still in state `armed` when a
+# prompt arrives has not run, and unless that prompt was queued it never will.
 #
 # `held` is the exception, and the reason this is a list rather than "anything
 # but pending": a held transition is *waiting* on an approval whose answer
@@ -300,13 +305,31 @@ if [[ "$drive_state" == "unread" ]]; then
     msgs+=("autodrive not read — $drive_err; left in place")
     notes+=("The autodrive-handoff plugin could not read .claude/autodrive ($drive_err). The file was left in place and not judged; a transition it holds may still run or be swept on a later turn.")
 fi
-if [[ -n "$drive_state" && "$drive_state" != "pending" && "$drive_state" != "held" \
+if [[ "$queued" == 1 && "$drive_kind" == "rename" ]]; then
+    : # left in place: the drive takes it at the end of the turn the prompt is in
+elif [[ "$queued" == 1 ]]; then
+    record_sweep
+    rm -f "$drive"
+    msgs+=("transition cancelled — a prompt arrived before it ran")
+    case "$drive_kind" in
+        clear)
+            notes+=("The driven /clear did not run. Answer this prompt, then run the handoff skill again with the same transition, unless this prompt changes that.") ;;
+        compact)
+            notes+=("The driven /compact did not run. Answer this prompt, then run the precompact skill again with the same transition, unless this prompt changes that.") ;;
+    esac
+elif [[ -n "$drive_state" && "$drive_state" != "pending" && "$drive_state" != "held" \
       && "$drive_state" != "foreign" && "$drive_state" != "unread" ]]; then
     record_sweep
     rm -f "$drive"
     if [[ "$drive_state" == "armed" ]]; then
+        # With no prompt_id the input cannot rule out a prompt typed while the
+        # arming turn ran, so the note names it as a possible cause.
+        queued_cause=""
+        if [[ -z "$prompt_id" ]]; then
+            queued_cause=", as does a prompt typed while that turn was still running"
+        fi
         msgs+=("stale autodrive discarded — the drive mod did not run it")
-        notes+=("A .claude/autodrive file was still armed when this turn began, so the transition it described did not run. Most likely the drive mod did not load (--safe-mode, a Claude Code older than 2.1.287, or an organization-managed Claude Code that does not list the plugin in managed settings); an interrupt or crash that ended the turn before it was taken leaves the same trace. The file has been discarded, so it cannot fire into unrelated work later.")
+        notes+=("A .claude/autodrive file was still armed when this turn began, so the transition it described did not run. Most likely the drive mod did not load (--safe-mode, a Claude Code older than 2.1.287, or an organization-managed Claude Code that does not list the plugin in managed settings); an interrupt or crash that ended the turn before it was taken leaves the same trace$queued_cause. The file has been discarded, so it cannot fire into unrelated work later.")
         # The lines are offered only to the session that wrote them. Another
         # session's, swept because its owner is not live, would be replayed into
         # this conversation.

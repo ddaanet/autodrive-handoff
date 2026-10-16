@@ -2,6 +2,15 @@
 
 2026-10-13.
 
+> **Superseded 2026-10-16** (see [A prompt queued into the arming
+> turn](2026-10-16-a-prompt-queued-into-the-arming-turn.md))
+> on the owner's own prompt being "the exact
+> discriminator": a prompt typed while the arming turn still runs fires the
+> owner's `UserPromptSubmit` inside that turn. The sweep now tells it apart by
+> its `prompt_id`, which is the arming turn's own, and leaves a `rename` and
+> cancels a `clear` or `compact` rather than treating the file as stale. The
+> owner and liveness rules for other sessions' files stand.
+
 ## What happened
 
 A driven clear armed by a `with-commit` handoff never ran. The sweep record

@@ -150,11 +150,19 @@ because the script owns root resolution.
 
 ## Running the plan
 
-For each line of `before` then `after`, in order, the mod first reads the
-prompt and **stops everything** if the person has text in it — it never runs
-over someone mid-sentence. A line starting with `/` runs as
-`$.command.run({command, args})`, the command name without its slash; any
-other line is `$.prompt.submit({text, asUser: true})`.
+For each line of `before` then `after`, in order, a line starting with `/`
+runs as `$.command.run({command, args})`, the command name without its slash;
+any other line is `$.prompt.submit({text, asUser: true})`.
+
+The mod does not read the prompt box. It once stopped on any text there, to
+avoid typing over a person; but `command.run` and `prompt.submit` do not type
+into the box. With text in the composer, `/rename`, `/clear` and
+`/compact <focus>` all took effect, `prompt.submit` sent the mod's text alone,
+and the person's text was still in the box afterwards, through the fresh
+session and the compaction too. The check cost transitions instead: text
+stashed and then restored before the turn ended made the mod take the
+sentinel, toast that it would run, and run nothing.
+[A prompt queued into the arming turn](../changelog/2026-10-16-a-prompt-queued-into-the-arming-turn.md)
 
 **A line that fails ends the sequence**, which is what makes a `/rename` that
 never lands under kind `clear` cost a wrong title and nothing more. The mod
@@ -222,9 +230,11 @@ through the same single `O_NOFOLLOW` open, never a test followed by a read.
 
 The hook also sweeps a sentinel still `armed`. `drive-take.sh` leaves it
 `pending` or removes it at the end of the turn that wrote it, so one still
-`armed` when the owner's next prompt arrives never ran. That holds only for the
-owner's prompt: another session's can arrive while the owning turn is still
-running. For a file owned by another session the hook asks whether that session
+`armed` when a prompt arrives has not run, and unless that prompt was typed
+into the arming turn it never will ([A prompt queued into the arming
+turn](queued-prompts.md)). Another session's prompt can arrive while the
+owning turn is still running too. For a file owned by another session the hook
+asks whether that session
 is **live** — its transcript, `<owner>.jsonl` beside the one in the hook input's
 `transcript_path`, written within `HANDOFF_OWNER_LIVE_SECS` (600 s by default).
 That question is asked of `armed` alone, which lives only until its owner's
@@ -245,7 +255,9 @@ replaces it.
 [Cross-session limits, documented](../changelog/2026-10-14-cross-session-limits-documented.md)
 
 For the owner's own `armed` file, or another's whose owner is not live, there are
-two causes the hook cannot tell apart: an aborted turn, and **the mod not being loaded** —
+two causes the hook cannot tell apart (three, when the input carries no
+`prompt_id` to rule out a prompt typed ahead): an aborted turn, and **the mod
+not being loaded** —
 `--safe-mode`, a Claude Code older than 2.1.287, or an organization-managed
 Claude Code that does not list the plugin in managed settings (Claude Code
 2.1.301: there, `classic.Stop` hooks pass over the plugins a person installs,
@@ -274,6 +286,14 @@ fixed name a planted link could redirect, renamed over the record by
 `os.replace`, which replaces a link put there meanwhile where `mv` would move
 the file into a directory it names. It says who took the file and how old it was; it
 does not decide whether the sweep was right.
+
+## A prompt queued into the arming turn
+
+The owner's own prompt can fire this hook inside the arming turn, before its
+`Stop`: the sweep tells it from an aborted turn by its `prompt_id` and leaves a
+`rename`, cancels a `clear` or `compact` and offers no lines. The argument, the
+marker that carries the id and the bounds are in
+[A prompt queued into the arming turn](queued-prompts.md).
 
 ## Sessions sharing a root
 
@@ -312,7 +332,8 @@ Three layers, because the mod's own seams are each reachable only one way:
 - `tests/mod/handoff.test.ts`, run by `claude plugin test`, stubs every mods
   API call the mod makes and asserts the exact call sequence: the deferral to
   `turn.complete`, stop-on-first-failure with the `failFile` write, the
-  prompt bail, the no-op on empty stdout and on an aborted turn. It consumes
+  absence of any prompt-box read, the no-op on empty stdout and on an aborted
+  turn. It consumes
   the same fixtures through a generated module, `tests/gen_mod_fixtures.py`,
   which `tests/test_mod_fixtures.py` keeps in step. Both gate `just precommit`.
 - `tests/test_mod_live.py` (`just mod-smoke`, outside precommit) drives a real

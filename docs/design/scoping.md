@@ -83,8 +83,22 @@ stale or wrong repo onto a pointer a live session then read for its whole
 remaining lifetime. Resolving per call has no such moment. See
 [`docs/changelog/2026-08-10-checkpoint-root-via-updatedinput.md`](../changelog/2026-08-10-checkpoint-root-via-updatedinput.md).
 
-The drift marker is the plugin's remaining state outside a project, and it
-has no owner that outlives the session. `session-pointer.sh` sweeps it (and
+The same matching path has a second effect. Once the root resolves and the
+input carries a `session_id` and a `prompt_id`, the hook records the id of the
+turn it runs in, NUL-terminated, in `$HANDOFF_POINTER_DIR/handoff-prompt-<session_id>`:
+the **prompt marker**, which `report-drive-failure.sh` compares a queued
+prompt's id with ([A prompt queued into the arming
+turn](queued-prompts.md)). It is written here and by nothing else, with the
+drift marker's guards, which live in `_lib.sh` (`marker_dir_ok`,
+`handoff_write_marker`) because two hooks use them. A marker that cannot be
+written changes nothing the hook prints, and the negative path stays one `jq`
+parse, now of four fields, and a substring test: the marker block sits after
+the root resolves, so a command that is neither entry point never reaches it.
+
+The drift marker and the prompt marker are the plugin's remaining state
+outside a project, and neither has an owner that outlives the session: the
+drift marker is cleared only if the cwd comes back, the prompt marker by
+nothing. `session-pointer.sh` sweeps them (and
 whatever stale root-pointer files the retired mechanism already left on
 disk) on every `SessionStart`, deleting files older than seven days, scoped
 by name to what this plugin writes and by `-maxdepth 1` to the level it

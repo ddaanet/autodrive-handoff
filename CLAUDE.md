@@ -129,8 +129,11 @@ note in `report-drive-failure.sh`.
   `$.command.run` from a `Stop` hook's call context, `$.clock.after` from it
   included, and timers die under `-p`. Fast path: a cwd equal to the session
   root with no `.claude/autodrive` returns without a spawn. Otherwise it runs
-  `scripts/drive-take.sh <cwd> <session-id>`; empty stdout is nothing armed. It reads the prompt
-  before each line and stops entirely on user text; a `/`-line is
+  `scripts/drive-take.sh <cwd> <session-id>`; empty stdout is nothing armed. It
+  does not read the prompt box and drives over whatever is typed there:
+  `command.run` and `prompt.submit` leave composer text untouched, so a guard
+  on it protected nothing and lost a transition when text was restored to the
+  box before the turn ended; a `/`-line is
   `$.command.run({command, args})`, other prose
   `$.prompt.submit({text, asUser: true})`; the first rejection writes
   `failFile` and toasts, and ends the sequence. A `Stop` with no session id
@@ -179,7 +182,25 @@ note in `report-drive-failure.sh`.
   ended on Esc or the mod did not load — with a note naming the unloaded mod
   (`--safe-mode`, Claude Code older than 2.1.287, or an organization-managed
   Claude Code whose managed settings do not list the plugin) and printing the
-  lines for the user to run. A file that does not parse is swept without lines,
+  lines for the user to run. A prompt sent while the arming turn still runs
+  fires this hook inside that turn, before its `Stop`, carrying that turn's
+  `prompt_id` (Claude Code 2.1.301), where a prompt after an Esc or at an idle
+  composer carries a fresh one. So for an `armed` file this session owns, with a
+  non-empty `prompt_id` in the input equal to the id in the prompt marker
+  (`$HANDOFF_POINTER_DIR/handoff-prompt-<session_id>`, read through
+  `marker_dir_ok` and `handoff_read_regular … own`, never written here), the
+  prompt is queued: a `rename` is left in place and nothing is said, a `clear`
+  or `compact` is swept, recorded, reported as `transition cancelled — a prompt
+  arrived before it ran` and met by a directive note (answer the prompt, then
+  run `handoff` or `precompact` again with the same transition), and no lines
+  are offered, since the transition and its continuation predate the prompt. No
+  `prompt_id` in the input sweeps as before, with the note also naming `a prompt
+  typed while that turn was still running`; no marker, a different id, any
+  other state or another session's file are as before, and an ordinary prompt
+  forks nothing new, the marker being read only behind the `armed`-and-owner
+  test. Cancelling rather than sparing, and writing the marker at the
+  checkpoint call rather than per prompt, are argued in
+  `docs/design/queued-prompts.md`. A file that does not parse is swept without lines,
   a link at the sentinel as its own `link` state, unread; a reader whose `python3` helper
   failed is `unread`, reported and never swept. `held` is exempt whoever owns
   it: it waits on a human, and a dead owner's is replaced by the next
@@ -255,7 +276,12 @@ note in `report-drive-failure.sh`.
   `absent`, `link`, `other` or `foreign`, then the bytes, from one
   `O_NOFOLLOW` open; nothing printed when `python3` failed);
   `handoff_replace <src> <dst>` (`os.replace`, replacing a link at the
-  destination rather than following it);
+  destination rather than following it); `marker_dir_ok` (the guard for every
+  marker in `$HANDOFF_POINTER_DIR`: a directory that is no link, is this user's
+  and is writable by no one else) and `handoff_write_marker <path> <value>`
+  (the value NUL-terminated into a `<path>.XXXXXX` `mktemp` sibling renamed
+  over the name, so a link there is replaced and an orphan matches the marker's
+  own sweep glob), shared by the drift marker and the prompt marker;
   `handoff_owner_live <transcript_path> <owner>` (the sweep's liveness test); `handoff_drive_has_source()` (`rename` has no
   confirming `SessionStart`; `compact` and `clear` do). Line 1 is the state
   (`held <session-id>`, `armed <session-id>`, `pending`; the owner is one id,
@@ -277,9 +303,9 @@ note in `report-drive-failure.sh`.
   a symlink whose own path does not mention the name is not. `TASK.md` and
   `TODO.md` are not guarded.
 - `scripts/session-pointer.sh` — `SessionStart` on every source: sweeps
-  `$HANDOFF_POINTER_DIR` of `handoff-root-*` (leftovers of a retired mechanism)
-  and `handoff-drift-*` older than 7 days, by name and `-maxdepth 1`, since the
-  directory is shared. Creates it `mkdir -m 700`, as the drift report does.
+  `$HANDOFF_POINTER_DIR` of `handoff-root-*` (leftovers of a retired mechanism),
+  `handoff-drift-*` and `handoff-prompt-*` older than 7 days, by name and
+  `-maxdepth 1`, since the directory is shared. Creates it `mkdir -m 700`, as the drift report does.
 - `scripts/worktree_root.py` — `worktree_root(cwd, project)`: walks up via
   on-disk `.git` linkage to the enclosing linked-worktree root, else `project`;
   returns `(root, branch)`, containment winning over the branch the walk took, so
@@ -287,8 +313,15 @@ note in `report-drive-failure.sh`.
 - `scripts/inject-checkpoint-root.sh` — `PreToolUse(Bash)`: matches any command
   containing `handoff-checkpoint` or `handoff-approved` (a loose substring test)
   and rewrites it to `export HANDOFF_ROOT=<quoted>; <original>` via
-  `updatedInput`, since neither entry point can resolve the root itself. NFR2:
-  the negative path is one jq parse and a substring test.
+  `updatedInput`, since neither entry point can resolve the root itself. On that
+  path, once the root resolves and the input's `session_id` and `prompt_id` are
+  both non-empty, it also records the `prompt_id`, NUL-terminated, in
+  `$HANDOFF_POINTER_DIR/handoff-prompt-<session_id>` (the prompt marker, under
+  `marker_dir_ok` and `handoff_write_marker`; created `mkdir -m 700 -p`); a
+  write that fails changes nothing the hook prints. It is written here and not
+  per prompt, which would fork on every prompt. NFR2: the negative path is one
+  jq parse, now of `command`, `cwd`, `session_id` and `prompt_id`, and a
+  substring test.
 - `scripts/checkpoint.py` — the one write path (FR1). Takes its root from
   `HANDOFF_ROOT` (`validate_root`, which refuses it when unset or not a
   directory), has `_checkpoint_payload.py` validate the JSON payload, hands
@@ -403,7 +436,8 @@ note in `report-drive-failure.sh`.
     `commit` fields → `the-skills.md`
   - `hooks/handoff.ts`, `drive-take.sh`, `load-handoff.sh`, `load-compact.sh`,
     `report-drive-failure.sh`'s sweep, `.claude/autodrive` and its states, FR-G
-    → `driving-the-transition.md`
+    → `driving-the-transition.md`; a prompt arriving while the arming turn runs,
+    the prompt marker → `queued-prompts.md`
   - `handoff-approved`, `closing_directive`, `ledger_path`, `held`,
     `with-commit`, the gitlore files, FR9, FR12 → `the-checkpoint-directive.md`
   - `worktree_root.py`, `handoff_root_read`, `inject-checkpoint-root.sh`,
@@ -486,15 +520,16 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
   `prompt.submit` sequence per kind, `Stop` driving nothing, an aborted turn
   (no `Stop`) driving nothing, the recorded cwd consumed once, the project-root
   fast path, the worktree/subdir fall-through, empty stdout, FR-G, a malformed
-  plan, the prompt bail before the first and mid-sequence, and
+  plan, and
   a Stop with no session id writing `failFile`, a link at `failFile` not
   written through, stop-on-first-failure with the `failFile` write (no live test reaches that
   path: no sentinel the parser accepts makes the host reject, see
   `docs/design/driving-the-transition.md`). The load-bearing rows are
-  mutation-checked, not observed passing: driving inside `Stop`, dropping the
-  prompt bail, continuing after a rejection, dropping the consume-once reset,
-  skipping the fast path. Its fixtures are the same plans `drive-take.sh`
-  prints, through the generated `tests/mod/fixtures.ts`.
+  mutation-checked, not observed passing: driving inside `Stop`, continuing
+  after a rejection, dropping the consume-once reset, skipping the fast path. No
+  expected log contains a prompt-box read and the rig stubs no such call, so a
+  restored one fails as an unstubbed call. Its fixtures are the same plans
+  `drive-take.sh` prints, through the generated `tests/mod/fixtures.ts`.
 - `tests/drive-take.bats` — runs the real `drive-take.sh` over real sentinel
   files and asserts stdout equals `tests/mod/fixtures/*.json` (`@ROOT@`
   substituted), plus: no file, `pending`, `held` and `armed` by another session
@@ -552,7 +587,19 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
   session left untouched and one whose owner's transcript is stale or
   missing, or with no `transcript_path`, swept, a failed reader helper
   leaving the file, the
-  owner's own aborted turn swept however fresh its transcript, the
+  owner's own aborted turn swept however fresh its transcript, a prompt
+  queued into the arming turn (the input's `prompt_id` equal to the prompt
+  marker's: an owner's `armed` `rename` left byte-identical with no output and
+  no sweep record; `clear` and `compact` swept, recorded and cancelled with the
+  per-kind note, no lines offered and no unloaded-mod note; each beside the
+  fresh-id row that sweeps as an aborted turn; an id with spaces and a trailing
+  newline spared on an exact match and swept when it differs by whitespace
+  alone; no `prompt_id` swept with the typed-ahead note, and no marker swept;
+  another session's `armed` file with a matching id left to the liveness rule,
+  a `held`, `pending` or malformed file unaffected; the sweep writing no
+  marker; a symlinked marker, a symlinked marker directory and a group- or
+  world-writable one not read, with the sweep still running; and an ordinary
+  prompt with an id and a marker forking no `find`), the
   `HANDOFF_OWNER_LIVE_SECS` window, each gate mutation-checked, a malformed file
   with none, session-root drift episodes and its cwd quoted (newline, ESC,
   backtick), the sweep's record: one line per
@@ -569,8 +616,8 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
   `/.`, a `..` detour, a newline in a directory component — and when it is a
   symlink or reached through an alias, in this project and across projects;
   `TASK.md`, `TODO.md`, `autodrive.md` and a file under a directory named
-  `autodrive` allowed), the pointer sweep, and
-  `handoff_root_read`'s labels. Each state gate is paired with the positive
+  `autodrive` allowed), the pointer sweep (a long-stale prompt marker removed,
+  another live session's kept), and `handoff_root_read`'s labels. Each state gate is paired with the positive
   over the same fixture, and the loader, guard and sweep gates are
   mutation-checked, as are the legacy rows: root-wins dropped, shadowing by
   the legacy file's body instead of its existence, a missing flag reset, a
@@ -580,10 +627,23 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
   is neither read nor shadowing, in `handoff_frame` and both loaders), and
   either root file's symlink refusal dropped (a `TASK.md` or `TODO.md` that is
   a valid or dangling symlink is not injected by either loader, and a
-  symlinked `TODO.md` lets the legacy todo load with no ignored note).
+  symlinked `TODO.md` lets the legacy todo load with no ignored note), and the
+  queued-prompt rows: owner test, non-empty `prompt_id` test, kind test (both
+  directions), `armed` state test, `marker_dir_ok` on the read, a marker write
+  in the sweep and the `handoff-prompt-*` glob of the pointer sweep each red a
+  row. The `own` argument of the prompt marker's read is the residual bound: no
+  unprivileged test can make a marker another user owns, so dropping it leaves
+  the suite green.
   `tests/checkpoint.bats` covers what stayed bash around the checkpoint:
   `inject-checkpoint-root.sh` (a root holding whitespace or ending in a newline
-  round-trips), `bin/handoff-approved` (output pinned whole, one
+  round-trips; the prompt marker: a `handoff-checkpoint` and a
+  `handoff-approved` call each leave the `prompt_id` NUL-terminated in a
+  private directory, a later call replaces it, a command that is neither call,
+  a missing `session_id` or `prompt_id` and a resolver that crashed write
+  nothing, a symlinked marker is replaced with its target untouched, a marker
+  that cannot be written leaves the output byte-identical, and an id holding a
+  space or ending in a newline round-trips; dropping the marker write reds the
+  writer rows), `bin/handoff-approved` (output pinned whole, one
   row per kind, against `closing_directive()` itself so the producers cannot
   drift; a failed reader helper reported as unreadable, not malformed) and the `bin/handoff-checkpoint` shim, plus
   the harness row that `make_repo` and `make_gitlore_repo` (via `run_git` in

@@ -14,6 +14,12 @@
 > unconditionally, while another session's prompt sweeps it only when the owner
 > is not live by its transcript's mtime.
 
+> **Superseded 2026-10-16** (see [A prompt queued into the arming
+> turn](2026-10-16-a-prompt-queued-into-the-arming-turn.md)) on the owner's own
+> prompt sweeping unconditionally: a prompt queued into the arming turn is
+> recognised by its `prompt_id` and not swept as stale. A prompt after an Esc,
+> or with no recorded match, sweeps as described here.
+
 `stop-compact.sh` checked only that `.claude/autocompact` existed. Its header
 claimed the fail-safe direction for free: *"Stop does NOT fire on an Esc
 interrupt, so an interrupted turn cannot arm the compaction."* True of the
