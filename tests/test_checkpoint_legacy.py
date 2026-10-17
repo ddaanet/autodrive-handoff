@@ -144,12 +144,16 @@ def snapshot(root: Path) -> dict[str, tuple[str, bytes]]:
     """Map every path under root (`.git` aside) to its kind and bytes.
 
     A symlink is recorded by its target and never followed, so a dangling one
-    and a directory are told apart from a file whose bytes happen to match.
+    and a directory are told apart from a file whose bytes happen to match. The
+    sentinel's lock file is left out: the first call that gets as far as taking
+    the lock creates it, it is never deleted and it holds nothing.
     """
     seen: dict[str, tuple[str, bytes]] = {}
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d != ".git"]
         for name in [*dirnames, *filenames]:
+            if name == "autodrive.lock":
+                continue
             path = Path(dirpath) / name
             rel = str(path.relative_to(root))
             if path.is_symlink():

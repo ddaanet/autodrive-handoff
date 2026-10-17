@@ -124,6 +124,14 @@ test('malformed plan toasts its message and runs nothing', async ($, on) => {
   expect(r.toasts[0]).toContain('autodrive malformed')
 })
 
+test('lock-busy plan toasts its message and runs nothing', async ($, on) => {
+  const r = rig(on, { sentinelExists: true, stdout: fixture('lock-busy', CWD) })
+  await endTurn($)
+  expect(r.log).toEqual(['process.run'])
+  expect(r.toasts.length).toBe(1)
+  expect(r.toasts[0]).toContain("the sentinel's lock was busy")
+})
+
 // --- failure ---------------------------------------------------------------
 
 test('first rejected line ends the sequence and writes failFile', async ($, on) => {

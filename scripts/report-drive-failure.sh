@@ -194,13 +194,20 @@ drive_err=""
 # removal it makes are one step: a take that ran first leaves `pending` for the
 # sweep to find, and one that runs after waits for the sweep. This includes
 # record_sweep and the failure branch's removal of a stranded `pending`. A lock
-# that cannot be taken (the bound, HANDOFF_LOCK_WAIT_SECS) is gone without, as
-# before the lock. Taken only for a file that is there, so the ordinary prompt
-# forks nothing; the second test is for one removed while this waited.
+# that cannot be taken fails closed, busy past the wait (HANDOFF_LOCK_WAIT_SECS)
+# or not set up at all: the file is neither read nor judged, so no state below
+# acts on it, and the report says it was left (the state `locked`, as `unread` is
+# for a reader that could not run). Taken only for a file that is there, so the
+# ordinary prompt forks nothing; the second test is for one removed while this
+# waited.
+lock_rc=0
 if [[ -L "$drive" || -f "$drive" ]]; then
-    handoff_lock_take "$cwd/$HANDOFF_REL_DRIVE_LOCK" || true
+    handoff_lock_take "$cwd/$HANDOFF_REL_DRIVE_LOCK" || lock_rc=$?
 fi
-if [[ -L "$drive" || -f "$drive" ]]; then
+if (( lock_rc != 0 )); then
+    drive_state="locked"
+    drive_err="$HANDOFF_LOCK_MSG"
+elif [[ -L "$drive" || -f "$drive" ]]; then
     read_rc=0
     handoff_drive_read "$drive" || read_rc=$?
     if (( read_rc == 0 )); then
@@ -262,6 +269,10 @@ if [[ "$failed_status" == link ]]; then
     rm -f "$failed"
     msgs+=("a symbolic link at $HANDOFF_REL_DRIVE_FAILED was removed unread")
     notes+=("A symbolic link sat where the handoff drive mod records a rejected line ($HANDOFF_REL_DRIVE_FAILED). The mod never writes one, so it was removed without reading what it points at; it says nothing about whether a transition ran.")
+elif [[ "$failed_status" == ok && "$drive_state" == "locked" ]]; then
+    # Its report and the clearing of a stranded `pending` go together, and the
+    # sentinel was not judged: the record stays for the next prompt.
+    :
 elif [[ "$failed_status" == ok ]]; then
     rm -f "$failed"
     # A failure part-way through a sequence strands the transition in `pending`:
@@ -311,6 +322,10 @@ fi
 # That holds for any owner's held file. Another session's armed file while it
 # is live was reclassified above as `foreign` and is not this session's to take.
 armed_lines=""   # the armed lines, for the user to type in order
+if [[ "$drive_state" == "locked" ]]; then
+    msgs+=("autodrive not judged — $drive_err; left in place")
+    notes+=("The autodrive-handoff plugin could not take the lock on .claude/autodrive ($drive_err), so it was left in place and not judged: a transition it holds may still run, and the next prompt judges what is there.")
+fi
 if [[ "$drive_state" == "unread" ]]; then
     msgs+=("autodrive not read — $drive_err; left in place")
     notes+=("The autodrive-handoff plugin could not read .claude/autodrive ($drive_err). The file was left in place and not judged; a transition it holds may still run or be swept on a later turn.")
@@ -328,7 +343,8 @@ elif [[ "$queued" == 1 ]]; then
             notes+=("The driven /compact did not run. Answer this prompt, then run the precompact skill again with the same transition, unless this prompt changes that.") ;;
     esac
 elif [[ -n "$drive_state" && "$drive_state" != "pending" && "$drive_state" != "held" \
-      && "$drive_state" != "foreign" && "$drive_state" != "unread" ]]; then
+      && "$drive_state" != "foreign" && "$drive_state" != "unread" \
+      && "$drive_state" != "locked" ]]; then
     record_sweep
     rm -f "$drive"
     if [[ "$drive_state" == "armed" ]]; then

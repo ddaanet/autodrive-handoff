@@ -59,7 +59,7 @@ take() {
     HANDOFF_LOCK_WAIT_SECS=30 bash scripts/drive-take.sh "$tmp" sess-hook-test \
         > "$BATS_TEST_TMPDIR/take.out" 2>&1 3>&- &
     take_pid=$!
-    wait_until_blocked "$take_pid"
+    wait_until_blocked
     seed "$tmp" "armed sess-other" clear "/rename Other" "/clear" "$CONTINUATION"
     release_drive_lock
     wait "$take_pid"
@@ -67,16 +67,34 @@ take() {
     [ "$(head -n1 "$tmp/.claude/autodrive")" = "armed sess-other" ]
 }
 
-# The bound: a lock that is not let go does not wedge the take. After the wait
-# (HANDOFF_LOCK_WAIT_SECS) it goes ahead unlocked, as it did before the lock.
-@test "drive-take (the lock is never released: the take goes ahead after the bound)" {
+# The bound fails closed: a lock that is not let go does not wedge the take,
+# and after the wait (HANDOFF_LOCK_WAIT_SECS) it takes nothing, leaves the file
+# as it is and prints a plan with no kind whose message names the lock. The
+# holder holds for the whole run, so the wait cannot succeed, and it is killed
+# afterwards: no sleep.
+@test "drive-take (the lock is held past the wait: nothing taken, file untouched, a kind-null plan names the lock)" {
     seed "$tmp" "armed sess-hook-test" compact "/compact keep the parser work" "$CONTINUATION"
+    cp "$tmp/.claude/autodrive" "$BATS_TEST_TMPDIR/sentinel.before"
     hold_drive_lock "$tmp"
-    HANDOFF_LOCK_WAIT_SECS=0.3 take "$tmp"
+    HANDOFF_LOCK_WAIT_SECS=0.05 take "$tmp"
     release_drive_lock
     [ "$status" -eq 0 ]
-    [ "$output" = "$(expected "$tmp" armed-compact.json)" ]
-    [ "$(head -n1 "$tmp/.claude/autodrive")" = "pending" ]
+    [ "$output" = "$(expected "$tmp" lock-busy.json)" ]
+    cmp "$BATS_TEST_TMPDIR/sentinel.before" "$tmp/.claude/autodrive"
+}
+
+# A lock that cannot be set up (a link at its name) is told apart from a busy
+# one, and fails closed the same way.
+@test "drive-take (a link at the lock: nothing taken, file untouched, the plan says the lock could not be set up)" {
+    seed "$tmp" "armed sess-hook-test" compact "/compact keep the parser work" "$CONTINUATION"
+    cp "$tmp/.claude/autodrive" "$BATS_TEST_TMPDIR/sentinel.before"
+    : > "$BATS_TEST_TMPDIR/elsewhere"
+    ln -s "$BATS_TEST_TMPDIR/elsewhere" "$tmp/.claude/autodrive.lock"
+    take "$tmp"
+    [ "$status" -eq 0 ]
+    echo "$output" | jq -e '.kind == null and .before == [] and .after == [] and .failFile == ""
+        and (.message | test("lock could not be set up; .*left untouched, nothing taken"))' >/dev/null
+    cmp "$BATS_TEST_TMPDIR/sentinel.before" "$tmp/.claude/autodrive"
 }
 
 @test "drive-take (no autodrive: empty stdout, exit 0)" {

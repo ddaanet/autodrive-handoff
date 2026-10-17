@@ -31,7 +31,7 @@ from conftest import (
     todo_keep,
     unset_clause_file,
 )
-from lock_holder import held_elsewhere, wait_until_blocked
+from lock_holder import blocked_signal, held_elsewhere
 
 pytestmark = pytest.mark.usefixtures("_session_id")
 
@@ -368,9 +368,10 @@ def test_sentinel_write_waits_on_the_lock(
     """Another actor holds the lock; the checkpoint writes the sentinel only
     once it is free.
 
-    The row changes nothing until the checkpoint has reported that it is waiting
-    on the lock, so an unlocked write, which never waits, fails the row however
-    late it starts. Without the lock it lands at once, under the other actor.
+    The row changes nothing until the checkpoint has reported, through a pipe it
+    blocks on, that it is waiting on the lock, so an unlocked write, which never
+    waits, fails the row however late it starts. Without the lock it lands at
+    once, under the other actor.
     """
     repo = make_repo(tmp_path)
     lock = repo / ".claude" / "autodrive.lock"
@@ -382,14 +383,78 @@ def test_sentinel_write_waits_on_the_lock(
     thread = threading.Thread(
         target=lambda: result.append(run_checkpoint(repo, payload))
     )
-    with held_elsewhere(lock):
+    with blocked_signal(blocked) as wait, held_elsewhere(lock):
         thread.start()
-        assert wait_until_blocked(blocked, thread.is_alive)
+        assert wait()
         assert not (repo / ".claude" / "autodrive").exists()
     thread.join(timeout=20)
     assert result
     assert result[0].returncode == 0, result[0].stderr
     assert (repo / ".claude" / "autodrive").exists()
+
+
+def _writing_payload() -> dict[str, object]:
+    """A call that would write both frame files and the sentinel."""
+    payload = handoff_payload("without-commit")
+    payload["task"] = "## Current task\n\nfresh task\n"
+    payload["todo"] = "## Remaining\n\n- fresh item\n"
+    return payload
+
+
+def _tree(repo: Path) -> dict[str, bytes]:
+    """Every file under the root outside .git and the lock file, by path."""
+    return {
+        str(path.relative_to(repo)): path.read_bytes()
+        for path in sorted(repo.rglob("*"))
+        if path.is_file()
+        and ".git" not in path.relative_to(repo).parts
+        and path.name != "autodrive.lock"
+    }
+
+
+def test_a_lock_held_past_the_wait_fails_closed_and_writes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The bound: with the lock held elsewhere for the whole run and the wait
+    tiny, the checkpoint exits 2 naming the lock before it writes anything.
+
+    The lock is taken ahead of the frame files, so a refused call leaves
+    TASK.md, TODO.md and the sentinel exactly as they were, and the same call
+    can be made again (an `edit` could not be, once applied). The holder is
+    killed when the body ends: no sleep.
+    """
+    repo = make_repo(tmp_path)
+    (repo / "TODO.md").write_text("## Remaining\n\n- old item\n")
+    (repo / ".claude" / "autodrive").write_text("armed sess-other\nrename\n/rename X\n")
+    before = _tree(repo)
+    monkeypatch.setenv("HANDOFF_LOCK_WAIT_SECS", "0.05")
+    with held_elsewhere(repo / ".claude" / "autodrive.lock"):
+        result = run_checkpoint(repo, _writing_payload())
+    assert result.returncode == 2
+    assert result.stderr.startswith("handoff-checkpoint: lock: ")
+    assert "busy" in result.stderr
+    assert result.stdout == ""
+    assert _tree(repo) == before
+
+
+def test_a_lock_that_cannot_be_set_up_fails_closed_and_writes_nothing(
+    tmp_path: Path,
+) -> None:
+    """A link at the lock's name is `unavailable`, told apart from busy, and
+    fails closed the same way; nothing is written through it."""
+    repo = make_repo(tmp_path)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.write_text("kept")
+    (repo / ".claude").mkdir(exist_ok=True)
+    (repo / ".claude" / "autodrive.lock").symlink_to(elsewhere)
+    before = _tree(repo)
+    result = run_checkpoint(repo, _writing_payload())
+    assert result.returncode == 2
+    assert result.stderr.startswith("handoff-checkpoint: lock: ")
+    assert "could not be set up" in result.stderr
+    assert "busy" not in result.stderr
+    assert elsewhere.read_text() == "kept"
+    assert _tree(repo) == before
 
 
 def test_a_read_back_that_cannot_run_removes_the_sentinel_and_says_so(

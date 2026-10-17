@@ -23,3 +23,8 @@ Choices the contract fixes for `drive-take.sh`:
   `null`, lists empty, `failFile` as always, and the message says the turn
   ended with no session id (`no-session.json`). The mod writes `failFile` on
   it, as for a rejected line, so the next prompt reports it.
+- The lock cannot be taken (`lock-busy.json`: the wait passed with another
+  actor holding it): file left exactly as it is, `kind` is `null`, lists empty,
+  `failFile` empty (the sentinel is still `armed`, so the next prompt's sweep
+  deals with it), and the message names the lock. A lock that could not be set
+  up at all prints the same shape with "could not be set up" for "was busy".

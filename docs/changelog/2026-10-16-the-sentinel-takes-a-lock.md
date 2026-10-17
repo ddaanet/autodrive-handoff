@@ -43,6 +43,10 @@ lock file, a child takes the lock on that descriptor, and the lock stays with
 the shell until it exits. A failure at any step is a lock not taken and the
 script carries on, as it did before. `handoff_drive_read` stays the one parser.
 
+> **Superseded 2026-10-17** (see [The lock fails closed](2026-10-17-the-lock-fails-closed.md)):
+> an actor that cannot take the lock, busy past the wait or not set up, no
+> longer goes ahead unlocked; it leaves the sentinel untouched and says so.
+
 **Fails open, bounded, never follows a link.** The wait is bounded at 5 s
 (`HANDOFF_LOCK_WAIT_SECS`) and then the actor goes ahead unlocked. The file is
 created 0600 by a step that opens it with `O_NOFOLLOW`, and the locking step

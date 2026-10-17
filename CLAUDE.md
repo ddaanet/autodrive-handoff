@@ -122,7 +122,9 @@ note in `report-drive-failure.sh`.
   `PreToolUse(Write|Edit)` (`write-guard.sh`); `PreToolUse(Bash)`
   (`inject-checkpoint-root.sh`); `SessionStart` on every source
   (`session-pointer.sh`), on `startup|clear` (`load-handoff.sh`) and on
-  `compact` (`load-compact.sh`).
+  `compact` (`load-compact.sh`). The three that take the sentinel's lock have
+  a `timeout` of 10 s, the default wait plus 5 s (asserted in
+  `tests/test_drive_lock.py`).
 - `hooks/handoff.ts` — the mod. `classic.Stop` records the turn's cwd and
   session id and nothing else (an interrupt fires no `Stop`, so an aborted turn arms nothing);
   `turn.complete` consumes it and drives **inline** — the host refuses
@@ -157,7 +159,9 @@ note in `report-drive-failure.sh`.
   reported with `kind: null`. Its stdout is pinned by
   `tests/mod/fixtures/*.json`. From its read to its exit it holds the
   sentinel's lock (`handoff_lock_take`, below), re-testing the file once it has
-  the lock.
+  the lock; a lock it cannot take (busy past the wait, or not set up) takes
+  nothing and prints a `kind: null` plan naming the lock
+  (`fixtures/lock-busy.json`), the file untouched.
 - `scripts/load-handoff.sh` — `SessionStart(startup|clear)`: assembles the
   frame in memory (`handoff_frame`, given the legacy paths too) and injects it
   via `additionalContext` plus a curt `systemMessage` with bytes and age. It
@@ -168,15 +172,18 @@ note in `report-drive-failure.sh`.
   gap note; the age is taken from the files that count, a legacy one included).
   On `clear` it consumes a `pending`
   transition of kind `clear` first, whatever the frame holds, reading and
-  removing it under the sentinel's lock. Starts no continuation — the mod
-  submits it.
+  removing it under the sentinel's lock; a lock not taken leaves it unread and
+  the frame is injected all the same, with a note on both channels. Starts no
+  continuation — the mod submits it.
 - `scripts/load-compact.sh` — `SessionStart(compact)`: consumes a `pending`
   `compact`, its read and removal under the sentinel's lock (and only that
   state and kind, so an `armed` file is left for the
   sweep and an overtaken `clear` is not consumed), injects the frame when
   there is one and tells the user `todo re-injected` or `No todo`, each
   followed by `; <fragment>` per legacy note, the same notes as
-  `load-handoff.sh` and no change in bytes without one. Silent when
+  `load-handoff.sh` and no change in bytes without one. With the lock not
+  taken it consumes nothing and still injects the frame, naming the left
+  sentinel on both channels (as `load-handoff.sh` does). Silent when
   nothing is pending, which keeps a hand-typed `/compact` or a threshold
   auto-compaction from re-injecting a stale list.
 - `scripts/report-drive-failure.sh` — `UserPromptSubmit`: reports and sweeps.
@@ -206,7 +213,9 @@ note in `report-drive-failure.sh`.
   checkpoint call rather than per prompt, are argued in
   `docs/design/queued-prompts.md`. A file that does not parse is swept without lines,
   a link at the sentinel as its own `link` state, unread; a reader whose `python3` helper
-  failed is `unread`, reported and never swept. `held` is exempt whoever owns
+  failed is `unread`, reported and never swept, and a lock not taken (busy or
+  not set up) is `locked`: not judged, left in place and reported on both
+  channels, a failure record left for the next prompt. `held` is exempt whoever owns
   it: it waits on a human, and a dead owner's is replaced by the next
   checkpoint. An `armed` file owned by another session is left untouched and
   unreported while that session is live (`handoff_owner_live`: its
@@ -298,10 +307,10 @@ note in `report-drive-failure.sh`.
   `other`, `foreign`, or empty for a failed helper) and `MARKER_VALUE`, NUL-safe, in the caller's scope:
   both markers are read through it);
   `HANDOFF_REL_DRIVE_LOCK` and `handoff_lock_take <lockfile>` (take the
-  sentinel's lock on fd 9, held until the shell exits or closes fd 9, rc 1
-  when not taken,
-  which no caller treats as an error: `|| true`; the `create` spawn only when
-  no regular lock file is there yet; see `_drive_lock.py`);
+  sentinel's lock on fd 9, held until the shell exits or closes fd 9; rc 1
+  busy past the wait, 2 unavailable, `HANDOFF_LOCK_MSG` set on either, and every
+  caller fails closed on both: the sentinel is left as it is; the `create` spawn
+  only when no regular lock file is there yet; see `_drive_lock.py`);
   `handoff_owner_live <transcript_path> <owner>` (the sweep's liveness test); `handoff_drive_has_source()` (`rename` has no
   confirming `SessionStart`; `compact` and `clear` do). Line 1 is the state
   (`held <session-id>`, `armed <session-id>`, `pending`; the owner is one id,
@@ -344,13 +353,17 @@ note in `report-drive-failure.sh`.
   substring test.
 - `scripts/_drive_lock.py` — the sentinel's advisory lock,
   `.claude/autodrive.lock` (`fcntl.flock`; `flock(1)` is not on macOS). `locked`
-  is the context manager `checkpoint.py` uses; the `create` and `wait`
+  is the context manager `checkpoint.py` uses (it raises `LockBusyError` or
+  `LockUnavailableError` on entry, never yielding unlocked); the `create` and `wait`
   commands are how bash holds it across steps through fd 9
-  (`handoff_lock_take`). The wait is bounded (`HANDOFF_LOCK_WAIT_SECS`, default
-  5) and a lock not taken is gone without; the file is 0600, opened
+  (`handoff_lock_take`, `wait` exiting 75 for busy). The wait is bounded
+  (`HANDOFF_LOCK_WAIT_SECS`, default 5) and a lock not taken fails closed in
+  every actor, the checkpoint exiting 2 (`lock: …`) before it writes anything;
+  the three lock-taking hooks have a 10 s `timeout` in `hooks.json`, asserted
+  against the default read from here. The file is 0600, opened
   `O_NOFOLLOW`, and never deleted. `HANDOFF_LOCK_BLOCKED_FILE`, when set, names
-  a file a wait touches once it finds the lock held: the one test-only seam,
-  which the ordering rows wait on instead of sleeping. `docs/design/sentinel-lock.md`.
+  a FIFO a wait writes a byte to once it finds the lock held: the one test-only
+  seam, which the ordering rows block on instead of sleeping. `docs/design/sentinel-lock.md`.
 - `scripts/checkpoint.py` — the one write path (FR1). Takes its root from
   `HANDOFF_ROOT` (`validate_root`, which refuses it when unset or not a
   directory), has `_checkpoint_payload.py` validate the JSON payload, hands
@@ -441,7 +454,8 @@ note in `report-drive-failure.sh`.
   file is another session's, or when the kind is not `rename|clear|compact`.
   Prints its status fact, a blank line, then the closing line (literal per
   `case` arm, byte-for-byte `closing_directive()`). Holds the sentinel's lock
-  from its read to its rewrite.
+  from its read to its rewrite; exits 2 naming the lock, the file untouched,
+  when it cannot be taken.
 - `tests/gen_mod_fixtures.py` — renders `tests/mod/fixtures.ts` from
   `tests/mod/fixtures/*.json`, because a hooks-module test can neither read
   files nor import JSON. `tests/test_mod_fixtures.py` fails when they disagree.
@@ -698,7 +712,10 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
   the actor, holding the lock from a background process, `tests/lock_holder.py`
   (through `tests/lock-helpers.bash` in bats), and changing the sentinel only
   once the actor has reported through `HANDOFF_LOCK_BLOCKED_FILE` that it waits
-  on the lock; the loaders' rows are in `tests/hook-test.bats`) and the `tests/test_checkpoint_*.py` files,
+  on the lock; the contention rows (lock held, wait 0.05 s, sentinel
+  byte-identical, fail-closed report; a link at the lock for the unavailable
+  cause) are with each actor, and no lock row sleeps or polls; the loaders' rows
+  are in `tests/hook-test.bats`) and the `tests/test_checkpoint_*.py` files,
   which drive `scripts/checkpoint.py` end-to-end via subprocess.
   `tests/conftest.py` holds what two or more of them use (the repository
   builders `make_repo` and `make_gitlore_repo`, the payload builders, the

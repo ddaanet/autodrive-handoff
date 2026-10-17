@@ -47,11 +47,18 @@ drive="$cwd/$HANDOFF_REL_DRIVE"
 # (_drive_lock.py): a checkpoint replaces whatever sentinel is there, so without
 # it one could land between the two and be removed unread. The lock is let go
 # once the file is consumed, ahead of the frame assembly. A lock that cannot be
-# taken (the bound, HANDOFF_LOCK_WAIT_SECS) is gone without, as before the lock.
+# taken fails closed, busy past the wait (HANDOFF_LOCK_WAIT_SECS) or not set up
+# at all: the sentinel is neither read nor removed, the frame below is assembled
+# and injected as usual, and both channels say the transition state was left.
 # The inner test is for a file removed while this waited.
+lock_ctx=""   # the agent's half of that note
 if [[ "$hook_source" == "clear" && ( -L "$drive" || -f "$drive" ) ]]; then
-    handoff_lock_take "$cwd/$HANDOFF_REL_DRIVE_LOCK" || true
-    if [[ -L "$drive" || -f "$drive" ]]; then
+    lock_rc=0
+    handoff_lock_take "$cwd/$HANDOFF_REL_DRIVE_LOCK" || lock_rc=$?
+    if (( lock_rc != 0 )); then
+        notes+=("autodrive left in place — $HANDOFF_LOCK_MSG")
+        lock_ctx="The transition state ($HANDOFF_REL_DRIVE) was left in place, not consumed: $HANDOFF_LOCK_MSG."
+    elif [[ -L "$drive" || -f "$drive" ]]; then
         read_rc=0
         handoff_drive_read "$drive" || read_rc=$?
         if (( read_rc == 2 )); then
@@ -128,6 +135,10 @@ print(int(max(os.path.getmtime(p) for p in sys.argv[1:])))' "${counted[@]}")
 else
     notes+=("No task frame or todo.")
     context="No task frame or todo."
+fi
+
+if [[ -n "$lock_ctx" ]]; then
+    context+=$'\n\n'"$lock_ctx"
 fi
 
 printf -v msg '%s; ' "${notes[@]}"

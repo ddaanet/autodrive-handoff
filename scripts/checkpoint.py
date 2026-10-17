@@ -27,6 +27,7 @@ the drift the single-parser design exists to prevent.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import shlex
 import subprocess
@@ -94,12 +95,17 @@ def main() -> int:
         # Only under handoff: after a compaction the summary carries the task.
         if skill == "handoff" and continuation:
             require_something_to_continue(plans)
+
+    # The frame files and the sentinel are written under the sentinel's lock,
+    # taken first: a call that cannot take it exits 2 having written nothing, so
+    # the same call can be made again (an `edit` could not be, once applied).
+    with contextlib.ExitStack() as stack:
+        hold_sentinel_lock(stack, root)
         for plan in plans:
             planning.apply_plan(plan)
-
-    compose_sentinel(
-        root, transition, continuation=continuation, owner=owner, held=held
-    )
+        compose_sentinel(
+            root, transition, continuation=continuation, owner=owner, held=held
+        )
     ending = Ending(held=held, typed=transition.typed)
     boundary = Boundary(skill, root, commit_mode)
     parts = compose_directives(boundary, memory, ending, plans)
@@ -193,40 +199,62 @@ def compose_sentinel(
     # `.claude/autodrive*` ignore covers, so one orphaned by a kill is never
     # committed.
     #
-    # The write and the read-back are one step under the sentinel's lock, so a
-    # take or a sweep acting on the file runs before or after both and never
-    # between them. A lock that cannot be taken (the bound,
-    # HANDOFF_LOCK_WAIT_SECS) is gone without.
+    # The write and the read-back are one step under the sentinel's lock, which
+    # the caller holds (`hold_sentinel_lock`), so a take or a sweep acting on the
+    # file runs before or after both and never between them.
     try:
-        drive_path.parent.mkdir(exist_ok=True)
+        planning.write_replacing(
+            drive_path,
+            "\n".join(sentinel_lines) + "\n",
+            prefix=f"{drive_path.name}.",
+        )
     except OSError as e:
         _cannot_write(e)
-    with drive_lock.locked(root / HANDOFF_REL_DRIVE_LOCK):
+    try:
+        ok, drive_err = _read_back_drive(drive_path)
+    except BaseException:
+        # Whatever the read-back raised, the file is unverified: gone
+        # before the error propagates.
+        drive_path.unlink(missing_ok=True)
+        raise
+    if not ok:
+        # Unverified and `armed` is a transition the mod would drive.
         try:
-            planning.write_replacing(
-                drive_path,
-                "\n".join(sentinel_lines) + "\n",
-                prefix=f"{drive_path.name}.",
-            )
+            drive_path.unlink()
         except OSError as e:
-            _cannot_write(e)
-        try:
-            ok, drive_err = _read_back_drive(drive_path)
-        except BaseException:
-            # Whatever the read-back raised, the file is unverified: gone
-            # before the error propagates.
-            drive_path.unlink(missing_ok=True)
-            raise
-        if not ok:
-            # Unverified and `armed` is a transition the mod would drive.
-            try:
-                drive_path.unlink()
-            except OSError as e:
-                drive_err += f"; it could not be removed: {e.strerror or e}"
+            drive_err += f"; it could not be removed: {e.strerror or e}"
     if not ok:
         lib.err(
             "transition",
             f"composed a sentinel this version cannot read back — {drive_err}",
+        )
+
+
+def hold_sentinel_lock(stack: contextlib.ExitStack, root: Path) -> None:
+    """Take the sentinel's lock for `stack`'s body, or exit 2 naming the lock.
+
+    Fails closed: a lock busy past the wait (HANDOFF_LOCK_WAIT_SECS) and one that
+    could not be set up (a link at its name, no flock) both end the call before
+    anything is written, in their own words. `.claude/` is created first, as the
+    lock file lives in it.
+    """
+    try:
+        (root / HANDOFF_REL_DRIVE).parent.mkdir(exist_ok=True)
+    except OSError as e:
+        _cannot_write(e)
+    try:
+        stack.enter_context(drive_lock.locked(root / HANDOFF_REL_DRIVE_LOCK))
+    except drive_lock.LockBusyError:
+        lib.err(
+            "lock",
+            f"the sentinel's lock ({HANDOFF_REL_DRIVE_LOCK}) was busy past the wait"
+            " (HANDOFF_LOCK_WAIT_SECS), so nothing was written; run the call again",
+        )
+    except drive_lock.LockUnavailableError as e:
+        lib.err(
+            "lock",
+            f"the sentinel's lock ({HANDOFF_REL_DRIVE_LOCK}) could not be set up"
+            f" ({e}), so nothing was written",
         )
 
 

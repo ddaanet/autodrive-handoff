@@ -46,10 +46,14 @@ drive="$root/$HANDOFF_REL_DRIVE"
 # The read below and the rewrite to `armed` are one step under the sentinel's
 # lock, held until this script exits: a checkpoint replacing the file, or a
 # take or sweep acting on it, is ordered before or after this approval and
-# never between its read and its write. A lock that cannot be taken (the
-# bound, HANDOFF_LOCK_WAIT_SECS) is gone without. The second test is for a file
-# removed while this waited.
-handoff_lock_take "$root/$HANDOFF_REL_DRIVE_LOCK" || true
+# never between its read and its write. A lock that cannot be taken fails
+# closed, busy past the wait (HANDOFF_LOCK_WAIT_SECS) or not set up at all: the
+# file is left as it is and the approval is asked for again. The second test is
+# for a file removed while this waited.
+lock_rc=0
+handoff_lock_take "$root/$HANDOFF_REL_DRIVE_LOCK" || lock_rc=$?
+(( lock_rc == 0 )) \
+    || err "$HANDOFF_LOCK_MSG, so $HANDOFF_REL_DRIVE was left untouched and nothing was armed; run handoff-approved again"
 [ -f "$drive" ] || err "no transition to arm: $HANDOFF_REL_DRIVE does not exist"
 
 handoff_drive_read "$drive" && drive_rc=0 || drive_rc=$?

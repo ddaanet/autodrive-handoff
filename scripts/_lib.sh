@@ -479,11 +479,16 @@ handoff_drive_arm() {
 
 # <lockfile>. Take the sentinel's lock, held until the shell exits (or closes
 # fd 9), so a script holds it across its whole read-decide-write by calling this
-# before the read. Returns 0 holding it, 1 not: a lock that cannot be taken
-# (no `.claude/`, a link at the name, python3 failing, the wait bound passed —
-# HANDOFF_LOCK_WAIT_SECS, default 5) is no reason to stop, and every caller
-# goes ahead as it did before the lock existed, so callers under `set -e` write
-# `handoff_lock_take … || true`.
+# before the read. Returns 0 holding it. Not holding it fails closed: the caller
+# leaves the sentinel alone, since acting unlocked reopens the race the lock
+# closes, and says why with HANDOFF_LOCK_MSG, which this sets on every failure.
+# Two returns tell the causes apart: 1 is `busy`, the wait bound passed with
+# another actor still holding the lock (HANDOFF_LOCK_WAIT_SECS, default 5); 2 is
+# `unavailable`, a lock that could not be set up at all (no `.claude/`, a link
+# or a non-file at the name, python3 or the helper failing, a file system with
+# no flock). Callers under `set -e` write `lock_rc=0; handoff_lock_take … ||
+# lock_rc=$?`. Call it directly, never in a `$(...)`: the message and the lock
+# itself are the caller's shell's.
 #
 # fd 9 is the lock's, and a script that calls this must not use it. A lock lives
 # on an open file description, which a child shares with the descriptor its
@@ -495,19 +500,27 @@ handoff_drive_arm() {
 # first take that is the usual case: one spawn instead of two). `wait` checks
 # that fd 9 is still the regular file the path names, which is the whole of the
 # safety `create` adds for a file already there. Read-write so that opening a
-# FIFO put there in the meantime cannot block.
+# FIFO put there in the meantime cannot block. `wait` exits 75 for busy and
+# anything else for unavailable (a crashed or missing python3 included).
+# shellcheck disable=SC2034  # HANDOFF_LOCK_MSG is read by the sourcing scripts
 handoff_lock_take() {
-    local lock="$1" helper
+    local lock="$1" helper wait_rc=0
+    HANDOFF_LOCK_MSG="the sentinel's lock could not be set up"
     helper="$HANDOFF_LIB_DIR/_drive_lock.py"
     if [[ ! -f "$lock" || -L "$lock" ]]; then
-        python3 -I "$helper" create "$lock" 2>/dev/null || return 1
+        python3 -I "$helper" create "$lock" 2>/dev/null || return 2
     fi
-    { exec 9<>"$lock"; } 2>/dev/null || return 1
-    if python3 -I "$helper" wait 9 "$lock" 2>/dev/null; then
+    { exec 9<>"$lock"; } 2>/dev/null || return 2
+    python3 -I "$helper" wait 9 "$lock" 2>/dev/null || wait_rc=$?
+    if (( wait_rc == 0 )); then
         return 0
     fi
     { exec 9>&-; } 2>/dev/null
-    return 1
+    if (( wait_rc == 75 )); then
+        HANDOFF_LOCK_MSG="the sentinel's lock was busy"
+        return 1
+    fi
+    return 2
 }
 
 # <path> [own]. Print a status line, then on `ok` the file's bytes, opened with

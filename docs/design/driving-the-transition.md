@@ -195,7 +195,9 @@ file it never read. Each consumes only
 its own kind in state `pending`: an `armed` file is left for the sweep, and a
 `clear` armed in this session and overtaken by a threshold auto-compaction is
 not consumed by the compact loader. The consume comes first and does not
-depend on the frame, so a `clear` with nothing to inject still consumes.
+depend on the frame, so a `clear` with nothing to inject still consumes. A
+loader that cannot take the lock consumes nothing and still injects the frame,
+saying so.
 
 What each says afterwards differs. `load-handoff.sh` always reports, on both
 channels: the frame's size and age, plus `No task frame` or `No todo` when one
@@ -306,8 +308,9 @@ a sweep that read `armed` could delete the `pending` file the take had just
 armed. Every actor of the sentinel, the checkpoint, `handoff-approved`,
 `drive-take.sh`, the sweep and the two loaders, holds an advisory lock
 (`.claude/autodrive.lock`) across its read-decide-write, with a bounded wait
-that fails open. The mechanism and its bounds are in [The sentinel's
-lock](sentinel-lock.md).
+that fails closed: an actor that cannot take it leaves the sentinel as it is
+and says so. The mechanism, its bounds and what each actor does are in [The
+sentinel's lock](sentinel-lock.md).
 
 ## Sessions sharing a root
 

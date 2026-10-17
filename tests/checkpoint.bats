@@ -497,7 +497,7 @@ pick up per the task file" ]
     (cd "$repo" && HANDOFF_ROOT="$repo" HANDOFF_LOCK_WAIT_SECS=30 bash "$APPROVED") \
         > "$BATS_TEST_TMPDIR/approved.out" 2>&1 3>&- &
     approved_pid=$!
-    wait_until_blocked "$approved_pid"
+    wait_until_blocked
     printf '%s\n' "held sess-someone-else" clear "/rename A Title" /clear \
         > "$repo/.claude/autodrive"
     release_drive_lock
@@ -506,6 +506,36 @@ pick up per the task file" ]
     [ "$approved_rc" -eq 2 ]
     [[ "$(cat "$BATS_TEST_TMPDIR/approved.out")" == *"session"* ]]
     [ "$(head -n1 "$repo/.claude/autodrive")" = "held sess-someone-else" ]
+}
+
+# The bound fails closed: the lock is held for the whole run (and the holder is
+# killed afterwards, no sleep), the wait is tiny, and the approval arms nothing,
+# exits 2 naming the lock and leaves the held file as it was.
+@test "handoff-approved: the lock is held past the wait -> exit 2 naming the lock, the held file untouched" {
+    repo="$(make_repo)"
+    printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" clear "/rename A Title" /clear \
+        "pick up per the task file" > "$repo/.claude/autodrive"
+    cp "$repo/.claude/autodrive" "$BATS_TEST_TMPDIR/sentinel.before"
+    hold_drive_lock "$repo"
+    HANDOFF_LOCK_WAIT_SECS=0.05 run_approved "$repo"
+    release_drive_lock
+    [ "$status" -eq 2 ]
+    [[ "$stderr" == *"the sentinel's lock was busy"* ]]
+    [[ "$output" != *"armed"* ]]
+    cmp "$BATS_TEST_TMPDIR/sentinel.before" "$repo/.claude/autodrive"
+}
+
+@test "handoff-approved: a link at the lock -> exit 2 saying it could not be set up, the held file untouched" {
+    repo="$(make_repo)"
+    printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" clear "/rename A Title" /clear \
+        "pick up per the task file" > "$repo/.claude/autodrive"
+    cp "$repo/.claude/autodrive" "$BATS_TEST_TMPDIR/sentinel.before"
+    : > "$BATS_TEST_TMPDIR/elsewhere"
+    ln -s "$BATS_TEST_TMPDIR/elsewhere" "$repo/.claude/autodrive.lock"
+    run_approved "$repo"
+    [ "$status" -eq 2 ]
+    [[ "$stderr" == *"the sentinel's lock could not be set up"* ]]
+    cmp "$BATS_TEST_TMPDIR/sentinel.before" "$repo/.claude/autodrive"
 }
 
 # The approval this command speaks for is the one *this* session was asked for.
@@ -559,7 +589,11 @@ pick up per the task file" ]
     repo="$(make_repo)"
     printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" compact "/compact" > "$repo/.claude/autodrive"
     stub="$BATS_TEST_TMPDIR/broken-python"; mkdir -p "$stub"
-    printf '#!/usr/bin/env bash\nexit 97\n' > "$stub/python3"; chmod +x "$stub/python3"
+    # The lock's helper still runs (a lock that cannot be set up fails closed
+    # before the read, and has its own row); every other python3 call fails.
+    real_python="$(command -v python3)"
+    printf '#!/usr/bin/env bash\ncase "$*" in *_drive_lock.py*) exec "%s" "$@" ;; esac\nexit 97\n' "$real_python" > "$stub/python3"
+    chmod +x "$stub/python3"
     # shellcheck disable=SC2016   # $1/$2/$3 are the inner bash -c's own positional params
     run --separate-stderr bash -c 'cd "$1" && PATH="$2:$PATH" HANDOFF_ROOT="$1" bash "$3"' _ "$repo" "$stub" "$APPROVED"
     [ "$status" -eq 2 ]
