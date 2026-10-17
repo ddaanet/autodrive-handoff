@@ -83,24 +83,28 @@ def main() -> int:
     check_sentinel_target(root)
 
     plans: list[planning.FilePlan] = []
+    task_fields: tuple[str, str] | None = None
+    todo_fields: tuple[str, str, str, str] | None = None
     if skill in ("handoff", "precompact"):
-        task_action, task_content = validation.validate_task(payload, skill)
-        todo_action, todo_content, todo_old, todo_new = validation.validate_todo(
-            payload
-        )
-        plans = [
-            planning.plan_task(root, task_action, task_content),
-            planning.plan_todo(root, todo_action, todo_content, todo_old, todo_new),
-        ]
-        # Only under handoff: after a compaction the summary carries the task.
-        if skill == "handoff" and continuation:
-            require_something_to_continue(plans)
+        task_fields = validation.validate_task(payload, skill)
+        todo_fields = validation.validate_todo(payload)
 
-    # The frame files and the sentinel are written under the sentinel's lock,
-    # taken first: a call that cannot take it exits 2 having written nothing, so
-    # the same call can be made again (an `edit` could not be, once applied).
+    # One locked scope covers reading TASK.md/TODO.md to plan, applying the
+    # plans and writing the sentinel, so an `edit` resolved against a body is
+    # applied to that body, never to one a waiting actor has since replaced.
+    # Taken before the first read of either file; a call that cannot take it
+    # exits 2 having written nothing, so the same call can be made again (an
+    # `edit` could not be, once applied).
     with contextlib.ExitStack() as stack:
         hold_sentinel_lock(stack, root)
+        if task_fields and todo_fields:
+            plans = [
+                planning.plan_task(root, *task_fields),
+                planning.plan_todo(root, *todo_fields),
+            ]
+            # Only under handoff: after a compaction the summary carries the task.
+            if skill == "handoff" and continuation:
+                require_something_to_continue(plans)
         for plan in plans:
             planning.apply_plan(plan)
         compose_sentinel(

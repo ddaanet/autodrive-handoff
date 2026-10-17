@@ -21,7 +21,9 @@ interleaving is wrong.
 Each actor holds an advisory lock, `.claude/autodrive.lock`, across its own
 read-decide-write, so the decision and the write are one step
 (`scripts/_drive_lock.py`, `flock(2)` through `fcntl`, which Linux and macOS
-share). The checkpoint holds it over the sentinel's write and read-back,
+share). The checkpoint holds it over its whole read-plan-write: the read of
+`TASK.md` and `TODO.md` that resolves each half, the application of the plans and
+the sentinel's write and read-back,
 `handoff-approved` from its read to its rewrite, `drive-take.sh` from its read
 to its exit, the sweep from its read to its exit, so `record_sweep` and the
 failure branch's removal of a stranded `pending` are inside it, and each loader
@@ -56,9 +58,18 @@ exactly as it was in every case:
 
 - `checkpoint.py` exits 2 through `lib.err` (`lock: …`, naming the lock and the
   cause) before it writes anything. It takes the lock before `TASK.md` and
-  `TODO.md` are written, not only around the sentinel, so a refused call leaves
-  all three untouched and the same call can be made again (an `edit` could not
-  be, once applied). The only thing it may leave is an empty `.claude/`.
+  `TODO.md` are read to be planned, not only around the sentinel, so an `edit`
+  that waited resolves against the body it finds once it has the lock, never
+  against one read before the wait, and a refused call leaves all three
+  untouched and the same call can be made again (an `edit` could not be, once
+  applied). What stays outside the lock is what reads only the payload or the
+  environment (validation, `HANDOFF_ROOT`, `CLAUDE_CODE_SESSION_ID`), the memory
+  directive's read of the gitlore submodule, which no actor of the sentinel
+  writes, and `check_sentinel_target`, which has to refuse a `.claude` that is a
+  file before the lock's own `mkdir` meets it. The only thing a refused call may
+  leave is an empty `.claude/`. The lock does not guard `TODO.md` against direct
+  edits: the agent's Edit tool takes no lock, and concurrent sessions in one
+  root stay a non-goal (`CLAUDE.md`, "Non-goals").
 - `handoff-approved` exits 2 naming the lock; the held file stays held.
 - `drive-take.sh` takes nothing and prints a `kind: null` plan whose message
   names the lock (`tests/mod/fixtures/lock-busy.json`, `failFile` empty as for

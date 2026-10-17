@@ -372,7 +372,8 @@ note in `report-drive-failure.sh`.
   into `FilePlan`s and applied, composes `.claude/autodrive` (creating
   `.claude/` when absent; `check_sentinel_target` refuses a `.claude` that is
   a file or a sentinel that is a directory before anything is written) through
-  `write_replacing` and reads it back, both under the sentinel's lock
+  `write_replacing` and reads it back, the whole read-plan-write (the reads
+  that resolve the plans included) under the sentinel's lock
   (`_drive_lock.locked`; only the write's `OSError` is reported as `cannot write`,
   and a read-back that fails or cannot run removes the unverified sentinel),
   then prints the directive parts

@@ -28,6 +28,7 @@ from conftest import (
     precompact_payload,
     run_checkpoint,
     task_clear,
+    todo_edit,
     todo_keep,
     unset_clause_file,
 )
@@ -391,6 +392,43 @@ def test_sentinel_write_waits_on_the_lock(
     assert result
     assert result[0].returncode == 0, result[0].stderr
     assert (repo / ".claude" / "autodrive").exists()
+
+
+def test_an_edit_is_planned_after_the_wait_not_before_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The lock covers the read-plan-write: an `edit` resolves against the
+    TODO.md the checkpoint finds once it has the lock.
+
+    The holder's change lands while the checkpoint waits, keeps the edit's
+    `old_string` and alters another line. A checkpoint that planned before it
+    waited applies the edit to the old body and writes it over the holder's
+    change; one that plans under the lock keeps both. The wait is the normal
+    one: the row releases the holder after the blocked signal, so nothing
+    sleeps or polls.
+    """
+    repo = make_repo(tmp_path)
+    todo = repo / "TODO.md"
+    todo.write_text("## Remaining\n\n- target item\n- other item\n")
+    lock = repo / ".claude" / "autodrive.lock"
+    blocked = tmp_path / "blocked"
+    monkeypatch.setenv("HANDOFF_LOCK_WAIT_SECS", "30")
+    monkeypatch.setenv(drive_lock.BLOCKED_ENV, str(blocked))
+    payload = handoff_payload("without-commit")
+    payload["todo"] = todo_edit("- target item", "- edited item")
+    result: list[subprocess.CompletedProcess[str]] = []
+    thread = threading.Thread(
+        target=lambda: result.append(run_checkpoint(repo, payload))
+    )
+    with blocked_signal(blocked) as wait, held_elsewhere(lock) as release:
+        thread.start()
+        assert wait()
+        todo.write_text("## Remaining\n\n- target item\n- holder item\n")
+        release()
+    thread.join(timeout=20)
+    assert result
+    assert result[0].returncode == 0, result[0].stderr
+    assert todo.read_text() == "## Remaining\n\n- edited item\n- holder item\n"
 
 
 def _writing_payload() -> dict[str, object]:
