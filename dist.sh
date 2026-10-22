@@ -4,7 +4,8 @@
 # and dogfood.sh need:
 #
 #   enabled <commit>                     exit 0 when <commit> carries dist.include
-#   tree <commit>                        print the sha of a tree holding exactly the listed paths
+#   tree <commit>                        print the sha of a tree holding exactly the listed paths,
+#                                        refused when a Markdown reference in it leaves it
 #   validate <tree>                      claude plugin validate --strict on that tree, extracted
 #   commit <src> <tree> <ver> [<parent>] print a commit of <tree>, author and committer copied from <src>
 #   paths <root>                         print <root>/dist.include's paths, NUL-delimited
@@ -117,6 +118,7 @@ cmd_tree() {
 
     GIT_INDEX_FILE="$tmp/index" git update-index -z --index-info < "$tmp/info"
     tree="$(GIT_INDEX_FILE="$tmp/index" git write-tree)"
+    check_refs "$tree"
     warn_result "$tmp/files" "$manifest_sha"
     printf '%s\n' "$tree"
 }
@@ -173,6 +175,22 @@ cmd_paths() {
     done < "$tmp/listed"
     [ "$problems" -eq 0 ] || exit 1
     cat "$tmp/listed"
+}
+
+# check_refs <tree>: check-refs.sh's shipped check over the built tree, where
+# every file is shipped, so a Markdown reference must resolve inside the tree.
+# Each line it refuses with becomes one dist: line.
+check_refs() {
+    local refs_sh line
+    refs_sh="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/check-refs.sh"
+    [ -f "$refs_sh" ] || die "check-refs.sh is missing beside dist.sh; run just update-plugin-dev"
+    if ! bash "$refs_sh" --tree "$1" >/dev/null 2>"$tmp/refs"; then
+        while IFS= read -r line; do
+            problem "$line"
+        done < "$tmp/refs"
+        [ "$problems" -gt 0 ] || problem "check-refs.sh failed on $1 and said nothing"
+        exit 1
+    fi
 }
 
 die() {

@@ -3,11 +3,19 @@
 # <root>/plugin-dev/bin/claude and put first on PATH, it execs the next claude on
 # PATH (every entry whose claude is the shim itself is dropped) with argv
 # unchanged, CLAUDE_CODE_PLUGIN_DIRS pointing at <root>/dist/plugin over any
-# inherited value, and CDPATH unset. It never syncs: a launch is not a
-# promotion, and only `just dogfood` writes the copy. With no copy it says so on
-# one dogfood: line naming that step, leaves the variable as it came, and
-# launches anyway; session-start then reports a session without the copy. With
-# no other claude on PATH it exits 127 and says so.
+# inherited value, and CDPATH unset.
+# <root>/dist/plugin/bin is also appended to that PATH, after every other entry.
+# A marketplace install puts a plugin's bin/ last on PATH and a
+# CLAUDE_CODE_PLUGIN_DIRS load puts nothing there, so the shim stands in for the
+# install; prepending would let a bin/ command shadow what the release never
+# shadows. Both settings are unconditional, copy or no copy: a PATH directory
+# that does not exist yet is inert, and claude starts cleanly with a plugin
+# directory that does not exist yet, so the first `just dogfood` of a running
+# session needs /reload-plugins and no relaunch. A repeat of the PATH entry is
+# harmless too.
+# It never syncs: a launch is not a promotion, and only `just dogfood` writes
+# the copy; session-start reports a session without it. With no other claude on
+# PATH it exits 127 and says so.
 # <root> is found from the script's own location, never from the launch
 # directory, and resolved physically, as dogfood.sh resolves its own, so the
 # variable spells the copy the way the hooks compute it.
@@ -15,40 +23,42 @@ set -euo pipefail
 unset CDPATH # else a relative cd searches it and prints its target
 
 main() {
-    local here root path
+    local here root copy
     here="$(dirname "${BASH_SOURCE[0]}" && printf x)"
     here="${here%?x}"
     root="$(cd -P -- "$here/../.." && printf '%s' "$PWD" && printf x)"
     root="${root%x}"
-    if [[ -d "$root/dist/plugin" ]]; then
-        export CLAUDE_CODE_PLUGIN_DIRS="$root/dist/plugin"
-    else
-        echo "dogfood: no copy at $root/dist/plugin, so claude starts without it; run just dogfood to create it" >&2
-    fi
-    path="$(path_without "${BASH_SOURCE[0]}" && printf x)"
-    export PATH="${path%x}"
+    copy="$root/dist/plugin"
+    export CLAUDE_CODE_PLUGIN_DIRS="$copy"
+    strip_path "${BASH_SOURCE[0]}"
+    export PATH="$stripped_path"
     if ! command -v claude >/dev/null; then
         echo "dogfood: no other claude on PATH" >&2
         exit 127
     fi
+    # After the claude check, so a claude the plugin ships in bin/ is never the
+    # next claude; the exec still finds the first one ahead of it.
+    export PATH="${stripped_path:+$stripped_path:}$copy/bin"
     exec claude "$@"
 }
 
-# PATH minus every entry whose claude is the file $1, however the entry is
-# spelled (trailing slash, symlinked directory, /./), so the exec finds the next
-# claude. An empty entry means the working directory, so it is tested as
-# ./claude and kept unless that is the shim itself. Every kept entry is prefixed
-# with a colon and the first one stripped, so an empty entry (the working
-# directory) survives in first place too.
-path_without() {
-    local entry out="" rest="$PATH:"
+# Sets stripped_path to PATH minus every entry whose claude is the file $1,
+# however the entry is spelled (trailing slash, symlinked directory, /./), so
+# the exec finds the next claude. An empty entry means the working directory, so
+# it is tested as ./claude and kept unless that is the shim itself. Every kept
+# entry is prefixed with a colon and the first one stripped, so an empty entry
+# (the working directory) survives in first place too. A root holding a colon
+# would split on the delimiter; nothing here claims to survive it.
+strip_path() {
+    local entry rest="$PATH:"
+    stripped_path=""
     while [[ -n "$rest" ]]; do
         entry="${rest%%:*}"
         rest="${rest#*:}"
         [[ "${entry:-.}/claude" -ef "$1" ]] && continue
-        out="$out:$entry"
+        stripped_path="$stripped_path:$entry"
     done
-    printf '%s' "${out#:}"
+    stripped_path="${stripped_path#:}"
 }
 
 main "$@"

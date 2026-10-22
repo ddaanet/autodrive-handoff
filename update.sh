@@ -69,6 +69,10 @@ if [ -f "$TOOLKIT_PREFIX/VERSION" ]; then
     [ "$new_version" = "$expected" ] \
         || echo "warning: $TOOLKIT_PREFIX/VERSION ($new_version) does not match requested ref ($ref)" >&2
 fi
+# No (or an empty) VERSION in the pulled tree, but the ref is a dist-v* one
+# (guarded above), so the version it names is the one pulled. The old version
+# has no such source: it is only what the consumer's own copy said.
+[ -n "$new_version" ] || new_version="$expected"
 
 # Print the migration notes for every version crossed by this pull:
 # old_version exclusive, new_version inclusive. Notes ship inside the dist
@@ -79,7 +83,7 @@ version_gt() {
     [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" = "$1" ]
 }
 
-if [ -d "$TOOLKIT_PREFIX/migrations" ] && [ -n "$new_version" ]; then
+if [ -d "$TOOLKIT_PREFIX/migrations" ]; then
     if [ -z "$old_version" ]; then
         echo "note: previous toolkit version unknown — review $TOOLKIT_PREFIX/migrations/ by hand." >&2
     else

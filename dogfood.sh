@@ -9,8 +9,9 @@
 #                  into <root>/dist/plugin/; exit 0 on either verdict, empty
 #                  stdout when allowing
 #   session-start  SessionStart hook: warn when this session does not load
-#                  <root>/dist/plugin/, or when jq is missing; exit 0,
-#                  empty stdout when silent
+#                  <root>/dist/plugin/, when it names that path and no
+#                  directory is there, or when jq is missing; exit 0, empty
+#                  stdout when silent
 set -euo pipefail
 unset CDPATH # else a relative cd searches it and prints its target
 
@@ -227,24 +228,29 @@ pre_tool() {
 
 # Silent when some ":"-separated entry of CLAUDE_CODE_PLUGIN_DIRS is
 # <root>/dist/plugin, each entry compared whole, never by prefix, suffix or
-# substring. An absolute entry naming a directory that can be entered is
-# resolved with physical_path, since Claude Code writes the variable back
-# normalized and a symlinked spelling must still match. Any other entry is
-# compared as spelled, trailing slashes stripped: a relative one, which Claude
-# Code drops, never matches, and one that cannot be entered puts no cd error on
-# stderr. Anything else, unset included, gets one object. The payload is not
-# read. systemMessage is the one line for the human, opening with an ANSI reset
-# so Claude Code does not dim it like routine hook output; it names the remedy:
-# with no <root>/dist/plugin directory, the shim's own test, just dogfood and a
-# relaunch, else launching through the shim. additionalContext gives the agent
-# the same finding as a fact and nothing to act on: no command, no way to make
-# the session load the copy, since the promotion and the relaunch are the
-# human's. The object is built with jq --arg, never spliced.
+# substring, and <root>/dist/plugin is a directory. An absolute entry naming a
+# directory that can be entered is resolved with physical_path, since Claude
+# Code writes the variable back normalized and a symlinked spelling must still
+# match. Any other entry is compared as spelled, trailing slashes stripped: a
+# relative one, which Claude Code drops, never matches, and one that cannot be
+# entered puts no cd error on stderr. The payload is not read. Anything else
+# gets one object, in one of three shapes. The session names the path and no
+# directory is there, a shim launch before the first just dogfood, or a regular
+# file where the copy belongs: just dogfood, then /reload-plugins, no relaunch.
+# The session does not name it and there is no copy: just dogfood, then direnv
+# allow in the root and a relaunch of claude. The session does not name it and
+# the copy exists: direnv allow and a relaunch. direnv loads the .envrc that
+# puts the shim first on PATH; the user is never told the shim's path.
+# systemMessage is the one line for the human, opening with an ANSI reset so
+# Claude Code does not dim it like routine hook output. additionalContext gives
+# the agent the same finding as a fact and nothing to act on: no command, no way
+# to make the session load the copy, since the promotion and the relaunch are
+# the human's. The object is built with jq --arg, never spliced.
 # Without jq there is no object to build and no copy guard in pre-tool, so the
 # check is skipped and a static systemMessage says so; it stays off the agent's
 # channel, since only the human can install jq.
 session_start() {
-    local root copy rest entry
+    local root copy rest entry named=0 no_copy
     if ! command -v jq >/dev/null; then
         printf '%s\n' '{"systemMessage":"\u001b[0mdogfood: jq is not on PATH, so the copy guard and this check are off until it is installed"}'
         exit 0
@@ -265,24 +271,30 @@ session_start() {
         else
             while [[ "$entry" == */ ]]; do entry="${entry%/}"; done
         fi
-        [[ "$entry" == "$copy" ]] && exit 0
+        if [[ "$entry" == "$copy" ]]; then
+            named=1
+            break
+        fi
     done
-    if [[ ! -d "$copy" ]]; then
-        jq -nc --arg copy "$copy" '{
-            systemMessage: ("\u001b[0m" + "dogfood: no copy at " + $copy + ", so this session does not load it; run just dogfood to create it, then relaunch"),
-            hookSpecificOutput: {
-                hookEventName: "SessionStart",
-                additionalContext: ("No copy exists at " + $copy + ", so this session loads none; plugin behaviour observed in it does not come from that path.")
-            }
-        }'
+    no_copy="No copy exists at $copy, so this session loads none; plugin behaviour observed in it does not come from that path."
+    if [[ -d "$copy" && "$named" == 1 ]]; then
         exit 0
+    elif [[ -d "$copy" ]]; then
+        warn_session "this session does not load $copy; run direnv allow in $root, then relaunch claude from a shell there" \
+            "This session does not load $copy, so plugin behaviour observed in it is not that of the promoted copy."
+    elif [[ "$named" == 1 ]]; then
+        warn_session "no copy at $copy yet; run just dogfood to create it, then /reload-plugins, no relaunch needed" "$no_copy"
+    else
+        warn_session "no copy at $copy, so this session does not load it; run just dogfood to create it, then direnv allow in $root and relaunch claude from a shell there" "$no_copy"
     fi
-    jq -nc --arg copy "$copy" '{
-        systemMessage: ("\u001b[0m" + "dogfood: this session does not load " + $copy + " — launch claude through plugin-dev/bin/claude from the repo root"),
-        hookSpecificOutput: {
-            hookEventName: "SessionStart",
-            additionalContext: ("This session does not load " + $copy + ", so plugin behaviour observed in it is not that of the promoted copy.")
-        }
+}
+
+# warn_session <message> <context>: the SessionStart object, the one-line
+# systemMessage for the human and the fact for the agent.
+warn_session() {
+    jq -nc --arg msg "$1" --arg ctx "$2" '{
+        systemMessage: ("\u001b[0mdogfood: " + $msg),
+        hookSpecificOutput: {hookEventName: "SessionStart", additionalContext: $ctx}
     }'
 }
 

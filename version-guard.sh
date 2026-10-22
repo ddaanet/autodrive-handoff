@@ -103,8 +103,9 @@ unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE \
 # A CLAUDE_PROJECT_DIR that is not itself a repo but sits inside one
 # lists the enclosing repo's tags instead; that only changes the wording
 # below, never the deny decision already established above. Same semver
-# filter release.sh's semver_tags uses, duplicated rather than sourced:
-# release.sh runs its flow at top level and isn't written to be sourced.
+# filter as semver_tags in release-tags.sh, duplicated rather than sourced:
+# that file is written for release.sh's shell (its die helper, its globals),
+# and one anchored grep is not worth coupling this hook to the release flow.
 #
 # A failed listing (git absent, killed, not a repo, ...) is not the same
 # answer as an empty one (a repo with no matching tags): the two take
