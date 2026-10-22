@@ -67,6 +67,22 @@ fi
 
 # 1. Vendor the toolkit if missing.
 if [ ! -d "$TOOLKIT_PREFIX" ]; then
+    # The state of this repository is a local fact, so it is checked before the
+    # network read below that resolves a missing ref: an unreachable remote must
+    # not hide a refusal that needs no remote. Each of the three has its own
+    # message, because `git rev-parse HEAD` fails outside a repository as well
+    # as in one with no commits, and `git diff HEAD` fails in the second.
+    git rev-parse --git-dir >/dev/null 2>&1 || {
+        echo "error: not a git repository — run this from the plugin's repository root" >&2
+        exit 1
+    }
+    # `subtree add` needs a commit to attach to; with none there is no HEAD to
+    # diff against either.
+    git rev-parse -q --verify HEAD >/dev/null || {
+        echo "error: no commits yet — commit the plugin before vendoring" >&2
+        exit 1
+    }
+    git diff --quiet HEAD || { echo "error: uncommitted changes — commit or stash before vendoring" >&2; exit 1; }
     if [ -z "$ref" ]; then
         # Same resolver as update.sh's no-ref default. Kept as a copy here:
         # the bootstrap script must stay runnable on its own, without
@@ -96,7 +112,6 @@ if [ ! -d "$TOOLKIT_PREFIX" ]; then
           exit 1
           ;;
     esac
-    git diff --quiet HEAD || { echo "error: uncommitted changes — commit or stash before vendoring" >&2; exit 1; }
     git subtree add --prefix="$TOOLKIT_PREFIX" "$TOOLKIT_URL" "$ref" --squash
     changed+=("$TOOLKIT_PREFIX/ (vendored at $ref)")
 elif [ -n "$ref" ]; then
@@ -246,8 +261,8 @@ else
     echo "  2. Commit the changes:"
     echo "     git add $TOOLKIT_PREFIX justfile .claude/settings.json"
     echo "     git commit -m 'add claude-plugin-dev toolkit'"
-    echo "  3. Set up the dogfood launcher: $TOOLKIT_PREFIX/README.md, section"
-    echo "     Dogfooding, subsection Setup. Until then the SessionStart check"
+    echo "  3. Set up the dogfood launcher: $TOOLKIT_PREFIX/manual/dogfood.md,"
+    echo "     section Setup. Until then the SessionStart check"
     echo "     warns on every session."
     echo "  4. Create the copy the session loads, then launch claude from the"
     echo "     repo root; without the copy the session starts without the plugin:"

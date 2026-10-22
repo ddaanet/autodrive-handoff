@@ -53,6 +53,10 @@
 # It skips non-fatally when MARKETPLACE_DIR is unset, the marketplace repo
 # isn't checked out, or the plugin has no entry yet (pre-first-publication).
 #
+# `check-refs` refuses a Markdown link whose target is missing, and, with a
+# dist.include, one from a shipped file to an unshipped one. No recipe here
+# runs it: a plugin wires it into its own gate, `precommit: check-refs`.
+#
 # Requirements: bash, jq, git, gh, rsync.
 
 toolkit_url := "git@github.com:ddaanet/claude-plugin-dev.git"
@@ -74,6 +78,10 @@ resume-release:
 # Check plugin.json's version against its marketplace.json entry.
 check-version:
     bash "{{toolkit_prefix}}/check-version.sh"
+
+# Refuse broken Markdown links, and shipped files linking outside dist.include.
+check-refs:
+    bash "{{toolkit_prefix}}/check-refs.sh"
 
 # Pull the vendored toolkit up to a dist tag; no ref = newest on the remote.
 update-plugin-dev ref='':
