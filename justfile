@@ -1,12 +1,23 @@
 import 'plugin-dev/release.just'
+import 'plugin-dev/gates.just'
+
+# Tool versions the gates' cached passes are keyed on, beyond what uv.lock pins
+# (ruff, mypy, ty, docformatter, pytest): the system tools every check shells
+# out to, and the claude binary that validates the plugin and runs the mod tests.
+export PLUGIN_DEV_GATE_TOOLS := "bats --version\nshellcheck --version\njq --version\ngit --version\npython3 --version\nclaude --version"
 
 # autodrive-handoff plugin — dev recipes
 #
-# `precommit` is the gate that runs before every commit: it lints the
-# manifests + settings, syntax-checks and lint/type-checks the Python
-# (mypy AND ty — ty catches Any-narrowing holes mypy launders through;
-# its version is locked, so gating it can't break the build
-# spontaneously), and runs the hook + pytest suites.
+# `precommit` is the gate that runs before every commit. It is two cached gates,
+# split because the cheap plugin checks read `skills/` and `.claude-plugin/`,
+# which the slow code checks never do: a skill edit must not pay for the
+# bats and pytest runs. `check-plugin` lints the manifests + settings, validates
+# the plugin, runs the mod tests and shellchecks; `check-code` lints/type-checks
+# the Python (mypy AND ty — ty catches Any-narrowing holes mypy launders
+# through; its version is locked, so gating it can't break the build
+# spontaneously) and runs the hook + pytest suites. Each skips itself while the
+# files it reads are unchanged; `PLUGIN_DEV_GATE_FORCE=1 just precommit` runs
+# them regardless, as before a release.
 #
 # `prerelease` is the gate the imported `release` recipe depends on.
 # Here it is exactly `precommit`; widen it if the release ever needs
@@ -16,22 +27,34 @@ import 'plugin-dev/release.just'
 _default:
     @just --list
 
-# Lint manifests + settings, lint/type-check the Python, run hook + pytest suites
-precommit:
+# Run both cached gates: the plugin checks and the code checks
+precommit: check-plugin check-code check-refs
+    @echo "precommit: check-plugin check-code passed"
+
+# Manifests, settings, plugin validation, mod tests, shellcheck; skipped while its inputs are unchanged
+check-plugin:
+    #!{{ plugin_dev_gate_prolog }}
+    sentinel-guard check-plugin .claude-plugin .claude/settings.json .gitignore bin hooks scripts skills tests
     jq . .claude-plugin/plugin.json > /dev/null
     jq . hooks/hooks.json > /dev/null
     jq . .claude/settings.json > /dev/null
     just validate-plugin
     claude plugin test
     shellcheck -x bin/* scripts/*.sh tests/*.bats
+    record-sentinel
+
+# Python lint + type checks and the bats + pytest suites; skipped while its inputs are unchanged
+check-code:
+    #!{{ plugin_dev_gate_prolog }}
+    sentinel-guard check-code .gitignore bin hooks scripts tests pyproject.toml uv.lock
     ruff check scripts tests
     ruff format --check scripts tests
     docformatter --check scripts/*.py tests/*.py
     mypy
     ty check
-    bats tests/hook-test.bats tests/checkpoint.bats tests/drive-take.bats
+    plugin-dev/run-bats.sh tests/hook-test.bats tests/checkpoint.bats tests/drive-take.bats
     pytest
-    @echo "ok"
+    record-sentinel
 
 # `claude plugin validate --strict`, minus two findings that cannot be fixed,
 # each dropped only on the entry whose `file` is the one it belongs to: the

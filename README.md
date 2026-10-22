@@ -229,16 +229,17 @@ and writes](#what-the-plugin-runs-and-writes) lists every file.
 
 ## Further reading
 
-- [Design hub](https://github.com/ddaanet/autodrive-handoff/blob/main/docs/design.md)
-  with the nodes under
-  [`docs/design/`](https://github.com/ddaanet/autodrive-handoff/tree/main/docs/design)
-- [Driving the transition](https://github.com/ddaanet/autodrive-handoff/blob/main/docs/design/driving-the-transition.md):
-  the mod, the sentinel, stale-file handling and sessions sharing a root
-- [The checkpoint directive](https://github.com/ddaanet/autodrive-handoff/blob/main/docs/design/the-checkpoint-directive.md):
-  memory commits, held and armed transitions
-- [`skills/handoff/SKILL.md`](skills/handoff/SKILL.md) and
-  [`skills/precompact/SKILL.md`](skills/precompact/SKILL.md): the protocols the
-  agent follows
+[`skills/handoff/SKILL.md`](skills/handoff/SKILL.md) and
+[`skills/precompact/SKILL.md`](skills/precompact/SKILL.md) are the protocols the
+agent follows.
+
+## Development
+
+The
+[design hub](https://github.com/ddaanet/autodrive-handoff/blob/main/docs/design.md)
+and its nodes hold the design, among them how the mod drives the transition
+(the sentinel, stale-file handling, sessions sharing a root) and the checkpoint
+directive (memory commits, held and armed transitions).
 
 ## License
 

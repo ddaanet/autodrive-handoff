@@ -552,12 +552,20 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
 `just mod-smoke`, needs `dangerouslyDisableSandbox`.
 
 - `just precommit` — the gate, and gitlore's `precommitCommand`, so it runs on
-  every memory commit (needs the direnv-activated venv). In order: `jq` over
+  every memory commit (needs the direnv-activated venv). It depends on two
+  cached gates (`plugin-dev/gates.just` sentinels, which skip a gate whose
+  inputs are unchanged; `PLUGIN_DEV_GATE_FORCE=1 just precommit` runs both
+  regardless). `check-plugin` (inputs `.claude-plugin`, `.claude/settings.json`,
+  `.gitignore`, `bin`, `hooks`, `scripts`, `skills`, `tests`): `jq` over
   `plugin.json`, `hooks.json` and `.claude/settings.json`; `just
   validate-plugin`; `claude plugin test`; `shellcheck -x` over `bin/*`,
-  `scripts/*.sh` and `tests/*.bats`; ruff check and format, docformatter, mypy,
-  ty; `bats tests/hook-test.bats tests/checkpoint.bats tests/drive-take.bats`;
-  `pytest`. The release recipe depends on this name through `prerelease`.
+  `scripts/*.sh` and `tests/*.bats`. `check-code` (inputs `bin`, `hooks`,
+  `scripts`, `tests`, `pyproject.toml`, `uv.lock`, `.gitignore`): ruff check and format,
+  docformatter, mypy, ty; `plugin-dev/run-bats.sh tests/hook-test.bats
+  tests/checkpoint.bats tests/drive-take.bats` (the quiet bats runner); `pytest`.
+  A new component directory the plugin validator reads (`agents/`, `commands/`)
+  goes into `check-plugin`'s list when it is created. The release recipe depends
+  on this name through `prerelease`.
 - `just validate-plugin` — `claude plugin validate --strict --json`, failing on
   any error or warning except the one that cannot be fixed: the repo-root
   `CLAUDE.md` "not loaded as project context" warning (it is this repo's own
