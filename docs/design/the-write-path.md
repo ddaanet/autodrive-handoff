@@ -8,7 +8,7 @@ Part of [handoff — Design](../design.md).
 plain tracked files: nothing is gitignored, nothing is force-added, and no hook
 stages them. Both are injected verbatim at `SessionStart`, task first, under
 one timestamp header — the *frame*, assembled in memory by `handoff_frame()`
-in `scripts/_lib.sh` and shared by the two loaders so the two transitions
+in `scripts/_lib_frame.sh` (reached through `_lib.sh`) and shared by the two loaders so the two transitions
 cannot drift.
 
 - **`TASK.md`** — `## Current task` alone: the task in hand and where it

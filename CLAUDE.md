@@ -252,7 +252,19 @@ note in `report-drive-failure.sh`.
   file, so this is the only trace of who took a sentinel.
 - `scripts/_lib.sh` — sourced helper (`# shellcheck source-path=SCRIPTDIR
   source=_lib.sh` above each `source`; `# shellcheck disable=SC2034` for vars
-  only sourcing scripts read). `HANDOFF_REL_*` path constants
+  only sourcing scripts read), the one file callers source. It keeps the path
+  constants, `handoff_owner_live`, `handoff_lock_take`, `handoff_root_read`,
+  `HANDOFF_UNRESOLVED_MSG` and `handoff_deny`, and after those sources three
+  parts from `$HANDOFF_LIB_DIR`, each under `# shellcheck
+  source-path=SCRIPTDIR/../scripts source=<part>`: `_lib_frame.sh`
+  (`handoff_frame`, `_handoff_has_body`, `handoff_frame_notes`),
+  `_lib_drive.sh` (the sentinel grammar: `_handoff_drive_*`,
+  `handoff_drive_read`, `handoff_drive_has_source`, `handoff_drive_arm`) and
+  `_lib_files.sh` (the file-safety primitives: `handoff_read_regular`,
+  `handoff_replace`, `marker_dir_ok`, `handoff_write_marker`,
+  `handoff_read_marker`). A part is never sourced by a caller; the
+  `../scripts` form is what lets shellcheck follow into it from `bin/` and
+  `tests/` too. `HANDOFF_REL_*` path constants
   (`HANDOFF_REL_DRIVE_SWEPT`, the sweep's record, among them);
   `HANDOFF_LEGACY_REL_*` beside them (the paths from before the move to the
   root, the loaders' fallback and the one marker of it, with a Python mirror in
@@ -534,9 +546,14 @@ note in `report-drive-failure.sh`.
 - `TODO.md` holds **open items only**. A finished item is dropped,
   never checked off: what landed is reconstructable from `git log`, and a
   done item still listed reads as outstanding and gets redone.
-- `_lib.sh`, the one remaining sourced bash helper, needs
+- `_lib.sh`, the one remaining sourced bash helper (callers source it alone;
+  it sources `_lib_frame.sh`, `_lib_drive.sh` and `_lib_files.sh`), needs
   `# shellcheck source-path=SCRIPTDIR source=_lib.sh` above the
-  `source` line so `shellcheck -x` follows it. Add
+  `source` line so `shellcheck -x` follows it. Inside `_lib.sh` the nested
+  `source` of a part carries `# shellcheck source-path=SCRIPTDIR/../scripts
+  source=<part>` instead: a bare `SCRIPTDIR` resolves against the top-level
+  script's directory, so from `bin/` and `tests/` shellcheck would silently
+  skip the part. Add
   `# shellcheck disable=SC2034` to vars consumed only by sourcing
   scripts. `_checkpoint_lib.py`, `_checkpoint_payload.py` and
   `_checkpoint_plan.py` are imported, not sourced, so this convention does not
@@ -626,8 +643,8 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
   answers in variables: which file counts, headings-only and whitespace-only
   ones not, `#tag` and a shebang yes, the reset between calls, nothing
   printed; an unreadable root or legacy file is no body, nor is a library that
-  exits 1 or 2, raises or is missing, each through a copy of `_lib.sh` sourced
-  beside a stub library), the `handoff_drive_read` shape matrix, `load-handoff.sh` and
+  exits 1 or 2, raises or is missing, each through a copy of `_lib.sh` and its
+  parts sourced beside a stub library), the `handoff_drive_read` shape matrix, `load-handoff.sh` and
   `load-compact.sh` (consume only their own kind in state `pending`, leave
   `armed` for the sweep, spawn nothing; the four frame states of
   `load-handoff.sh` with both channels asserted whole, the age taken from the

@@ -667,9 +667,9 @@ require_read_denied() {
     [ "${FRAME_TODO_LEGACY:-unset}" = "0" ]
 }
 
-# The library is found beside the sourced _lib.sh, so a copy of _lib.sh in a
-# directory of its own, sourced over the setup's, reads the stub placed beside
-# it. Nothing in production changes for the test.
+# The library is found beside the sourced _lib.sh, so a copy of _lib.sh and its
+# parts in a directory of its own, sourced over the setup's, reads the stub
+# placed beside it. Nothing in production changes for the test.
 # <exit status> — a stubbed library answering that status; a task file with a
 # body is then handed to handoff_frame.
 frame_with_stub_status() {
@@ -679,7 +679,7 @@ frame_with_stub_status() {
 # <name> <library source> — the same, with the stub library's whole source.
 frame_with_stub_lib() {
     stub="$BATS_TEST_TMPDIR/stub-lib-$1"; mkdir -p "$stub"
-    cp "$repo_root/scripts/_lib.sh" "$stub/_lib.sh"
+    cp "$repo_root/scripts/_lib.sh" "$repo_root"/scripts/_lib_*.sh "$stub/"
     printf '%s\n' "$2" > "$stub/_checkpoint_lib.py"
     # shellcheck source-path=SCRIPTDIR source=../scripts/_lib.sh disable=SC1090,SC1091
     source "$stub/_lib.sh"
@@ -1037,8 +1037,8 @@ read_drive() {
 @test "every python3 -c in the hooks and bin runs isolated (-I)" {
     run grep -n 'python3 -c' scripts/*.sh bin/*
     [ "$status" -eq 1 ]
-    run grep -c 'python3 -I -c' scripts/_lib.sh
-    [ "$output" -ge 1 ]
+    run grep -h 'python3 -I -c' scripts/_lib.sh scripts/_lib_*.sh
+    [ "$status" -eq 0 ]
 }
 
 # --- _lib.sh: handoff_drive_arm ---

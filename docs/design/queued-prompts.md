@@ -54,7 +54,7 @@ turn's, so the note leaves the phrase out; a marker directory that does not
 exist is the first of these, since nothing has ever written a marker there; the sweep and the lines are the same either way.
 `held`, `pending`, another session's file, a link, a malformed or unreadable
 one and the failure record are as before. Both markers are read through
-`handoff_read_marker` in `_lib.sh`.
+`handoff_read_marker` in `_lib_files.sh`.
 [A prompt queued into the arming turn](../changelog/2026-10-16-a-prompt-queued-into-the-arming-turn.md)
 
 **Residual bounds.** That a queued prompt carries the arming turn's id is
