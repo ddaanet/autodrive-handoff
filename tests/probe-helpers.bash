@@ -38,10 +38,6 @@ EOF
     echo "seed" > "$repo/memory/seed.md"
     run_git -C "$repo/memory" add -A
     run_git -C "$repo/memory" -c user.email=t@t -c user.name=t commit -qm seed
-    # gitlore.memoryApprovalClauseFile: what a real gitlore SessionStart would
-    # have seeded/re-pinned this session.
-    printf '%s\n' "a stand-in approval clause" > "$repo/.gitlore-memory-approval-clause.txt"
-    run_git -C "$repo" config gitlore.memoryApprovalClauseFile "$repo/.gitlore-memory-approval-clause.txt"
     printf '%s\n' "$repo"
 }
 

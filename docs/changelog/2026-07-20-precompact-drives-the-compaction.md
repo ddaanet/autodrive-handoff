@@ -29,6 +29,13 @@
 > watcher once the pane is idle. The decision that precompact can drive the
 > compaction stands.
 
+> **Superseded 2026-10-30** (see [Memory commits go through the
+> skill](2026-10-30-memory-commits-go-through-the-skill.md)) on the file IPC
+> and the with-commit/without-commit split of it: neither the message file nor
+> the trigger file exists, and the directive is the same under both modes. That
+> memory commits before the summariser runs, and the ordering constraint on the
+> sentinel write, stand.
+
 precompact used to end by telling the user to run `/compact`, and was
 explicitly forbidden from committing memory. Both are now inverted: the skill
 commits memory through the probe's directive and arms the compaction plus the

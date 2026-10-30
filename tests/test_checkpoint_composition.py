@@ -9,7 +9,6 @@ import os
 from collections.abc import Callable
 from pathlib import Path
 
-import _checkpoint_lib as lib
 import pytest
 from conftest import (
     add_flat_sdd_ledger,
@@ -24,7 +23,6 @@ from conftest import (
     run_git,
     task_clear,
     todo_keep,
-    unset_clause_file,
 )
 
 pytestmark = pytest.mark.usefixtures("_session_id")
@@ -55,12 +53,10 @@ def test_precompact_composition_carries_sdd_nudge_memory_first(tmp_path: Path) -
     add_sdd_ledger(repo)
     result = run_checkpoint(repo, precompact_payload("without-commit"))
     assert result.returncode == 0
-    assert str(repo / ".claude" / "gitlore-commit-memory") in result.stdout
+    assert "gitlore:commit" in result.stdout
     assert ".superpowers/sdd/feature-plan/progress.md" in result.stdout
     out_lines = result.stdout.splitlines()
-    mem_line = next(
-        i for i, line in enumerate(out_lines) if "gitlore-commit-memory" in line
-    )
+    mem_line = next(i for i, line in enumerate(out_lines) if "gitlore:commit" in line)
     sdd_line = next(
         i
         for i, line in enumerate(out_lines)
@@ -103,7 +99,8 @@ def test_each_boundary_composes_own_directive_not_the_others(
         assert "re-dispatched" in result.stdout
         assert "survives the /clear" not in result.stdout
     lines = result.stdout.splitlines()
-    mem = next(i for i, line in enumerate(lines) if "gitlore-memory-message" in line)
+    assert "gitlore:commit" in result.stdout
+    mem = next(i for i, line in enumerate(lines) if "gitlore:commit" in line)
     led = next(
         i
         for i, line in enumerate(lines)
@@ -135,7 +132,7 @@ def test_precompact_no_ledger_memory_directive_only(tmp_path: Path) -> None:
     dirty_memory(repo)
     result = run_checkpoint(repo, precompact_payload("without-commit"))
     assert result.returncode == 0
-    assert str(repo / ".claude" / "gitlore-memory-message") in result.stdout
+    assert "gitlore:commit" in result.stdout
     assert ".superpowers/sdd/feature-plan/progress.md" not in result.stdout
 
 
@@ -236,7 +233,6 @@ def test_held_sentinel_prints_no_closing_line(
     typed_field: str,
 ) -> None:
     repo = make_gitlore_repo(tmp_path)
-    assert lib.memory_directive(str(repo), "with-commit").text == ""
     payload = payload_fn("with-commit")
     payload[typed_field] = True
     result = run_checkpoint(repo, payload)
@@ -244,17 +240,3 @@ def test_held_sentinel_prints_no_closing_line(
     first_line = (repo / ".claude" / "autodrive").read_text().splitlines()[0]
     assert first_line == "held sess-checkpoint"
     assert "end on one line" not in result.stdout.lower()
-
-
-def test_refusal_prints_alone_when_not_held(tmp_path: Path) -> None:
-    repo = make_gitlore_repo(tmp_path)
-    dirty_memory(repo)
-    unset_clause_file(repo)
-    refusal = lib.memory_directive(str(repo), "with-commit")
-    assert refusal.text != ""
-    assert refusal.refusal
-    result = run_checkpoint(repo, precompact_payload("with-commit"))
-    assert result.returncode == 0
-    first_line = (repo / ".claude" / "autodrive").read_text().splitlines()[0]
-    assert first_line == "armed sess-checkpoint"
-    assert result.stdout == refusal.text

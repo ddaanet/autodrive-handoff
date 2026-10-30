@@ -33,7 +33,6 @@
   },
   "enabledPlugins": {},
   "gitlore": {
-    "enabled": true,
-    "precommitCommand": "just precommit"
+    "enabled": true
   }
 }

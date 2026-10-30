@@ -68,9 +68,11 @@ word for word goes in `TODO.md`. With "continue", `/compact` runs when your
 turn ends, `TODO.md` is re-injected and the work resumes.
 
 **Memory.** If your repository uses
-[gitlore](https://github.com/ddaanet/gitlore), the wrap-up also offers to
-commit uncommitted memory: it drafts the message and waits for your approval
-before any clear or compact.
+[gitlore](https://github.com/ddaanet/gitlore), the wrap-up also sends the agent
+to gitlore's `gitlore:commit` skill to commit uncommitted memory: it drafts the
+summary and waits for your approval before any clear or compact. This needs a
+gitlore that ships that skill. When the wrap-up also commits, that commit
+includes the memory pointer the skill staged.
 
 **When it does not run.** If the transition could not run, you are told at
 your next prompt, with the commands to run by hand. That happens on Claude
@@ -137,8 +139,8 @@ network code.
 `git` is read-only and runs only inside `handoff-checkpoint`, to learn whether
 a gitlore memory submodule has uncommitted changes:
 `git config --file .gitmodules submodule.gitlore-memory.path`, then
-`git -C <memory> status --porcelain` and
-`git -C <root> config --get gitlore.memoryApprovalClauseFile`.
+`git -C <memory> status --porcelain`. It commits nothing: memory is committed
+through gitlore's skill.
 
 ### What the mod submits
 

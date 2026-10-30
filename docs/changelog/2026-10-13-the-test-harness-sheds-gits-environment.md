@@ -4,6 +4,12 @@
 
 ## The defect
 
+> **Superseded 2026-10-30** (see [Memory commits go through the
+> skill](2026-10-30-memory-commits-go-through-the-skill.md)) on the cause named
+> below: gitlore no longer runs `just precommit` from a parent pre-commit hook,
+> and the clause-file refusal the decoy row saw is gone. Git exports those
+> variables to any hook that runs the gate, so shedding them stands.
+
 `make_repo`, `make_gitlore_repo` and `run_checkpoint` in `tests/conftest.py`
 passed the whole process environment to git and to `checkpoint.py`. gitlore's
 pre-commit hook runs `just precommit` with `GIT_DIR`, `GIT_INDEX_FILE` and

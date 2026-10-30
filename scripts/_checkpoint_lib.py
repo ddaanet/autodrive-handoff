@@ -2,23 +2,21 @@
 """Shared helpers for checkpoint.py and _checkpoint_plan.py.
 
 Port of _checkpoint-lib.sh — see docs/changelog/2026-08-10-python-split.md. Each
-directive function returns its directive text, or "" when silent
-(`memory_directive` wraps its text in a `MemoryPart`); the caller decides
-whether to print it. `err` is the one exit for a schema or write-time error,
-shared by both callers. The emptiness rule is also reachable from bash through
-the --has-body CLI.
+directive function returns its directive text, or "" when silent; the caller
+decides whether to print it. `err` is the one exit for a schema or write-time
+error, shared by both callers. The emptiness rule is also reachable from bash
+through the --has-body CLI.
 """
 
 from __future__ import annotations
 
-import os
 import re
 import shlex
 import subprocess
 import sys
 from collections.abc import Sequence
 from pathlib import Path
-from typing import NamedTuple, NoReturn
+from typing import NoReturn
 
 
 def _printf_lines(*args: str) -> str:
@@ -74,41 +72,19 @@ def _resolve_submodule_path(root: str) -> str:
     return mempath if result.returncode == 0 else ""
 
 
-def _resolve_approval_clause(root: str) -> str | None:
-    """Return the clause text, or None when it cannot be read.
+def memory_directive(root: str) -> str:
+    """Return the gitlore memory directive, or "" when nothing is owed.
 
-    The caller reports the key-and-restart fallback on None.
-    """
-    clause_result = subprocess.run(
-        ["git", "-C", root, "config", "--get", "gitlore.memoryApprovalClauseFile"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    clause_file = clause_result.stdout.strip() if clause_result.returncode == 0 else ""
-    path = Path(clause_file) if clause_file else None
-    if path is None or not path.is_file() or not os.access(path, os.R_OK):
-        return None
-    return path.read_text(encoding="utf-8").rstrip("\n")
-
-
-def memory_directive(root: str, mode: str) -> MemoryPart:
-    """Return the gitlore memory-commit directive, or an empty part.
-
-    When memory is dirty but the approval clause cannot be read, the part is the
-    clause-file refusal instead, flagged `refusal=True`.
-
-    `mode` ("with-commit"/"without-commit") selects which of gitlore's two
-    commit paths the agent is told to take. The with-commit text never mentions
-    the trigger file — its reader has no other source for that filename, so
-    saying nothing is what makes the standalone commit unreachable.
+    Owed when the `gitlore-memory` submodule is materialized and its worktree is
+    dirty. The text names the dirty paths and points at the `gitlore:commit`
+    skill, which owns the commit; it is the same under both commit modes.
     """
     mempath = _resolve_submodule_path(root)
     if not mempath:
-        return MemoryPart("", refusal=False)
+        return ""
     mem = Path(root) / mempath
     if not (mem / ".git").exists():
-        return MemoryPart("", refusal=False)
+        return ""
 
     status = subprocess.run(
         ["git", "-C", str(mem), "status", "--porcelain"],
@@ -117,86 +93,42 @@ def memory_directive(root: str, mode: str) -> MemoryPart:
         check=False,
     ).stdout.rstrip("\n")
     if not status.strip():
-        return MemoryPart("", refusal=False)
+        return ""
 
-    clause = _resolve_approval_clause(root)
-    if clause is None:
-        return MemoryPart(
-            _printf_lines(
-                "gitlore memory has uncommitted changes, but this session cannot "
-                "read the memory-approval wording: git config "
-                "gitlore.memoryApprovalClauseFile is unset or its file is missing. "
-                "gitlore pins that key at SessionStart — run /restart (or "
-                "exit and relaunch with --resume, by hand), then retry. The "
-                "memory changes are still pending."
-            ),
-            refusal=True,
-        )
-
-    msgfile = Path(root) / ".claude" / "gitlore-memory-message"
-    trigger = Path(root) / ".claude" / "gitlore-commit-memory"
-    approve_files = "the file below" if mode == "with-commit" else "either file below"
-
-    common = _printf_lines(
+    return _printf_lines(
         "gitlore memory has uncommitted changes:",
         "",
         status,
         "",
-        "Summarize these changes as a commit message, its title line at most "
-        "72 characters.",
-        "",
-        clause,
-        "",
-        "Present it to the user as a markdown blockquote (lines prefixed with "
-        f"'> ', not a code fence) and get their approval — they may edit it. Do "
-        f"not write {approve_files} before the user approves.",
-        "",
+        "Commit them through the gitlore:commit skill: invoke it before drafting a "
+        "summary, and follow it.",
     )
-    if mode == "with-commit":
-        specific = _printf_lines(
-            "Once approved, write the approved summary to:",
-            "",
-            f"     {msgfile}",
-            "",
-            "The commit that lands these changes carries the memory.",
-        )
-    else:
-        specific = _printf_lines(
-            "Once approved, commit the memory with two file writes (no Bash):",
-            "",
-            "  1. Write the approved summary to:",
-            f"     {msgfile}",
-            "  2. Write the trigger file (any content) to:",
-            f"     {trigger}",
-        )
-    return MemoryPart(common + specific, refusal=False)
 
 
-class MemoryPart(NamedTuple):
-    """The memory directive's text, and whether it is the clause-file refusal.
-
-    `text == ""` when nothing is owed. `refusal` is true only for the clause-
-    file refusal, the one memory text that suppresses every part after it — the
-    checkpoint prints it alone.
-    """
-
-    text: str
-    refusal: bool
-
-
-def commit_directive(root: str = "", legacy_paths: Sequence[str] = ()) -> str:
+def commit_directive(
+    root: str = "", legacy_paths: Sequence[str] = (), *, memory: bool = False
+) -> str:
     """Return the commit act, printed under "with-commit".
 
     Names no git verb for the commit itself: the request may call for an amend
     or a fresh commit, and the checkpoint does not know which. Names the two
-    files because nothing has staged what this call did to them. Legacy paths
-    this call moved or removed lead it, as `legacy_unstage_directive`, which
-    needs the root they are relative to.
+    files because nothing has staged what this call did to them. With `memory`
+    owed, the act also names the memory gitlink that `gitlore:commit` staged.
+    Legacy paths this call moved or removed lead it, as
+    `legacy_unstage_directive`, which needs the root they are relative to.
     """
-    commit = _printf_lines(
-        "Once everything above is done, make the commit the request called for, "
-        "including any change to `TASK.md` and `TODO.md`."
-    )
+    if memory:
+        sentence = (
+            "Once everything above is done, make the commit the request called for, "
+            "including any change to `TASK.md` and `TODO.md` and the memory gitlink "
+            "`gitlore:commit` staged."
+        )
+    else:
+        sentence = (
+            "Once everything above is done, make the commit the request called for, "
+            "including any change to `TASK.md` and `TODO.md`."
+        )
+    commit = _printf_lines(sentence)
     unstage = legacy_unstage_directive(root, legacy_paths)
     return f"{unstage}\n{commit}" if unstage else commit
 

@@ -7,25 +7,24 @@ tests/conftest.py.
 """
 
 import shutil
-import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
 import _checkpoint_lib as lib
 import pytest
 from conftest import (
-    GITLORE_MEMORY_APPROVAL_CLAUSE,
+    COMMIT_ACT,
+    COMMIT_ACT_WITH_MEMORY,
+    MEMORY_DIRECTIVE_CLOSING,
     add_sdd_ledger,
     assert_stdout_is_closing,
     dirty_memory,
-    git_free_env,
     handoff_payload,
     make_gitlore_repo,
     make_repo,
     precompact_payload,
     run_checkpoint,
     run_git,
-    unset_clause_file,
 )
 
 pytestmark = pytest.mark.usefixtures("_session_id")
@@ -58,119 +57,62 @@ def test_submodule_registered_not_materialized_closing_only(tmp_path: Path) -> N
     assert_stdout_is_closing(result, "handoff", typed=False)
 
 
-def test_dirty_memory_directive_names_both_ipc_paths(tmp_path: Path) -> None:
+MEMORY_HEAD = "gitlore memory has uncommitted changes:"
+MEMORY_PART = f"{MEMORY_HEAD}\n\n?? feedback_x.md\n\n{MEMORY_DIRECTIVE_CLOSING}\n"
+
+
+@pytest.mark.parametrize("commit", ["without-commit", "with-commit"])
+def test_dirty_memory_directive_is_the_status_then_the_skill_sentence(
+    tmp_path: Path, commit: str
+) -> None:
     repo = make_gitlore_repo(tmp_path)
     dirty_memory(repo)
-    result = run_checkpoint(repo, handoff_payload("without-commit"))
+    result = run_checkpoint(repo, handoff_payload(commit))
+    assert result.returncode == 0
+    assert MEMORY_PART in result.stdout
+
+
+@pytest.mark.parametrize("commit", ["without-commit", "with-commit"])
+def test_dirty_memory_directive_names_no_file_handshake(
+    tmp_path: Path, commit: str
+) -> None:
+    repo = make_gitlore_repo(tmp_path)
+    dirty_memory(repo)
+    result = run_checkpoint(repo, handoff_payload(commit))
     assert result.returncode == 0
     assert "uncommitted changes" in result.stdout
-    assert "feedback_x.md" in result.stdout
-    assert str(repo / ".claude" / "gitlore-memory-message") in result.stdout
-    assert str(repo / ".claude" / "gitlore-commit-memory") in result.stdout
+    out = result.stdout.lower()
+    for gone in (
+        "gitlore-memory-message",
+        "gitlore-commit-memory",
+        "memoryapprovalclausefile",
+        "trigger",
+        "blockquote",
+    ):
+        assert gone not in out
 
 
-def test_clause_resolved_content_is_its_own_block(tmp_path: Path) -> None:
-    repo = make_gitlore_repo(tmp_path)
-    dirty_memory(repo)
-    result = run_checkpoint(repo, handoff_payload("without-commit"))
-    assert result.returncode == 0
-    assert GITLORE_MEMORY_APPROVAL_CLAUSE in result.stdout
-    assert f"\n\n{GITLORE_MEMORY_APPROVAL_CLAUSE}\n\n" in result.stdout
-    assert "72 characters" in result.stdout
+def _memory_part(stdout: str) -> str:
+    """The memory directive: from its head through its closing sentence."""
+    start = stdout.find(MEMORY_HEAD)
+    assert start != -1, stdout
+    end = stdout.find(MEMORY_DIRECTIVE_CLOSING, start)
+    assert end != -1, stdout
+    return stdout[start : end + len(MEMORY_DIRECTIVE_CLOSING)]
 
 
-def test_clause_file_unset_names_key_and_restart(tmp_path: Path) -> None:
-    repo = make_gitlore_repo(tmp_path)
-    dirty_memory(repo)
-    unset_clause_file(repo)
-    result = run_checkpoint(repo, handoff_payload("without-commit"))
-    assert result.returncode == 0
-    assert "gitlore.memoryapprovalclausefile" in result.stdout.lower()
-    assert "/restart" in result.stdout
-    # The checkpoint has already written the task file, the todo file and the
-    # sentinel by the time this prints, so it claims no such thing — only that
-    # the memory changes are still pending.
-    assert "Nothing has been written" not in result.stdout
-    assert "The memory changes are still pending." in result.stdout
-    assert str(repo / ".claude" / "gitlore-memory-message") not in result.stdout
-    assert str(repo / ".claude" / "gitlore-commit-memory") not in result.stdout
-
-
-def test_clause_file_missing_same_key_and_restart_report(tmp_path: Path) -> None:
-    repo = make_gitlore_repo(tmp_path)
-    dirty_memory(repo)
-    run_git(
-        repo,
-        "config",
-        "gitlore.memoryApprovalClauseFile",
-        str(repo / ".gitlore-memory-approval-clause-missing.txt"),
-    )
-    result = run_checkpoint(repo, handoff_payload("without-commit"))
-    assert result.returncode == 0
-    assert "gitlore.memoryapprovalclausefile" in result.stdout.lower()
-    assert "/restart" in result.stdout
-    assert "Nothing has been written" not in result.stdout
-    assert "The memory changes are still pending." in result.stdout
-    assert str(repo / ".claude" / "gitlore-memory-message") not in result.stdout
-
-
-def test_unset_and_missing_clause_reports_are_the_same(tmp_path: Path) -> None:
-    repo_unset = make_gitlore_repo(tmp_path, "glrepo_unset")
-    dirty_memory(repo_unset)
-    unset_clause_file(repo_unset)
-    unset_result = run_checkpoint(repo_unset, handoff_payload("without-commit"))
-
-    repo_missing = make_gitlore_repo(tmp_path, "glrepo_missing")
-    dirty_memory(repo_missing)
-    run_git(
-        repo_missing,
-        "config",
-        "gitlore.memoryApprovalClauseFile",
-        str(repo_missing / "gone.txt"),
-    )
-    missing_result = run_checkpoint(repo_missing, handoff_payload("without-commit"))
-
-    assert unset_result.returncode == 0
-    assert missing_result.returncode == 0
-    assert unset_result.stdout == missing_result.stdout
-
-
-def test_with_commit_summary_write_only_no_trigger_mention(tmp_path: Path) -> None:
-    repo = make_gitlore_repo(tmp_path)
-    dirty_memory(repo)
-    result = run_checkpoint(repo, handoff_payload("with-commit"))
-    assert result.returncode == 0
-    assert str(repo / ".claude" / "gitlore-memory-message") in result.stdout
-    assert "gitlore-commit-memory" not in result.stdout
-    assert "trigger" not in result.stdout
-    assert "two file writes" not in result.stdout
-
-
-def test_with_commit_states_commit_carries_the_memory(tmp_path: Path) -> None:
-    repo = make_gitlore_repo(tmp_path)
-    dirty_memory(repo)
-    result = run_checkpoint(repo, handoff_payload("with-commit"))
-    assert result.returncode == 0
-    assert "carries the memory" in result.stdout.lower()
-
-
-def test_without_commit_keeps_standalone_two_file_instruction(tmp_path: Path) -> None:
-    repo = make_gitlore_repo(tmp_path)
-    dirty_memory(repo)
-    result = run_checkpoint(repo, handoff_payload("without-commit"))
-    assert result.returncode == 0
-    assert "two file writes" in result.stdout
-    assert "Write the trigger file (any content)" in result.stdout
-    assert "carries the memory" not in result.stdout
-
-
-def test_with_commit_memory_text_drops_nothing_further(tmp_path: Path) -> None:
-    repo = make_gitlore_repo(tmp_path)
-    dirty_memory(repo)
-    result = run_checkpoint(repo, handoff_payload("with-commit"))
-    assert result.returncode == 0
-    assert "gitlore memory has uncommitted changes" in result.stdout
-    assert "nothing further" not in result.stdout.lower()
+def test_memory_part_is_byte_identical_under_both_commit_modes(
+    tmp_path: Path,
+) -> None:
+    parts = []
+    for commit in ("without-commit", "with-commit"):
+        repo = make_gitlore_repo(tmp_path, f"glrepo_{commit}")
+        dirty_memory(repo)
+        result = run_checkpoint(repo, handoff_payload(commit))
+        assert result.returncode == 0
+        parts.append(_memory_part(result.stdout))
+    assert parts[0] == parts[1]
+    assert parts[0] == MEMORY_PART.rstrip("\n")
 
 
 # ==========================================================================
@@ -183,37 +125,67 @@ def test_with_commit_prints_the_commit_act(
     tmp_path: Path, payload_fn: Callable[[str], dict[str, object]]
 ) -> None:
     repo = make_gitlore_repo(tmp_path)
-    commit_act = lib.commit_directive()
-    assert commit_act
     result = run_checkpoint(repo, payload_fn("with-commit"))
     assert result.returncode == 0
-    assert commit_act in result.stdout
-    assert "commit" in commit_act.lower()
+    assert COMMIT_ACT in result.stdout
+    assert "gitlink" not in result.stdout
 
 
 @pytest.mark.parametrize("payload_fn", [handoff_payload, precompact_payload])
-def test_without_commit_prints_no_commit_act(
+def test_with_commit_and_dirty_memory_names_the_staged_gitlink(
     tmp_path: Path, payload_fn: Callable[[str], dict[str, object]]
 ) -> None:
     repo = make_gitlore_repo(tmp_path)
-    commit_act = lib.commit_directive()
-    assert commit_act
+    dirty_memory(repo)
+    result = run_checkpoint(repo, payload_fn("with-commit"))
+    assert result.returncode == 0
+    assert COMMIT_ACT_WITH_MEMORY in result.stdout
+    assert COMMIT_ACT not in result.stdout
+
+
+@pytest.mark.parametrize("payload_fn", [handoff_payload, precompact_payload])
+@pytest.mark.parametrize("dirty", [False, True], ids=["clean", "dirty"])
+def test_without_commit_prints_no_commit_act(
+    tmp_path: Path,
+    payload_fn: Callable[[str], dict[str, object]],
+    *,
+    dirty: bool,
+) -> None:
+    repo = make_gitlore_repo(tmp_path)
+    if dirty:
+        dirty_memory(repo)
     result = run_checkpoint(repo, payload_fn("without-commit"))
     assert result.returncode == 0
-    assert commit_act not in result.stdout
+    assert COMMIT_ACT not in result.stdout
+    assert COMMIT_ACT_WITH_MEMORY not in result.stdout
+    assert "make the commit the request called for" not in result.stdout
 
 
-def test_commit_act_is_the_exact_no_git_verb_sentence() -> None:
+def test_commit_act_is_the_exact_no_git_verb_sentence(tmp_path: Path) -> None:
     """Pin the exact sentence rather than blacklisting verb spellings.
 
     A reword naming a verb another way ("stage and commit", "`git ci`") passes
     a substring blacklist; the design record quotes this sentence verbatim
-    (docs/changelog/2026-09-18-the-directive-owns-the-procedure.md).
+    (docs/changelog/2026-09-18-the-directive-owns-the-procedure.md). Memory
+    clean, no legacy file, nothing to continue: the act and the closing line are
+    all there is, so the whole stdout is pinned.
     """
-    assert lib.commit_directive() == (
-        "Once everything above is done, make the commit the request called for, "
-        "including any change to `TASK.md` and `TODO.md`.\n"
-    )
+    repo = make_gitlore_repo(tmp_path)
+    result = run_checkpoint(repo, precompact_payload("with-commit"))
+    assert result.returncode == 0
+    closing = lib.closing_directive("precompact", typed=False)
+    assert result.stdout == COMMIT_ACT + "\n" + closing
+
+
+# Unit rows on the new `commit_directive(root, legacy_paths, *, memory)`
+# signature: the checkpoint rows above are the behavioural pins.
+@pytest.mark.parametrize(
+    ("memory", "expected"),
+    [(False, COMMIT_ACT), (True, COMMIT_ACT_WITH_MEMORY)],
+    ids=["memory_clean", "memory_owed"],
+)
+def test_commit_directive_unit_follows_memory(*, memory: bool, expected: str) -> None:
+    assert lib.commit_directive("", (), memory=memory) == expected
 
 
 # ==========================================================================
@@ -226,15 +198,15 @@ def test_handoff_parts_print_in_order(tmp_path: Path) -> None:
     dirty_memory(repo)
     add_sdd_ledger(repo)
     todo_boundary = lib.todo_boundary(str(repo))
-    commit_act = lib.commit_directive()
     assert todo_boundary
-    assert commit_act
     result = run_checkpoint(repo, handoff_payload("with-commit"))
     assert result.returncode == 0
     out = result.stdout
-    memory_index = out.index("gitlore memory has uncommitted changes")
+    assert MEMORY_DIRECTIVE_CLOSING in out
+    assert COMMIT_ACT_WITH_MEMORY in out
+    memory_index = out.index("gitlore:commit")
     todo_index = out.index(todo_boundary)
-    commit_index = out.index(commit_act)
+    commit_index = out.index(COMMIT_ACT_WITH_MEMORY)
     assert memory_index < todo_index < commit_index
 
 
@@ -258,10 +230,8 @@ def test_precompact_parts_print_in_order(tmp_path: Path) -> None:
     dirty_memory(repo)
     add_sdd_ledger(repo)
     sdd_directive = lib.sdd_directive(str(repo))
-    commit_act = lib.commit_directive()
     closing = lib.closing_directive("precompact", typed=False)
     assert sdd_directive
-    assert commit_act
     assert closing
     result = run_checkpoint(repo, precompact_payload("with-commit"))
     assert result.returncode == 0
@@ -270,9 +240,11 @@ def test_precompact_parts_print_in_order(tmp_path: Path) -> None:
     first_line = (repo / ".claude" / "autodrive").read_text().splitlines()[0]
     assert first_line == "armed sess-checkpoint"
     out = result.stdout
-    memory_index = out.index("gitlore memory has uncommitted changes")
+    assert MEMORY_DIRECTIVE_CLOSING in out
+    assert COMMIT_ACT_WITH_MEMORY in out
+    memory_index = out.index("gitlore:commit")
     sdd_index = out.index(sdd_directive)
-    commit_index = out.index(commit_act)
+    commit_index = out.index(COMMIT_ACT_WITH_MEMORY)
     closing_index = out.index(closing)
     assert memory_index < sdd_index < commit_index < closing_index
     assert out.endswith(closing)
@@ -340,25 +312,3 @@ def test_run_checkpoint_ignores_an_inherited_git_environment(
     assert result.returncode == 0
     assert "feedback_x.md" in result.stdout
     assert _git_bytes(decoy) == before
-
-
-def test_unset_clause_file_ignores_an_inherited_git_environment(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The decoy holds the key too: a call that inherits GIT_DIR unsets it there
-    and leaves the built repository's."""
-    repo = make_gitlore_repo(tmp_path)
-    decoy = _decoy_git_env(tmp_path, monkeypatch)
-    run_git(decoy, "config", "gitlore.memoryApprovalClauseFile", "decoy.txt")
-    before = _git_bytes(decoy)
-    unset_clause_file(repo)
-    assert _git_bytes(decoy) == before
-    probe = subprocess.run(
-        ["git", "config", "--get", "gitlore.memoryApprovalClauseFile"],
-        cwd=repo,
-        env=git_free_env(),
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert probe.returncode == 1, probe.stdout

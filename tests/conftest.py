@@ -34,15 +34,23 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 CHECKPOINT = REPO_ROOT / "scripts" / "checkpoint.py"
 LIB = REPO_ROOT / "scripts" / "_lib.sh"
 
-GITLORE_MEMORY_APPROVAL_CLAUSE = (
-    "The commit message is a subject line, a blank line, then one paragraph per\n"
-    "changed memory file, each opening with a bold prefix naming the file's kind and\n"
-    "its tier/slug. Template:\n"
-    "\n"
-    "    <subject line, no conventional-commit prefix>\n"
-    "\n"
-    "    **New <tier>/<slug>:** what the fact records, and what prompted writing it\n"
-    "    now rather than earlier."
+# The closing sentence of the memory directive, identical under both commit
+# modes (gitlore D70: the commit is the gitlore:commit skill's, not a file
+# handshake).
+MEMORY_DIRECTIVE_CLOSING = (
+    "Commit them through the gitlore:commit skill: invoke it before drafting a "
+    "summary, and follow it."
+)
+
+# The commit act (with-commit), with memory clean and with memory owed.
+COMMIT_ACT = (
+    "Once everything above is done, make the commit the request called for, "
+    "including any change to `TASK.md` and `TODO.md`.\n"
+)
+COMMIT_ACT_WITH_MEMORY = (
+    "Once everything above is done, make the commit the request called for, "
+    "including any change to `TASK.md` and `TODO.md` and the memory gitlink "
+    "`gitlore:commit` staged.\n"
 )
 
 
@@ -91,11 +99,6 @@ def run_git(
     )
 
 
-def unset_clause_file(repo: Path) -> None:
-    """Remove `gitlore.memoryApprovalClauseFile` from the repo's config."""
-    run_git(repo, "config", "--unset", "gitlore.memoryApprovalClauseFile")
-
-
 @functools.cache
 def _git_local_env_vars() -> tuple[str, ...]:
     result = subprocess.run(
@@ -124,14 +127,6 @@ def make_gitlore_repo(tmp_path: Path, name: str = "glrepo") -> Path:
     subprocess.run(
         ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "seed"],
         cwd=mem,
-        check=True,
-        env=git_free_env(),
-    )
-    clause_file = repo / ".gitlore-memory-approval-clause.txt"
-    clause_file.write_text(GITLORE_MEMORY_APPROVAL_CLAUSE + "\n")
-    subprocess.run(
-        ["git", "config", "gitlore.memoryApprovalClauseFile", str(clause_file)],
-        cwd=repo,
         check=True,
         env=git_free_env(),
     )

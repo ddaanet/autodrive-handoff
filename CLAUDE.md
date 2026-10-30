@@ -22,18 +22,20 @@ the two files has a body, each half falling back to its old path under
 a fresh session. `README.md` has the user-facing version.
 
 The checkpoint also emits, on stdout, the procedure for the one cell the call
-is in: when a gitlore-memory submodule is dirty, a memory directive tells the
-agent to summarize → get approval → write gitlore's message file, plus the
-trigger file only under `without-commit`, which gitlore's own `PostToolBatch`
-hook consumes (under `with-commit` the message file alone leaves the memory
-commit to the parent commit's pre-commit hook, so both paths end with one
-parent commit carrying the source change and the gitlink bump). After the
-memory part it prints the commit act under `with-commit`, then either the
-instruction to run `handoff-approved` (held) or the closing line the reply
-ends on — so the skills state none of it. See
+is in: when a gitlore-memory submodule is dirty, a memory directive prints the
+dirty listing and sends the agent to the `gitlore:commit` skill, which owns the
+summary format and the approval protocol (show the summary, end the turn,
+commit on approval); it is the same text under both commit modes, and the
+plugin writes no file for gitlore. After the memory part it prints the commit
+act under `with-commit` (naming the memory gitlink `gitlore:commit` staged when
+memory was owed), then either the instruction to run `handoff-approved` (held)
+or the closing line the reply ends on — so the skills state none of it. The
+plugin needs a gitlore that ships `gitlore:commit`, with no shim for the file
+handshake it replaced. See
 `docs/changelog/2026-07-25-commit-awareness.md`,
-`docs/changelog/2026-07-27-one-channel-one-writer.md` and
-`docs/changelog/2026-09-18-the-directive-owns-the-procedure.md`.
+`docs/changelog/2026-07-27-one-channel-one-writer.md`,
+`docs/changelog/2026-09-18-the-directive-owns-the-procedure.md` and
+`docs/changelog/2026-10-30-memory-commits-go-through-the-skill.md`.
 
 **Two boundaries, two skills, one flow.** `handoff` for `/clear`, `precompact`
 for `/compact`; the `skill` field names it, which also keys the directive
@@ -429,14 +431,14 @@ note in `report-drive-failure.sh`.
   error: names the field, exits 2; shared by `checkpoint.py`,
   `_checkpoint_payload.py` and `_checkpoint_plan.py`), `is_empty_body` (markdown's own heading
   test; read by `handoff_frame` through the `--has-body` CLI, and its
-  `ATX_HEADING` by the task-shape check), `memory_directive` (gated on the
-  `gitlore-memory` submodule and a dirty worktree, FR12; couples only to the two
-  IPC filenames and `gitlore.memoryApprovalClauseFile`; the `with-commit` text
-  never mentions the trigger file, which is what makes the standalone commit
-  unreachable; the clause-file refusal prints last, after the legacy reports
-  and the git line, and suppresses every other part), `commit_directive`
-  (names `TASK.md` and `TODO.md`, since nothing has staged them, and takes the
-  legacy paths this call moved or removed, to lead with
+  `ATX_HEADING` by the task-shape check), `memory_directive(root)` (gated on the
+  `gitlore-memory` submodule and a dirty worktree, FR12; a plain string, empty
+  when nothing is owed: the `git status --porcelain` listing and one sentence
+  sending the agent to the `gitlore:commit` skill, identical under both modes;
+  couples only to the `.gitmodules` registration and that skill name), `commit_directive`
+  (`memory: bool`; names `TASK.md` and `TODO.md`, since nothing has staged
+  them, and the memory gitlink `gitlore:commit` staged when `memory` is true;
+  takes the legacy paths this call moved or removed, to lead with
   `legacy_unstage_directive(root, paths)`: `git -C <root> rm --cached
   --ignore-unmatch -q -- <path> …`, each path relative to the root, every
   argument `shlex.quote`d. `-C` makes it run from any directory with no query
@@ -488,7 +490,7 @@ note in `report-drive-failure.sh`.
     the prompt marker → `queued-prompts.md`; the sentinel's lock,
     `_drive_lock.py`, `handoff_lock_take` → `sentinel-lock.md`
   - `handoff-approved`, `closing_directive`, `ledger_path`, `held`,
-    `with-commit`, the gitlore files, FR9, FR12 → `the-checkpoint-directive.md`
+    `with-commit`, the gitlore seam, FR9, FR12 → `the-checkpoint-directive.md`
   - `worktree_root.py`, `handoff_root_read`, `inject-checkpoint-root.sh`,
     `session-pointer.sh`, `HANDOFF_ROOT` → `scoping.md`
   - `plugin-dev/`, `release.just`, `$MARKETPLACE_DIR` →
@@ -551,8 +553,7 @@ with **`claude plugin test`**. pytest runs off a uv-managed venv that
 from the agent's Bash, and so `just precommit`, `just validate-plugin` and
 `just mod-smoke`, needs `dangerouslyDisableSandbox`.
 
-- `just precommit` — the gate, and gitlore's `precommitCommand`, so it runs on
-  every memory commit (needs the direnv-activated venv). It depends on two
+- `just precommit` — the gate (needs the direnv-activated venv). It depends on two
   cached gates (`plugin-dev/gates.just` sentinels, which skip a gate whose
   inputs are unchanged; `PLUGIN_DEV_GATE_FORCE=1 just precommit` runs both
   regardless). `check-plugin` (inputs `.claude-plugin`, `.claude/settings.json`,
@@ -730,11 +731,11 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
   builders `make_repo` and `make_gitlore_repo`, the payload builders, the
   `run_checkpoint` runner (`with_session_id=False` for a run with no
   `CLAUDE_CODE_SESSION_ID`), `run_git` (git, checked, under `git_free_env`),
-  `unset_clause_file`, `drive_state`, the ledger and memory fixtures, and
+  `drive_state`, the ledger and memory fixtures, and
   `git_free_env`, the environment minus git's repository-local variables
   (`git rev-parse --local-env-vars`) that both builders and the runner pass to
-  git, since gitlore's pre-commit hook exports `GIT_DIR`, `GIT_INDEX_FILE` and
-  `GIT_WORK_TREE` for the outer repository), which
+  git, since a gate run from inside a git hook inherits `GIT_DIR`,
+  `GIT_INDEX_FILE` and `GIT_WORK_TREE` for the outer repository), which
   they import by name, since pytest's `pythonpath` carries `tests/`; a helper
   only one file uses is in that file. It also defines the `_session_id` fixture
   without `autouse`, so the other test files do not inherit it: each
@@ -798,17 +799,19 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
     from `checkpoint.py` rather than restated, read back through
     `handoff_drive_read`; and the constant itself, one line that does not begin
     with `/`.
-  - `tests/test_checkpoint_directives.py` — the memory directive, the commit act
-    (present under `with-commit` and absent without), the order of the parts
-    and the ledger-liveness matrix; and the harness's own isolation, `make_repo`
-    and `run_checkpoint` under a decoy `GIT_DIR`/`GIT_WORK_TREE`/
-    `GIT_INDEX_FILE` leaving the decoy byte-identical. Mutation-checked: `with-commit` output never
-    mentions the trigger file.
+  - `tests/test_checkpoint_directives.py` — the memory directive (the status
+    line and the `gitlore:commit` sentence, byte-identical under both modes,
+    none of the retired file handshake's words), the commit act (present under
+    `with-commit` and absent without; the sentence naming the memory gitlink
+    exactly when memory is dirty), the order of the parts and the ledger-liveness
+    matrix; and the harness's own isolation, `make_repo` and `run_checkpoint`
+    under a decoy `GIT_DIR`/`GIT_WORK_TREE`/`GIT_INDEX_FILE` leaving the decoy
+    byte-identical. Mutation-checked: the commit act ignoring `memory`, in both
+    directions, and the memory part differing by mode.
   - `tests/test_checkpoint_composition.py` — the directive composition per skill
     (memory then SDD under `precompact`, absent under `handoff`), stdout exactly
     the closing line through one helper, part order pinned per skill with the
-    closing line last, and the clause-file refusal printed last on a held and an
-    armed fixture.
+    closing line last, the memory part located by `gitlore:commit`.
   - `tests/test_checkpoint_hold.py` — the arming instruction, the hold rule, the
     held state and its owner, the armed state's owner, and the check of
     `CLAUDE_CODE_SESSION_ID` on both paths, the sentinel's write waiting on the
@@ -828,8 +831,7 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
     as it was, a dangling symlink no legacy file; a rejected payload leaving
     legacy and root files byte-identical; a root write that fails leaving the
     legacy file; a root file that cannot be read staying unread with no legacy
-    file; the reports ahead of every directive part (the clause-file refusal
-    after the legacy reports and the git line) and the closing line last; the
+    file; the reports ahead of every directive part and the closing line last; the
     `git rm --cached` line only under `with-commit`, naming only what moved or
     went, run from a subdirectory over a tracked legacy file to the staged
     deletion and, once the new file is added, a rename, and a silent no-op over

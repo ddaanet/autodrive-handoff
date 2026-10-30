@@ -247,7 +247,7 @@ The standing calls, each argued in
 - **The frame carries no transcript.**
 - **The agent supplies one fact; the code owns the branch.**
 - **Ask the question the request can answer.**
-- **Withholding is a mechanism.**
+- **The directive points at the skill and holds no copy of the protocol.**
 - **A directive is correct only where in the turn it lands.**
 - **Mechanical logic lives in a script or hook; the skill body holds judgement
   only.**

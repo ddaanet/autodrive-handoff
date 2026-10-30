@@ -144,6 +144,12 @@ directories, and the deletion is the one pass above.
 
 ## No git work, and the act that stands in for it
 
+> **Superseded 2026-10-30** (see [Memory commits go through the
+> skill](2026-10-30-memory-commits-go-through-the-skill.md)) on "Where it
+> prints": there is no clause-file refusal to print ahead of, so the reports and
+> the git line lead the output and the memory directive follows. The act and
+> its reason stand.
+
 > **Superseded 2026-10-13** (see [The unstage line runs from the
 > root](2026-10-13-the-unstage-line-runs-from-the-root.md)): the line is no
 > longer in the `:/` form. It is `git --literal-pathspecs -C <root> rm --cached

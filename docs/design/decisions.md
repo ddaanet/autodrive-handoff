@@ -97,37 +97,42 @@ list](../changelog/2026-07-17-task-frame-drops-transcript.md)
 **The agent supplies one fact; the code owns the branch.** Commit awareness
 — *does the ask this call serves imply a commit?* — is a fact about the
 conversation that no script can see, and everything downstream of the answer
-is deterministic. It changes where the memory commit *lands*, and whether
-the checkpoint prints a commit act and holds a typed transition behind it.
-It does not change what memory *says*: how memory bodies are written,
-present-tense truth included, is `gitlore:memory-writing`'s rule, which
-holds in every mode and which the memory directive invokes through gitlore's
-approval clause. The transition fields are the same shape, which is why they
-are fields and not skills.
+is deterministic. It changes whether the checkpoint prints a commit act, holds
+a driven transition behind it, and names the memory gitlink in it. It does not
+change how memory is committed or what memory *says*: the memory directive is
+the same text in both modes, and how memory bodies are written, present-tense
+truth included, is `gitlore:memory-writing`'s rule, which holds in every mode
+and which `gitlore:commit` has the agent apply before it drafts the summary.
+The transition fields are the same shape, which is why they are fields and not
+skills.
 [Commit awareness](../changelog/2026-07-25-commit-awareness.md),
-[Transitions become modes](../changelog/2026-08-05-transitions-become-modes.md)
+[Transitions become modes](../changelog/2026-08-05-transitions-become-modes.md),
+[Memory commits go through the
+skill](../changelog/2026-10-30-memory-commits-go-through-the-skill.md)
 
 **Ask the question the request can answer.** The rule this replaced counted
 a commit landing in a later session, because it framed the question as where
 the memory belongs rather than whether anything present decides it — and
 that is unanswerable in the prepare-only modes, where the agent has no
-evidence in front of it and guesses. It is also the hazard: withholding
-gitlore's trigger defers the memory commit to a parent commit's pre-commit
-hook, and a commit on the far side of a `/clear` is owed by no live session,
-so the approved summary goes unread and the next session's memory write
-stales it. The ask stops at the transition, uniformly — a compaction keeps
-the session alive, so a commit asked for on the far side of one would in
-fact have a live hook, but one sentence that holds for every mode is worth
-more than one correctly deferred memory commit.
+evidence in front of it and guesses. The ask stops at the transition,
+uniformly: one sentence that holds for every mode is worth more than a
+carve-out for the compaction, which keeps the session alive and could
+legitimately look past it. Nothing about the memory commit rides on the answer
+any more, so a wrong guess costs a parent commit that is made or skipped, not
+an approved summary that goes unread.
 [Transitions become modes](../changelog/2026-08-05-transitions-become-modes.md)
 
-**Withholding is a mechanism.** The standalone memory commit is reachable
-only through one filename, and the `with-commit` directive's reader is a
-fresh agent with no other source for it — so saying nothing makes that path
-unreachable, while a prohibition would introduce the concept it forbids. The
-same cut removes mechanism a reader cannot act on: it does not sit inert, it
-gets verified and narrated back.
-[Commit awareness](../changelog/2026-07-25-commit-awareness.md)
+**The directive points at the skill and holds no copy of the protocol.** The
+memory part is the dirty listing and a sentence naming `gitlore:commit`. The
+summary format, the review and the approval protocol are the skill's, and a
+restatement here would be a second owner to drift from the first. The reader is
+a fresh agent, so what it needs is the skill's name; the command, the file
+formats and the hooks gitlore once consumed are mechanism it cannot act on, and
+text that carries them is verified and narrated back. Nothing is named that
+would need forbidding.
+[Commit awareness](../changelog/2026-07-25-commit-awareness.md),
+[Memory commits go through the
+skill](../changelog/2026-10-30-memory-commits-go-through-the-skill.md)
 
 **A directive is correct only where in the turn it lands.** handoff runs its
 checkpoint in the same turn as the writes — deliberately, so the snapshot

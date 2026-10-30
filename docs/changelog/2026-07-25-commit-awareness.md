@@ -1,5 +1,15 @@
 # Commit awareness (2026-07-25)
 
+> **Superseded 2026-10-30** (see [Memory commits go through the
+> skill](2026-10-30-memory-commits-go-through-the-skill.md)) on the mechanism:
+> the trigger file, `PostToolBatch`, the parent pre-commit pickup and the
+> message-file-alone path no longer exist, so withholding a filename no longer
+> picks a path and the memory directive is identical under both modes. The
+> commit answer still decides whether the checkpoint prints a commit act and
+> holds a driven transition behind it, and the act now names the memory gitlink
+> when memory was owed. Withholding what the reader cannot otherwise reach, and
+> keeping mechanism out of the directive, stand.
+
 The routine wrap-up is `/handoff` then `/commit`. Handoff's memory step always
 took gitlore's standalone path — write the approved summary *and* the trigger,
 let `PostToolBatch` commit the submodule on the spot.

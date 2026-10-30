@@ -8,6 +8,13 @@
 > names the key, says gitlore pins it at `SessionStart`, and asks for a
 > restart. The discovery mechanism and the no-fallback decision stand.
 
+> **Superseded 2026-10-30** (see [Memory commits go through the
+> skill](2026-10-30-memory-commits-go-through-the-skill.md)): the approval
+> wording moved into the `gitlore:commit` skill, `gitlore.memoryApprovalClauseFile`
+> is no longer set and the clause file is not shipped, so the plugin discovers
+> nothing from gitlore and keeps no refusal. That the wording has one owner,
+> gitlore, stands.
+
 `checkpoint_memory_directive`'s approval-body wording — one line per changed
 memory file: kind (New/Update/Augment/Reduce/Remove), tier/slug, one-line
 summary — used to be hardcoded here, a fourth independent copy alongside

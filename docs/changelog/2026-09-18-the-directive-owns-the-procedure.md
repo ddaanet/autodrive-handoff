@@ -116,6 +116,11 @@ for everything above them. The closing line now reads the same way.
 
 ## The refusal prints alone
 
+> **Superseded 2026-10-30** (see [Memory commits go through the
+> skill](2026-10-30-memory-commits-go-through-the-skill.md)): the clause-file
+> refusal and `MemoryPart(text, refusal)` are gone, so nothing prints alone or
+> suppresses the other parts. `memory_directive` returns a plain string.
+
 > **Superseded 2026-10-11** (see [Legacy paths are read, and the checkpoint
 > moves them](2026-10-11-legacy-paths-are-read-and-moved.md)): the refusal
 > prints last, not alone. The legacy reports and, under `with-commit`, the git

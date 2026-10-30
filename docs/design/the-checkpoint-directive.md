@@ -16,14 +16,17 @@ condition:
    name, removed, or ignored because the root file has a body. They are facts
    about a change already made, so they come first and carry no act;
 2. the memory directive, when the `gitlore-memory` submodule is registered
-   and dirty;
+   and dirty: the dirty listing and one sentence sending the agent to the
+   `gitlore:commit` skill, the same text under both commit modes;
 3. the todo boundary (`handoff`) or the SDD ledger nudge (`precompact`),
    when a live ledger exists;
 4. the commit act, under `with-commit` — make the commit the request called
    for, including any change to `TASK.md` and `TODO.md`. It names no git verb
    for the commit: the request may be an amend or a fresh commit, and the
    checkpoint cannot tell which. It names the two files because nothing has
-   staged them. When the call moved or removed a legacy file it leads with the
+   staged them, and, when the memory directive was emitted, the memory gitlink
+   `gitlore:commit` staged, so the commit carries the pointer too. When the
+   call moved or removed a legacy file it leads with the
    one git line the checkpoint does name, `git -C <root> rm --cached
    --ignore-unmatch -q -- <path> …`, over those paths alone and
    never an ignored one, so git records a rename once the files are added.
@@ -63,18 +66,6 @@ command stays one file rewrite (NFR1), and a test compares it with
 `closing_directive()` so the two producers cannot drift. One hold decision
 writes the sentinel's state and selects between the arming instruction and
 the closing line, so the file and the printed ending cannot disagree.
-
-The clause-file refusal prints last and suppresses the rest. When memory is
-dirty but gitlore's approval clause cannot be read —
-`gitlore.memoryApprovalClauseFile` unset, or its file missing — the memory
-part tells the agent to restart and retry, and a commit act, arming
-instruction or closing line after it would tell the agent to finish a boundary
-it has just been told cannot proceed. The sentinel is composed as usual; the
-retry composes it again. Two things precede the refusal: the legacy reports
-and, under `with-commit`, the git line alone, without the commit sentence. The
-move has already happened on disk and the retry finds no legacy file to
-report, so the refusal's own call is the only one that can name the line.
-[Legacy paths are read, and the checkpoint moves them](../changelog/2026-10-11-legacy-paths-are-read-and-moved.md)
 
 `autoname` prints nothing: it is not a boundary, owes no memory write, and
 has no procedure after the call.
@@ -138,17 +129,28 @@ the take nothing is any one session's.
 
 The checkpoint's directive is the plugin's one seam with
 [gitlore](https://github.com/ddaanet/gitlore). When the `gitlore-memory`
-submodule is registered and dirty, it instructs the agent to summarize → get
-approval → write `.claude/gitlore-memory-message`, and — only under
-`without-commit` — `.claude/gitlore-commit-memory`. That trigger file is the
-entire difference between the two paths: written, gitlore's `PostToolBatch`
-commits memory standalone; withheld, the parent commit's pre-commit hook
-folds it into the source commit. Both are file writes, which sidesteps the
-sandbox and the auto-mode classifier. The coupling is two IPC filenames plus
-one advertised `git config` key — `gitlore.memoryApprovalClauseFile`, whose
-value is the file holding the approval wording the directive quotes, so the
-wording has one owner instead of a copy per consumer. Never gitlore
-internals.
+submodule is registered and dirty, it prints the dirty listing and one
+sentence: commit it through the `gitlore:commit` skill, invoked before a
+summary is drafted. The skill owns the summary format, the review against
+`gitlore:memory-writing` and the approval protocol (show the summary, end the
+turn, commit on the approving reply), so the directive carries a pointer and no
+copy, and a change to any of them lands in one place. It names neither the
+command nor the format. The coupling is the `.gitmodules` registration that
+gates it and the skill's name; no file, no git config key and no gitlore
+internal.
+
+A memory commit is the agent's own act, and no hook commits memory, so
+nothing the plugin writes could approve or trigger one. The mode therefore
+does not change the memory part: the same text serves `with-commit` and
+`without-commit`. What the mode changes is the commit act. `gitlore-commit`
+stages the moved memory gitlink in the parent index, and under `with-commit`
+the commit act names it, so the parent commit the request calls for records the
+pointer along with `TASK.md` and `TODO.md`. The approval takes a turn before
+that commit, which is why a sentinel that names a command still holds while the
+approval is owed (see "Held" above). The plugin needs a gitlore that ships
+`gitlore:commit`; it keeps no fallback for the file handshake that skill
+replaced.
+[Memory commits go through the skill](../changelog/2026-10-30-memory-commits-go-through-the-skill.md)
 
 `ledger_path` is the one-row registry of foreign workflow-owned
 progress ledgers (currently superpowers SDD). It detects **liveness**, not

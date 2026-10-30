@@ -73,7 +73,6 @@ decoy_snapshot() {
     [ -d "$glrepo/memory/.git" ]
     # The seed commit landed in the built memory repo, not the decoy.
     [ "$(run_git -C "$glrepo/memory" log --format=%s)" = "seed" ]
-    [ -n "$(run_git -C "$glrepo" config gitlore.memoryApprovalClauseFile)" ]
 }
 
 # ==========================================================================
@@ -684,7 +683,7 @@ handoff_payload() {
     run bash -c 'cd "$1" && HANDOFF_ROOT="$1" "$2" <<<"$3"' \
         _ "$repo" "$SHIM" "$(handoff_payload without-commit)"
     [ "$status" -eq 0 ]
-    echo "$output" | grep -qF "$repo/.claude/gitlore-commit-memory"
+    echo "$output" | grep -qF "gitlore:commit"
 }
 
 @test "shim: bin/handoff-checkpoint surfaces a schema violation" {

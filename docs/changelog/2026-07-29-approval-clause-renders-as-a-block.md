@@ -1,5 +1,10 @@
 # The approval clause renders as a block (2026-07-29)
 
+> **Superseded 2026-10-30** (see [Memory commits go through the
+> skill](2026-10-30-memory-commits-go-through-the-skill.md)): there is no
+> clause to render. The directive prints a listing and one sentence naming the
+> `gitlore:commit` skill, and the clause-file refusal is gone.
+
 Two defects in `checkpoint_memory_directive`, both dating from
 [the day before](2026-07-28-memory-approval-from-gitlore.md), when the
 approval-body wording stopped being handoff's and became gitlore's.

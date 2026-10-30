@@ -68,11 +68,11 @@ def main() -> int:
         payload, skill, typed=transition.typed
     )
 
-    memory = lib.MemoryPart("", refusal=False)
+    memory = ""
     if skill in ("handoff", "precompact"):
-        memory = lib.memory_directive(str(root), commit_mode)
+        memory = lib.memory_directive(str(root))
     held = hold_decision(
-        transition, memory=bool(memory.text), commit=commit_mode == "with-commit"
+        transition, memory=bool(memory), commit=commit_mode == "with-commit"
     )
     # Resolved before anything is written (task/todo/sentinel): every call
     # composes a sentinel, held or armed, and both name their owner on line 1,
@@ -342,19 +342,18 @@ class Boundary(NamedTuple):
 
 def compose_directives(
     boundary: Boundary,
-    memory: lib.MemoryPart,
+    memory: str,
     ending: Ending,
     plans: list[planning.FilePlan],
 ) -> list[str]:
     """Return the ordered, non-empty directive parts for this boundary.
 
-    Print order: the legacy reports, then memory, then the todo boundary/SDD
-    nudge, then the commit act (present only under "with-commit"), then either
-    the arming instruction (held) or the closing line (not held) — always last,
-    and mutually exclusive. [] under autoname. The act that stages the legacy
-    paths and the reports both name them relative to the root. The clause-file
-    refusal (`memory.refusal`) suppresses every other part but the legacy
-    reports and the act that stages the legacy paths: it prints last.
+    Print order: the legacy reports, then the memory directive (`memory`, "" when
+    nothing is owed), then the todo boundary/SDD nudge, then the commit act
+    (present only under "with-commit", naming the memory gitlink when memory is
+    owed), then either the arming instruction (held) or the closing line (not
+    held) — always last, and mutually exclusive. [] under autoname. The act that
+    stages the legacy paths and the reports both name them relative to the root.
     """
     skill, root, commit_mode = boundary
     if skill not in ("handoff", "precompact"):
@@ -367,15 +366,14 @@ def compose_directives(
     ]
     with_commit = commit_mode == "with-commit"
     root_s = str(root)
-    if memory.refusal:
-        unstage = lib.legacy_unstage_directive(root_s, gone) if with_commit else ""
-        return [part for part in (reports, unstage, memory.text) if part]
     if skill == "handoff":
         second = lib.todo_boundary(root_s)
     else:
         second = lib.sdd_directive(root_s)
-    commit = lib.commit_directive(root_s, gone) if with_commit else ""
-    parts = [part for part in (reports, memory.text, second, commit) if part]
+    commit = (
+        lib.commit_directive(root_s, gone, memory=bool(memory)) if with_commit else ""
+    )
+    parts = [part for part in (reports, memory, second, commit) if part]
     if ending.held:
         parts.append(lib.arming_directive())
     else:

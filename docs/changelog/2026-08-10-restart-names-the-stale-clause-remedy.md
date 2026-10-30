@@ -5,6 +5,11 @@
 > `/handoff:restart` is gone and the refusal text names the built-in
 > `/restart`. The diagnosis stands.
 
+> **Superseded 2026-10-30** (see [Memory commits go through the
+> skill](2026-10-30-memory-commits-go-through-the-skill.md)): the refusal this
+> entry words is gone with the clause key, so no checkpoint output names a
+> restart for a stale clause.
+
 `brief-driven-restart.md` asked `handoff-checkpoint`'s gitlore diagnosis to
 split into "gitlore not installed here / key never set / key points at a
 path that no longer exists," quoting the diagnosis as "the gitlore plugin

@@ -25,9 +25,9 @@ committed it. The frame is assembled in memory at read time instead.
 
 **A `PreCompact` hook for the memory flush** — `PreCompact(manual)` can
 annotate or block a compaction but cannot run an agent turn, and the flush
-needs one: summarize, get approval, write the message file. It stays a skill
+needs one: summarize, get approval, commit. It stays a skill
 the user runs before compacting, where that turn exists. Compaction threatens
-conversation state only, so the commit can wait for any later commit.
+conversation state only, so the flush can wait for any later turn.
 [Session compaction](../changelog/2026-07-12-session-compaction.md),
 [The mechanical principle is narrowed; a reviewer waits for a
 measurement](../changelog/2026-10-15-the-mechanical-principle-is-narrowed.md)

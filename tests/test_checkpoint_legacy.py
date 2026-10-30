@@ -20,6 +20,7 @@ import pytest
 from checkpoint import CONTINUATION
 from conftest import (
     CHECKPOINT,
+    COMMIT_ACT,
     add_sdd_ledger,
     dirty_memory,
     drive_state,
@@ -35,7 +36,6 @@ from conftest import (
     todo_clear,
     todo_edit,
     todo_keep,
-    unset_clause_file,
 )
 
 pytestmark = pytest.mark.usefixtures("_session_id")
@@ -74,12 +74,10 @@ IGNORED = re.compile(r"\bignored\b", re.IGNORECASE)
 # before todo. `-C` makes it run from any directory and keeps the root's name
 # out of every pathspec, so a glob or `!x` root is a directory change.
 #
-# Two constraints on the implementation that these rows make:
-# - `lib.commit_directive`'s legacy-paths parameter must be optional: the rows
-#   that expect today's text call it with no argument.
-# - A legacy path named on any line other than the act's counts as a report
-#   (`report_lines`), so an act split over two lines with a path on the second
-#   one reads as a duplicate report and fails the one-report rows.
+# One constraint on the implementation that these rows make: a legacy path named
+# on any line other than the act's counts as a report (`report_lines`), so an
+# act split over two lines with a path on the second one reads as a duplicate
+# report and fails the one-report rows.
 UNSTAGE_MARK = "--ignore-unmatch"
 
 
@@ -788,39 +786,6 @@ def test_reports_precede_every_directive_part(tmp_path: Path) -> None:
     assert_directive_tail(out, repo, "handoff", typed=False, held=True)
 
 
-@pytest.mark.parametrize("commit", ["without-commit", "with-commit"])
-def test_reports_and_the_git_rm_act_print_ahead_of_the_clause_file_refusal(
-    tmp_path: Path, commit: str
-) -> None:
-    """The refusal still prints last; the migration it follows is not dropped.
-
-    The files are written before the refusal prints, so on a retry there is
-    nothing legacy left and the agent would never be told of the move. The
-    reports, and the git act under with-commit, therefore precede the refusal.
-    """
-    repo = make_gitlore_repo(tmp_path)
-    dirty_memory(repo)
-    unset_clause_file(repo)
-    put(repo, LEGACY_TODO_REL, TODO_LEGACY_BODY)
-    refusal = lib.memory_directive(str(repo), commit)
-    assert refusal.refusal
-    result = run_checkpoint(repo, handoff_payload(commit))
-    ok(result)
-    out = result.stdout
-    assert read(repo / "TODO.md") == TODO_LEGACY_BODY
-    assert not (repo / LEGACY_TODO_REL).exists()
-    assert_reported(out, LEGACY_TODO_REL, "moved")
-    assert out.endswith(refusal.text)
-    assert out.count(refusal.text) == 1
-    report_at = out.index(report_lines(out, LEGACY_TODO_REL)[0])
-    if commit == "with-commit":
-        act = git_act(repo, LEGACY_TODO_REL)
-        assert report_at < out.index(act) < out.index(refusal.text)
-    else:
-        assert "git -C" not in out
-        assert report_at < out.index(refusal.text)
-
-
 @pytest.mark.parametrize("skill", ["handoff", "precompact"])
 @pytest.mark.parametrize("commit", ["without-commit", "with-commit"])
 @pytest.mark.parametrize("typed", [False, True], ids=["untyped", "typed"])
@@ -845,7 +810,7 @@ def test_stdout_with_no_legacy_file_anywhere_is_what_it_was(
     state, _owner = drive_state(repo / SENTINEL_REL)
     assert state == ("held" if held else "armed")
     tail = lib.arming_directive() if held else lib.closing_directive(skill, typed=typed)
-    commit_act = lib.commit_directive().rstrip("\n") + "\n\n"
+    commit_act = COMMIT_ACT + "\n"
     expected = (commit_act if commit == "with-commit" else "") + tail
     assert result.stdout == expected
 

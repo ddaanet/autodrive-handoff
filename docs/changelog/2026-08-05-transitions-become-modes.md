@@ -81,6 +81,14 @@ continue:null` makes it expressible, and the claim goes.
 
 ## Commit awareness narrows
 
+> **Superseded 2026-10-30** (see [Memory commits go through the
+> skill](2026-10-30-memory-commits-go-through-the-skill.md)) on the hazard
+> below: withholding gitlore's trigger file no longer defers the memory commit
+> to a parent commit's pre-commit hook, because neither exists. Memory is
+> committed at the boundary in both modes, so a commit on the far side of a
+> `/clear` strands no approved summary. The rule stands on its other ground:
+> the question must be one the request can answer.
+
 > **Superseded 2026-10-15** (see [The continuation is a constant](2026-10-15-the-continuation-is-a-constant.md))
 > on where a commit could be named: there is no agent-authored continuation
 > prompt to name one, so "a commit named in the continuation prompt" describes
