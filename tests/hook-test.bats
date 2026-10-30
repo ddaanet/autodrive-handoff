@@ -2829,11 +2829,12 @@ pick up '"'"'task  3'"'"' per the *file*; then \ done'
 # fires UserPromptSubmit inside that turn, before its Stop, and carries that
 # turn's prompt_id; one typed at an idle composer, after an Esc, carries a fresh
 # one. inject-checkpoint-root.sh leaves the prompt_id of the turn that ran the
-# checkpoint in a per-session marker (its rows are in tests/checkpoint.bats);
-# this hook only reads it, and only for an armed file this session owns, so the
-# rows here write the marker themselves. A queued `rename` is left for the drive
-# to take at that turn's end; a queued `clear` or `compact` is swept and
-# cancelled with no lines offered, since the prompt is lost as handoff state. See
+# checkpoint in a per-session marker (its rows are in
+# tests/inject-checkpoint-root.bats); this hook only reads it, and only for an
+# armed file this session owns, so the rows here write the marker themselves. A
+# queued `rename` is left for the drive to take at that turn's end; a queued
+# `clear` or `compact` is swept and cancelled with no lines offered, since the
+# prompt is lost as handoff state. See
 # plans/reports/2026-10-16-queued-prompt-sweep-repro.md and
 # plans/reports/2026-10-16-queued-prompt-with-clear-compact.md.
 

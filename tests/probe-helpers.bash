@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared synthetic-repo builder for tests/checkpoint.bats's shim test — the
+# Shared synthetic-repo builder for tests/bin-commands.bats's shim test — the
 # one row left there that needs a gitlore-managed repo with dirty memory.
 # checkpoint.py's own memory-directive tests (schema, composition, ledger
 # liveness) moved to tests/test_checkpoint_*.py, which share their own Python

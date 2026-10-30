@@ -2,11 +2,11 @@
 
 Those files test scripts/checkpoint.py (handoff-checkpoint), whose logic lives
 in checkpoint.py, _checkpoint_payload.py, _checkpoint_plan.py and
-_checkpoint_lib.py. They are the port of the checkpoint.sh-specific rows of
-tests/checkpoint.bats — see docs/changelog/2026-08-10-python-split.md. inject-
-checkpoint-root.sh, bin/handoff-approved and the bin/handoff-checkpoint shim
-stay bash and stay tested in tests/checkpoint.bats; the Python files cover only
-checkpoint.py's own behavior.
+_checkpoint_lib.py. They are the port of the checkpoint.sh-specific rows of the
+bash tests — see docs/changelog/2026-08-10-python-split.md. The bash side
+(inject-checkpoint-root.sh, bin/handoff-approved and the bin/handoff-checkpoint
+shim) stays tested in tests/inject-checkpoint-root.bats and tests/bin-
+commands.bats; the Python files cover only checkpoint.py's own behavior.
 
 What is here is what two or more of those files use: the repository builders,
 the payload builders, the `run_checkpoint` runner. A helper only one file uses
@@ -164,7 +164,7 @@ def add_unidentified_sdd_ledger(repo: Path, slug: str = "ghmem") -> None:
 
 
 def task_clear() -> dict[str, str]:
-    # Also spelled out in tests/checkpoint.bats' handoff_payload(); the two
+    # Also spelled out in tests/bin-commands.bats' handoff_payload(); the two
     # move together.
     return {"action": "clear"}
 

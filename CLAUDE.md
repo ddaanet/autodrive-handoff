@@ -577,10 +577,10 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
   `.gitignore`, `bin`, `hooks`, `scripts`, `skills`, `tests`): `jq` over
   `plugin.json`, `hooks.json` and `.claude/settings.json`; `just
   validate-plugin`; `claude plugin test`; `shellcheck -x` over `bin/*`,
-  `scripts/*.sh` and `tests/*.bats`. `check-code` (inputs `bin`, `hooks`,
+  `scripts/*.sh`, `tests/*.bats` and `tests/*.bash`. `check-code` (inputs `bin`, `hooks`,
   `scripts`, `tests`, `pyproject.toml`, `uv.lock`, `.gitignore`): ruff check and format,
-  docformatter, mypy, ty; `plugin-dev/run-bats.sh tests/hook-test.bats
-  tests/checkpoint.bats tests/drive-take.bats` (the quiet bats runner); `pytest`.
+  docformatter, mypy, ty; `plugin-dev/run-bats.sh tests/*.bats` (the quiet bats
+  runner); `pytest`.
   A new component directory the plugin validator reads (`agents/`, `commands/`)
   goes into `check-plugin`'s list when it is created. The release recipe depends
   on this name through `prerelease`.
@@ -635,8 +635,7 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
   skip is never mistaken for a pass. Run it whenever the mod, a loader or the
   sentinel's shape changes — it found the `Stop` call-context refusal that no
   stub could.
-- `just hook-test` — `bats tests/hook-test.bats tests/checkpoint.bats
-  tests/drive-take.bats` alone. `bats run` captures exit codes and output
+- `just hook-test` — `bats tests/*.bats` alone. `bats run` captures exit codes and output
   without the `set +e` dance; see `tests/bats-best-practices.md`.
   `tests/hook-test.bats` covers the hook scripts against synthetic tool-event
   payloads: `handoff_frame` (called directly, never through `run`, since it
@@ -710,7 +709,9 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
   row. The `own` argument of the prompt marker's read is the residual bound: no
   unprivileged test can make a marker another user owns, so dropping it leaves
   the suite green.
-  `tests/checkpoint.bats` covers what stayed bash around the checkpoint:
+  Three files cover what stayed bash around the checkpoint, and share their
+  `setup` and `make_repo` through `tests/checkpoint-helpers.bash`.
+  `tests/inject-checkpoint-root.bats` covers
   `inject-checkpoint-root.sh` (a root holding whitespace or ending in a newline
   round-trips; the prompt marker: a `handoff-checkpoint` and a
   `handoff-approved` call each leave the `prompt_id` NUL-terminated in a
@@ -719,12 +720,14 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
   nothing, a symlinked marker is replaced with its target untouched, a marker
   that cannot be written leaves the output byte-identical, and an id holding a
   space or ending in a newline round-trips; dropping the marker write reds the
-  writer rows), `bin/handoff-approved` (output pinned whole, one
+  writer rows).
+  `tests/bin-commands.bats` covers `bin/handoff-approved` (output pinned whole, one
   row per kind, against `closing_directive()` itself so the producers cannot
   drift; a failed reader helper reported as unreadable, not malformed) and the `bin/handoff-checkpoint` shim, plus
   the harness row that `make_repo` and `make_gitlore_repo` (via `run_git` in
   `tests/probe-helpers.bash`, git minus `git rev-parse --local-env-vars`) leave a
-  decoy `GIT_DIR` repository byte-identical, mutation-checked. The `validate-plugin` rows run
+  decoy `GIT_DIR` repository byte-identical, mutation-checked.
+  `tests/validate-plugin.bats` covers the `validate-plugin` rows, which run
   the real recipe under a stub `claude` printing a fixture: the empty
   `.mcp.json` error and the `CLAUDE.md` warning pass (also under a root with a
   space), and the same finding on another entry's file, a non-empty or absent
@@ -868,7 +871,7 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
     effective todo, a legacy file included, the refusal moving nothing.
 
   The load-bearing rows are mutation-checked, as listed under each file, and
-  with them `handoff-approved`'s bare-name row in `tests/checkpoint.bats`.
+  with them `handoff-approved`'s bare-name row in `tests/bin-commands.bats`.
 
 Test files live under `tests/`. The justfile recipes are one-liners that
 delegate. Add new scenarios to the existing `.bats`/`test_*.py` files rather
