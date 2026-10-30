@@ -808,14 +808,14 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
     `continue` as a boolean at every boundary, driven or not (null, a string,
     an empty string, a number, a list and an object each refused with no
     sentinel written; `true` refused against a transition not carried out and
-    legal against one carried out; `false` legal everywhere); `continue: true`
-    under `handoff` refused when neither half would have a body after the plans
-    (six bodyless shapes, files byte-identical, no sentinel), legal when either
-    has one, with `false`, and under `precompact`; the legal
-    combinations pinning the sentinel's exact bytes, `CONTINUATION` imported
-    from `checkpoint.py` rather than restated, read back through
-    `handoff_drive_read`; and the constant itself, one line that does not begin
-    with `/`.
+    legal against one carried out; `false` legal everywhere); and the
+    continuation constant itself, one line that does not begin with `/`.
+  - `tests/test_checkpoint_sentinel.py` — `continue: true` under `handoff`
+    refused when neither half would have a body after the plans (six bodyless
+    shapes, files byte-identical, no sentinel), legal when either has one, with
+    `false`, and under `precompact`; the legal combinations pinning the
+    sentinel's exact bytes, `CONTINUATION` imported from `checkpoint.py` rather
+    than restated, read back through `handoff_drive_read`.
   - `tests/test_checkpoint_directives.py` — the memory directive (the status
     line and the `gitlore:commit` sentence, byte-identical under both modes,
     none of the retired file handshake's words), the commit act (present under
@@ -831,11 +831,14 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
     closing line last, the memory part located by `gitlore:commit`.
   - `tests/test_checkpoint_hold.py` — the arming instruction, the hold rule, the
     held state and its owner, the armed state's owner, and the check of
-    `CLAUDE_CODE_SESSION_ID` on both paths, the sentinel's write waiting on the
-    lock, and a read-back that cannot run removing the sentinel. Mutation-checked: the held/armed pair over one
-    fixture (never hold ⟹ the held row alone reds; hold whatever the sentinel
-    names ⟹ the names-nothing row alone reds) and the `(driven ∧ with-commit)`
-    disjunct.
+    `CLAUDE_CODE_SESSION_ID` on both paths. Mutation-checked: the held/armed
+    pair over one fixture (never hold ⟹ the held row alone reds; hold whatever
+    the sentinel names ⟹ the names-nothing row alone reds) and the
+    `(driven ∧ with-commit)` disjunct.
+  - `tests/test_checkpoint_readback.py` — the sentinel's write waiting on the
+    lock, an `edit` planned under it, a lock held past the wait or that cannot
+    be set up failing closed with nothing written, and a read-back that cannot
+    run, fails or raises removing the sentinel.
   - `tests/test_checkpoint_legacy.py` — the whole legacy migration, one file
     whatever its length, since it is deleted in one pass when the fallback is
     retired: a legacy todo moved on `keep` with its modification time, across
