@@ -121,8 +121,8 @@ whole run, the actor runs with `HANDOFF_LOCK_WAIT_SECS` of 0.05 so its wait ends
 at once, and the row asserts the sentinel byte-identical, the actor's
 fail-closed report or exit and, for the loaders, the frame still injected; a
 second row per actor puts a link at the lock for the unavailable cause. They are
-in `tests/drive-take.bats`, `tests/hook-test.bats`, `tests/bin-commands.bats` and
-`tests/test_checkpoint_readback.py`, and `tests/test_drive_lock.py` covers the
-lock itself.
+in `tests/drive-take.bats`, `tests/sentinel-lock.bats`, `tests/bin-commands.bats`
+and `tests/test_checkpoint_readback.py`, and `tests/test_drive_lock.py` covers
+the lock itself.
 [The sentinel takes a lock](../changelog/2026-10-16-the-sentinel-takes-a-lock.md),
 [The lock fails closed](../changelog/2026-10-17-the-lock-fails-closed.md)

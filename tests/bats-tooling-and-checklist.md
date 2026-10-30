@@ -122,9 +122,10 @@ STUB
 }
 ```
 
-This is the pattern `hook-test.bats` uses to stub a command (a per-test
-`$STUBDIR` script that logs its arguments and emits scripted output). Reviewer expectations for a PATH stub: it lives
-under a bats tmpdir (auto-cleaned), it is `chmod +x`, and it is put on
+This is the pattern `tests/report-drive-failure-drift.bats` uses to stub `find`
+(a per-test script under `$BATS_TEST_TMPDIR` that leaves a witness file when it
+runs, then execs the real command). Reviewer expectations for a PATH stub: it
+lives under a bats tmpdir (auto-cleaned), it is `chmod +x`, and it is put on
 `PATH` only for the call under test (`run env PATH=… cmd`) so it can't
 leak into other tests. Prefer this over rewriting the script under test
 to inject a command path.

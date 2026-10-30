@@ -4,7 +4,7 @@ over the module's command line).
 
 The rows that show the lock *ordering* actors, a checkpoint, a take, a sweep and
 an approval each waiting on a held lock, are with the actor: tests/
-test_checkpoint_readback.py, tests/drive-take.bats, tests/hook-test.bats and
+test_checkpoint_readback.py, tests/drive-take.bats, tests/sentinel-lock.bats and
 tests/bin-commands.bats.
 """
 

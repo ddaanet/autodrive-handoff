@@ -240,7 +240,7 @@ another project's and is denied as a cross-project write. What the guard does
 not catch is the sentinel reached by a path that does not mention its name —
 through a symlink called something else, or a case variant on a
 case-insensitive filesystem. Judging any one of the three paths alone lets
-one of those spellings through, and each is a row in `tests/hook-test.bats`.
+one of those spellings through, and each is a row in `tests/write-guard.bats`.
 
 ## The Python half
 

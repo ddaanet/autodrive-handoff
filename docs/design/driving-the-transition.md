@@ -367,7 +367,7 @@ reject a line today. A forced-failure dogfood with a well-formed `/compact`
 was accepted and compacted the session (step 7, check 3). The `failFile`
 write, the toast and the next prompt's report rest on the stub rig's
 stop-on-first-failure row and the `report-drive-failure.sh` rows in
-`tests/hook-test.bats`. The path stays because a host change is the failure
+`tests/report-drive-failure*.bats`. The path stays because a host change is the failure
 class the live test has already caught once, and without it a rejection would
 end the drive with nothing said. No test seam is added to reach it: that would
 loosen the pinned slots to test code that exists to report a failure.

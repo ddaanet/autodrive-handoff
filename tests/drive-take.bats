@@ -21,7 +21,7 @@ setup() {
     [ -n "$CONTINUATION" ]
 }
 
-# Linked-worktree layout, as in hook-test.bats: .git is a file pointing under
+# Linked-worktree layout, as in hook-helpers.bash: .git is a file pointing under
 # the project's .git/worktrees. Echoes the worktree path.
 make_worktree() {
     local name="$1" wt="$BATS_TEST_TMPDIR/$1"

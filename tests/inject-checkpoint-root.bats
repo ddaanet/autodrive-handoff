@@ -125,9 +125,10 @@ STUB
 # still running fires UserPromptSubmit inside that turn with that turn's
 # prompt_id; report-drive-failure.sh compares its input's against this marker to
 # tell it from one typed at an idle composer (its rows are in
-# tests/hook-test.bats, where the marker is a fixture). The one writer is this
-# hook, on its matching path, so the id it records is the checkpoint call's own
-# turn's. The pointer directory is not made by the setup: the hook makes it.
+# tests/report-drive-failure-queued.bats, where the marker is a fixture). The
+# one writer is this hook, on its matching path, so the id it records is the
+# checkpoint call's own turn's. The pointer directory is not made by the setup:
+# the hook makes it.
 
 prompt_marker="handoff-prompt-sess-checkpoint"
 
