@@ -684,9 +684,10 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
     newline.
   - `tests/load-compact.bats` covers `load-compact.sh` (it consumes only its
     own kind in state `pending`, leaves `armed` for the sweep and spawns
-    nothing; `todo re-injected` and `No todo`) and its legacy paths, the same
-    fallback rows as `load-handoff-legacy.bats`, a dropped task-shadowed note
-    among them.
+    nothing; `todo re-injected` and `No todo`) and its legacy paths: each half
+    alone and both from the old path, the root todo or task shadowing a legacy
+    one, a headings-only root todo not shadowing it, a symlinked legacy todo
+    and legacy files with no body.
   - `tests/write-guard.bats` covers the write guard: the sentinel denied under
     every spelling that normalises onto it — a trailing slash, a `/.`, a `..`
     detour, a newline in a directory component — and when it is a symlink or
@@ -699,7 +700,7 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
     failed reader helper leaves the file, in both loaders and the sweep) and the
     sentinel as a symlink.
   - `tests/sentinel-lock.bats` covers the sentinel's lock in the sweep and the
-    loaders.
+    loaders, and a sentinel that does not parse swept with no lines offered.
   - `tests/report-drive-failure.bats` covers `report-drive-failure.sh`: the
     failure file, the stranded-`pending` clear, the sweep's note naming the mod
     and printing the lines, and the sweep's record: one line per removal naming

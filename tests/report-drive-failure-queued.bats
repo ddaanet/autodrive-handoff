@@ -273,7 +273,3 @@ assert_cancel_report() {
     [ ! -e "$tmp/.claude/autodrive" ]
     assert_unloaded_report "$output" "$LINES" unsettled
 }
-
-# <directory> — an armed rename, and in <directory> a marker holding the id the
-# input will carry: a directory the hook must not read, since a read through it
-# would spare the file.

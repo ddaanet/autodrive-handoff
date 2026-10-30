@@ -2,6 +2,9 @@
 # shellcheck source-path=SCRIPTDIR source=hook-helpers.bash
 source "$BATS_TEST_DIRNAME/hook-helpers.bash"
 
+# <directory> — an armed rename, and in <directory> a marker holding the id the
+# input will carry: a directory the hook must not read, since a read through it
+# would spare the file.
 seed_marker_in_untrusted_dir() {
     printf '%s\0' arming-prompt > "$1/$prompt_marker"
     seed_armed_kind rename
