@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC2034   # SHIM, APPROVED and INJECT_ROOT are read by the files that load this
+# shellcheck disable=SC2034   # SHIM, APPROVED and INJECT_ROOT are read by the files that source this
 # Shared by the bats files that test the bash-side neighbors of the checkpoint
 # channel (docs/changelog/2026-08-10-python-split.md): validate-plugin.bats,
-# inject-checkpoint-root.bats and bin-commands.bats. A bats file loads this at
-# its top, which gives it the shared `setup` and `make_repo`; a helper only one
-# of them calls stays in that file.
+# inject-checkpoint-root.bats and bin-commands.bats. Each `source`s this at its
+# top, under the line
+# `# shellcheck source-path=SCRIPTDIR source=checkpoint-helpers.bash`
+# so that shellcheck follows it, which gives it the shared `setup` and
+# `make_repo`. A helper only one of them calls stays in that file.
 #
 # checkpoint.py's own behavior (schema validation, write semantics,
 # sentinel/directive composition) is covered in tests/test_checkpoint_*.py
