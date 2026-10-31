@@ -2,9 +2,9 @@
 # a file entry refuses once its file is under the cap, so delete it then.
 docs/changelog # frozen archive: craft retired the dated changelog on 2026-10-31, so no record is added, edited or split
 docs/changelog.md # the frozen archive's index, frozen with it; retiring the index ends the entry
-docs/design/decisions.md # each bullet's argument moves to the node owning its mechanism, the conclusion stays (TODO.md)
-docs/design/driving-the-transition.md # its failure-report and sweep section becomes a node of its own (TODO.md)
-docs/design/rejected-alternatives.md # each entry's argument moves to the node owning its mechanism, the verdict stays (TODO.md)
-scripts/report-drive-failure.sh # the sweep or the drift note moves to a fourth _lib.sh part (TODO.md)
-skills/handoff/SKILL.md # the anti-patterns move to a references/ node (TODO.md)
+docs/design/decisions.md # split along a need-time seam (TODO.md)
+docs/design/driving-the-transition.md # split along a need-time seam (TODO.md)
+docs/design/rejected-alternatives.md # split along a need-time seam (TODO.md)
+scripts/report-drive-failure.sh # split along a need-time seam (TODO.md)
+skills/handoff/SKILL.md # split along a need-time seam (TODO.md)
 tests/test_checkpoint_legacy.py # deleted whole by the legacy-path removal, not before 2026-11-16 (TODO.md)
