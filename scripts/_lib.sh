@@ -4,6 +4,15 @@
 #   # shellcheck source-path=SCRIPTDIR source=_lib.sh
 #   source "$(dirname "$0")/_lib.sh"
 
+# The directory this file is in, computed once when it is sourced so no helper
+# forks `dirname` for it: the scripts it runs (`_checkpoint_lib.py`,
+# `_drive_lock.py`, `worktree_root.py`) are beside it. `.` when BASH_SOURCE has
+# no slash.
+case "${BASH_SOURCE[0]}" in
+    */*) HANDOFF_LIB_DIR="${BASH_SOURCE[0]%/*}"; : "${HANDOFF_LIB_DIR:=/}" ;;
+    *) HANDOFF_LIB_DIR="." ;;
+esac
+
 # Canonical relative paths inside the project. Changing these is a
 # breaking change (see CLAUDE.md conventions).
 # shellcheck disable=SC2034  # consumed by sourcing scripts
@@ -30,6 +39,12 @@ HANDOFF_LEGACY_REL_TODO=".claude/handoff-todo.md"
 # names the transition."
 # shellcheck disable=SC2034
 HANDOFF_REL_DRIVE=".claude/autodrive"
+# The advisory lock the sentinel's actors hold across a read-decide-write
+# (_drive_lock.py; docs/design/driving-the-transition.md, "The sentinel's lock").
+# Beside the sentinel, under the `.claude/autodrive*` ignore, and never removed.
+# Mirrored in checkpoint.py.
+# shellcheck disable=SC2034
+HANDOFF_REL_DRIVE_LOCK=".claude/autodrive.lock"
 # Where the drive mod records a line it could not run (written from
 # the mod at the failing line). A mod's rejection goes nowhere on its
 # own, so this is the only path back to the agent; consumed and reported by
@@ -86,7 +101,7 @@ HANDOFF_POINTER_DIR="${HANDOFF_POINTER_DIR:-/tmp/claude}"
 handoff_frame() {
     local task="$1" todo="$2" legacy_task="${3:-}" legacy_todo="${4:-}" lib
     local task_src todo_src
-    lib="$(dirname "${BASH_SOURCE[0]}")/_checkpoint_lib.py"
+    lib="$HANDOFF_LIB_DIR/_checkpoint_lib.py"
     # Any of the four paths that is a symlink, dangling or not, is treated as
     # absent: never tested, read or counted as shadowing or shadowed. The
     # checkpoint refuses a symlink at each, naming the field (a dangling
@@ -462,6 +477,52 @@ handoff_drive_arm() {
     fi
 }
 
+# <lockfile>. Take the sentinel's lock, held until the shell exits (or closes
+# fd 9), so a script holds it across its whole read-decide-write by calling this
+# before the read. Returns 0 holding it. Not holding it fails closed: the caller
+# leaves the sentinel alone, since acting unlocked reopens the race the lock
+# closes, and says why with HANDOFF_LOCK_MSG, which this sets on every failure.
+# Two returns tell the causes apart: 1 is `busy`, the wait bound passed with
+# another actor still holding the lock (HANDOFF_LOCK_WAIT_SECS, default 5); 2 is
+# `unavailable`, a lock that could not be set up at all (no `.claude/`, a link
+# or a non-file at the name, python3 or the helper failing, a file system with
+# no flock). Callers under `set -e` write `lock_rc=0; handoff_lock_take … ||
+# lock_rc=$?`. Call it directly, never in a `$(...)`: the message and the lock
+# itself are the caller's shell's.
+#
+# fd 9 is the lock's, and a script that calls this must not use it. A lock lives
+# on an open file description, which a child shares with the descriptor its
+# parent opened, so bash opens fd 9 on the file, `_drive_lock.py wait` takes
+# the lock on it from a child, and the lock stays with the shell's descriptor
+# after that child is gone. `create` makes the file first, 0600 and
+# O_NOFOLLOW, which bash's own redirection could not promise, and is skipped
+# once a regular file is there (the lock file is never deleted, so after the
+# first take that is the usual case: one spawn instead of two). `wait` checks
+# that fd 9 is still the regular file the path names, which is the whole of the
+# safety `create` adds for a file already there. Read-write so that opening a
+# FIFO put there in the meantime cannot block. `wait` exits 75 for busy and
+# anything else for unavailable (a crashed or missing python3 included).
+# shellcheck disable=SC2034  # HANDOFF_LOCK_MSG is read by the sourcing scripts
+handoff_lock_take() {
+    local lock="$1" helper wait_rc=0
+    HANDOFF_LOCK_MSG="the sentinel's lock could not be set up"
+    helper="$HANDOFF_LIB_DIR/_drive_lock.py"
+    if [[ ! -f "$lock" || -L "$lock" ]]; then
+        python3 -I "$helper" create "$lock" 2>/dev/null || return 2
+    fi
+    { exec 9<>"$lock"; } 2>/dev/null || return 2
+    python3 -I "$helper" wait 9 "$lock" 2>/dev/null || wait_rc=$?
+    if (( wait_rc == 0 )); then
+        return 0
+    fi
+    { exec 9>&-; } 2>/dev/null
+    if (( wait_rc == 75 )); then
+        HANDOFF_LOCK_MSG="the sentinel's lock was busy"
+        return 1
+    fi
+    return 2
+}
+
 # <path> [own]. Print a status line, then on `ok` the file's bytes, opened with
 # O_NOFOLLOW so the check and the read are one step: no link put at the name
 # at any moment is followed. The status is `ok`, `absent`, `link` (the last
@@ -508,6 +569,62 @@ handoff_replace() {
     python3 -I -c 'import os, sys; os.replace(sys.argv[1], sys.argv[2])' "$1" "$2"
 }
 
+# The per-session markers in $HANDOFF_POINTER_DIR (the drift marker, and the
+# prompt marker the checkpoint leaves) are used only in a directory that is no
+# link, is this user's and is writable by no one else. The directory is shared
+# by every local user, so it and every name in it may be a link someone else
+# planted: each marker is read with handoff_read_regular (no link followed) and
+# written with handoff_write_marker. Where the directory fails the test there is
+# no marker at all.
+marker_dir_ok() {
+    [[ -d "$HANDOFF_POINTER_DIR" && ! -L "$HANDOFF_POINTER_DIR" && -O "$HANDOFF_POINTER_DIR" ]] \
+        && [[ -z "$(find "$HANDOFF_POINTER_DIR" -maxdepth 0 \( -perm -020 -o -perm -002 \) 2>/dev/null)" ]]
+}
+
+# <path> <value>. Write <value>, NUL-terminated, to <path>: a mktemp sibling
+# renamed over the name (handoff_replace), so a link at the name is replaced and
+# never written through. The sibling is named `<path>.XXXXXX`, which matches the
+# marker's own glob, so session-pointer.sh sweeps an orphan. Returns 1, leaving
+# no sibling behind, when any step fails.
+handoff_write_marker() {
+    local path="$1" value="$2" tmp
+    tmp="$(mktemp "$path.XXXXXX" 2>/dev/null)" || return 1
+    if ! printf '%s\0' "$value" > "$tmp" \
+        || ! handoff_replace "$tmp" "$path"; then
+        rm -f "$tmp"
+        return 1
+    fi
+}
+
+# <path>. Read a per-session marker in $HANDOFF_POINTER_DIR into the caller's
+# scope, the handoff_drive_read idiom: MARKER_STATUS is `absent` when the
+# directory does not exist (nothing was ever written there, so there is no
+# marker), `nodir` when it exists and fails marker_dir_ok (nothing is read),
+# else handoff_read_regular's status with `own` (`ok`, `absent`, `link`,
+# `other`, `foreign`), or empty when python3 failed; MARKER_VALUE is the bytes,
+# NUL-terminated and read whole so a value holding a newline or edge whitespace
+# survives, and is empty unless the status is `ok`. Always returns 0. The drift
+# marker and the prompt marker are read through here, so neither can skip the
+# directory test or the no-follow open.
+# shellcheck disable=SC2034  # assigned for the caller's scope
+handoff_read_marker() {
+    MARKER_STATUS="" MARKER_VALUE=""
+    if [[ ! -e "$HANDOFF_POINTER_DIR" && ! -L "$HANDOFF_POINTER_DIR" ]]; then
+        MARKER_STATUS="absent"
+        return 0
+    fi
+    if ! marker_dir_ok; then
+        MARKER_STATUS="nodir"
+        return 0
+    fi
+    {
+        IFS= read -r MARKER_STATUS || true
+        if [[ "$MARKER_STATUS" == ok ]]; then
+            IFS= read -r -d '' MARKER_VALUE || true
+        fi
+    } < <(handoff_read_regular "$1" own)
+}
+
 # Effective project root for the handoff files of THIS session, into the
 # caller's HANDOFF_ROOT, plus the branch that produced it in
 # HANDOFF_ROOT_BRANCH: `inside` (cwd is the project or under it), `worktree`
@@ -541,7 +658,7 @@ handoff_root_read() {
     # a newline would be cut by a line-wise read.
     HANDOFF_ROOT="" HANDOFF_ROOT_BRANCH=""
     { IFS= read -r -d '' HANDOFF_ROOT; IFS= read -r -d '' HANDOFF_ROOT_BRANCH; } < <(
-        python3 "$(dirname "${BASH_SOURCE[0]}")/worktree_root.py" "$1" "$project"
+        python3 "$HANDOFF_LIB_DIR/worktree_root.py" "$1" "$project"
     ) || true
     # A process substitution's exit status is out of reach in bash 3.2, so the
     # answer is judged instead: a resolver that crashed printed nothing, or not

@@ -18,6 +18,10 @@
 # NFR2: this fires on every Bash call in every session with the plugin
 # installed, so the negative path is one jq field parse and a substring test —
 # no root resolution unless the command matches.
+#
+# A matching call also records its prompt_id in the session's prompt marker,
+# which report-drive-failure.sh compares against a prompt queued into this turn.
+# A marker that cannot be written changes nothing here.
 set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -25,10 +29,10 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/_lib.sh"
 
 payload="$(cat)"
-# One parse for both fields, each NUL-terminated and read whole: a cwd ending in
-# a newline would lose it to a `$(...)` capture.
-{ IFS= read -r -d '' command; IFS= read -r -d '' cwd; } < <(
-    jq -j '(.tool_input.command // ""), "\u0000", (.cwd // ""), "\u0000"' <<<"$payload"
+# One parse for all four fields, each NUL-terminated and read whole: a cwd or an
+# id ending in a newline would lose it to a `$(...)` capture.
+{ IFS= read -r -d '' command; IFS= read -r -d '' cwd; IFS= read -r -d '' session_id; IFS= read -r -d '' prompt_id; } < <(
+    jq -j '(.tool_input.command // ""), "\u0000", (.cwd // ""), "\u0000", (.session_id // ""), "\u0000", (.prompt_id // ""), "\u0000"' <<<"$payload"
 ) || true
 
 case "$command" in
@@ -46,6 +50,18 @@ if [[ "$HANDOFF_ROOT_BRANCH" == "unresolved" ]]; then
     exit 0
 fi
 [ -n "$root" ] || exit 0
+
+# The prompt marker: the id of the turn this call runs in, which
+# report-drive-failure.sh compares a queued prompt's id with. Written here only,
+# and only when both ids are present. A marker that cannot be written costs
+# nothing else: stdout and stderr are silent, and the rewrite below is the same.
+if [[ -n "$session_id" && -n "$prompt_id" ]]; then
+    # shellcheck disable=SC2174
+    mkdir -m 700 -p "$HANDOFF_POINTER_DIR" 2>/dev/null || true
+    if marker_dir_ok; then
+        handoff_write_marker "$HANDOFF_POINTER_DIR/handoff-prompt-$session_id" "$prompt_id" 2>/dev/null || true
+    fi
+fi
 
 # export …; rather than a bare VAR=… prefix, so the value survives a batched
 # command: `VAR=x a && b` would apply to `a` alone, not `b`. printf %q quotes

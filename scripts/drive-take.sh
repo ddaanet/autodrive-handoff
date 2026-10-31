@@ -4,7 +4,8 @@
 # a Stop, with the Stop event's cwd and session id. Exit 0 always; empty stdout
 # means nothing was armed for this session (no file, `pending`, `held`, or
 # `armed` by another session); an `armed` file with no session id given is a
-# `kind: null` plan saying so. Otherwise one line of JSON:
+# `kind: null` plan saying so, and so is a sentinel whose lock could not be taken
+# (nothing touched). Otherwise one line of JSON:
 # {kind, before[], after[], failFile, message}.
 #
 # The mod never touches the sentinel: this script is the one place that leaves
@@ -33,6 +34,28 @@ drive="$root/$HANDOFF_REL_DRIVE"
 fail_file="$root/$HANDOFF_REL_DRIVE_FAILED"
 
 # A link, dangling or not, reaches the reader, which refuses it.
+[[ -L "$drive" || -f "$drive" ]] || exit 0
+
+# The read and the move out of `armed` are one step under the sentinel's lock
+# (_drive_lock.py), held until this script exits. The prompt-time sweep judges
+# and removes the same file, and the host does not order its hook against this
+# take: without the lock the sweep could read `armed`, lose the race to the
+# arm below and then delete the `pending` file of a transition about to run,
+# telling the user the mod never ran it. A checkpoint or an approval writing the
+# file waits the same way. A lock that cannot be taken fails closed, whether
+# busy past the wait (HANDOFF_LOCK_WAIT_SECS) or not set up at all: nothing is
+# taken, the file is left exactly as it is (still `armed`, so the next prompt's
+# sweep deals with it) and the plan carries the message alone, as for an
+# unresolved root. The second test is for a file the sweep removed while this
+# waited.
+lock_rc=0
+handoff_lock_take "$root/$HANDOFF_REL_DRIVE_LOCK" || lock_rc=$?
+if (( lock_rc != 0 )); then
+    jq -nc --arg m "$HANDOFF_LOCK_MSG" \
+        '{kind: null, before: [], after: [], failFile: "",
+          message: ("handoff: " + $m + "; " + ".claude/autodrive left untouched, nothing taken.")}'
+    exit 0
+fi
 [[ -L "$drive" || -f "$drive" ]] || exit 0
 
 read_rc=0

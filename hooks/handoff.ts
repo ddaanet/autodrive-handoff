@@ -46,8 +46,6 @@ async function drive($: any, cwd: string, session: string) {
   }
 
   for (const line of [...plan.before, ...plan.after]) {
-    // Parity with the old composer check: never type over a person.
-    if ((await $.prompt.read()).text !== '') return
     try {
       await runLine($, line)
     } catch (err: any) {

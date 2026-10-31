@@ -31,29 +31,46 @@ drive="$cwd/$HANDOFF_REL_DRIVE"
 # A link, dangling or not, reaches the reader, which refuses it.
 [[ -L "$drive" || -f "$drive" ]] || exit 0
 
-read_rc=0
-handoff_drive_read "$drive" || read_rc=$?
-if (( read_rc == 2 )); then
-    # The reader could not run, which says nothing about the file: kept.
-    jq -nc --arg e "$DRIVE_ERR" \
-        '{systemMessage: ("handoff: autodrive not read — " + $e + "; left in place, not resuming.")}'
-    exit 0
-fi
-if (( read_rc != 0 )); then
+# The read and the removal below are one step under the sentinel's lock
+# (_drive_lock.py): a checkpoint replaces whatever sentinel is there, so without
+# it one could land between the two and be removed unread. The lock is let go
+# once the file is consumed; the early exits below let it go by exiting. A lock
+# that cannot be taken fails closed, busy past the wait (HANDOFF_LOCK_WAIT_SECS)
+# or not set up at all: the sentinel is neither read nor removed, and the frame
+# is injected as usual, with a note on both channels that the transition state
+# was left. Whether a compaction was pending cannot be known then, and a frame
+# missing from a driven compaction is the costlier error. The second test is for
+# a file removed while this waited.
+lock_rc=0
+handoff_lock_take "$cwd/$HANDOFF_REL_DRIVE_LOCK" || lock_rc=$?
+[[ -L "$drive" || -f "$drive" ]] || exit 0
+
+if (( lock_rc == 0 )); then
+    read_rc=0
+    handoff_drive_read "$drive" || read_rc=$?
+    if (( read_rc == 2 )); then
+        # The reader could not run, which says nothing about the file: kept.
+        jq -nc --arg e "$DRIVE_ERR" \
+            '{systemMessage: ("handoff: autodrive not read — " + $e + "; left in place, not resuming.")}'
+        exit 0
+    fi
+    if (( read_rc != 0 )); then
+        rm -f "$drive"
+        jq -nc --arg e "$DRIVE_ERR" \
+            '{systemMessage: ("handoff: autodrive malformed — " + $e + "; not resuming.")}'
+        exit 0
+    fi
+
+    # Only a transition in flight is ours to complete, and only our own kind. An
+    # armed file belongs to a Stop that has not fired; a pending `clear` armed in
+    # this session and overtaken by a threshold auto-compaction would otherwise
+    # fire its continuation into the session the clear was meant to replace.
+    [[ "$DRIVE_STATE" == "pending" && "$DRIVE_KIND" == "compact" ]] || exit 0
+
+    # Consume unconditionally: a transition is taken at most once.
     rm -f "$drive"
-    jq -nc --arg e "$DRIVE_ERR" \
-        '{systemMessage: ("handoff: autodrive malformed — " + $e + "; not resuming.")}'
-    exit 0
+    { exec 9>&-; } 2>/dev/null
 fi
-
-# Only a transition in flight is ours to complete, and only our own kind. An
-# armed file belongs to a Stop that has not fired; a pending `clear` armed in
-# this session and overtaken by a threshold auto-compaction would otherwise fire
-# its continuation into the session the clear was meant to replace.
-[[ "$DRIVE_STATE" == "pending" && "$DRIVE_KIND" == "compact" ]] || exit 0
-
-# Consume unconditionally: a transition is taken at most once.
-rm -f "$drive"
 
 # The todo remainder carries the content across the compaction; the
 # continuation prompt is only a handle to it. Inject the frame here so the handle
@@ -81,6 +98,12 @@ done
 for note in ${FRAME_NOTES_MSG[@]+"${FRAME_NOTES_MSG[@]}"}; do
     msg+="; $note"
 done
+# A sentinel left because its lock could not be taken is named on both channels.
+if (( lock_rc != 0 )); then
+    lock_ctx="The transition state ($HANDOFF_REL_DRIVE) was left in place, not consumed: $HANDOFF_LOCK_MSG."
+    context="${context:+$context$'\n\n'}$lock_ctx"
+    msg+="; autodrive left in place — $HANDOFF_LOCK_MSG"
+fi
 msg+="."
 
 jq -nc --arg f "$context" --arg m "$msg" \
