@@ -200,21 +200,9 @@ prompt may carry, because the schema leaves nothing to argue.
 [The continuation is a
 constant](../changelog/2026-10-15-the-continuation-is-a-constant.md)
 
-**A sentinel names its owner, and only the owner judges it stale.** Every
-session sharing the root runs the same hooks and the same mod, the background
-session the harness starts after a `git commit` among them, so seeing a
-sentinel says nothing about whose it is. `held` and `armed` carry their owner on
-line 1. Only the owner's turn end takes an `armed` file, and only the owner's
-prompt sweeps one as an aborted turn, unless the prompt was queued into the
-arming turn. Another session sweeps an `armed` file
-only once the owner is not live by its transcript's mtime. That test is a
-heuristic, and every way it can be wrong sweeps a file that should have
-stayed, so it is not applied to `held`, which waits on a human for as long as
-that takes: no session but the owner ever sweeps a `held` file, and a dead
-owner's is replaced by the next checkpoint.
-[The armed sentinel has an
-owner](../changelog/2026-10-13-the-armed-sentinel-has-an-owner.md),
-[Cross-session limits, documented](../changelog/2026-10-14-cross-session-limits-documented.md)
+**A sentinel names its owner, and only the owner judges it stale.** The
+owner rides on line 1 of `armed` and `held`; the argument is in [Sessions
+sharing a root](sessions-sharing-a-root.md#decision).
 
 **A prompt queued into the arming turn cancels a `clear` or `compact`, and
 spares a `rename`.** A spared `clear` or `compact` would run cleanly, but the

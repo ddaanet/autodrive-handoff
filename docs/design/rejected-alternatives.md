@@ -54,16 +54,9 @@ against the stateless `.git` walk.
 root](../changelog/2026-06-09-per-worktree-handoff-root.md)
 
 **A session-id sidecar or a recency timeout for a stale sentinel** —
-the most likely trigger is an Esc in the *same* session, so the id matches
-and the next `Stop` arms it anyway; a timeout is a guess about how long a
-turn may run, and a wrong guess silently drops a wanted compaction. Both stay
-rejected for the owner's own sentinel, which its next prompt sweeps
-unless that prompt was queued into the arming turn. Across sessions the owner
-rides on line 1 rather than in a sidecar, and what is timed is the owner's transcript, never the sentinel.
-[A stale autocompact is one a later turn can
-see](../changelog/2026-07-22-stale-autocompact.md),
-[The armed sentinel has an
-owner](../changelog/2026-10-13-the-armed-sentinel-has-an-owner.md)
+neither is used: the owner rides on line 1 and its transcript is what is
+timed; the argument is in [Sessions sharing a
+root](sessions-sharing-a-root.md#rejected-alternatives).
 
 **Sparing every kind of queued prompt**, **recording each prompt's id in the
 sweep**, **the mod reading the prompt box** — a spared `clear` or `compact`
@@ -263,17 +256,10 @@ and the mods API has no rename or delete for the atomic `armed` → `pending`.
 The cost it would save is paid only on the rare path: the every-turn check is a
 single `exists` on the project root.
 
-**Per-session sentinels or checksums for sessions sharing a root** — one
-sentinel per session, or a checksum the take compares before rewriting. Each
-closes one race (a later checkpoint replacing an earlier session's sentinel)
-at the cost of a second file per session or a compare-and-swap every bash
-reader would implement, and none touches `TASK.md` and `TODO.md`, which are shared state by
-design: two sessions writing one task frame conflict whatever the sentinel
-does. The complexity is out of proportion to a setup a worktree per session
-already avoids. A lock was first ruled out here with them and has since been
-adopted for a narrower race, between the actors of one session's sentinel, the
-sweep and the take ([The sentinel's lock](driving-the-transition.md#the-sentinels-lock));
-it does not make a root safe for two sessions. **Recording the root in the sentinel**, checked on take, to
+**Per-session sentinels or checksums for sessions sharing a root** — out of
+proportion to a setup a worktree per session already avoids; the argument,
+and the lock adopted since for a narrower race, are in [Sessions sharing a
+root](sessions-sharing-a-root.md#rejected-alternatives). **Recording the root in the sentinel**, checked on take, to
 catch a `.claude/` shared between roots, is more machinery and another line
 every reader parses for a setup that is unsupported. **Refusing a symlinked
 `.claude/`** adds nothing either: a project directory the user has accepted as

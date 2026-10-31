@@ -74,7 +74,8 @@ One line each, with the node under `docs/design/` that holds its behaviour.
 - `scripts/_drive_lock.py` — the sentinel's advisory lock → sentinel-lock.md
 - `scripts/worktree_root.py` — the session-root resolver → scoping.md
 - `scripts/_lib.sh` — the one sourced helper: constants, root resolver, lock,
-  owner liveness; sources the next three → scoping.md
+  owner liveness; sources the next three → scoping.md,
+  sessions-sharing-a-root.md
 - `scripts/_lib_frame.sh` — `handoff_frame` and its notes → the-write-path.md
 - `scripts/_lib_drive.sh` — the sentinel's grammar → driving-the-transition.md
 - `scripts/_lib_files.sh` — no-follow reads, replacing writes → scoping.md
@@ -85,7 +86,8 @@ One line each, with the node under `docs/design/` that holds its behaviour.
 - `scripts/load-compact.sh` — `SessionStart(compact)` loader →
   driving-the-transition.md
 - `scripts/report-drive-failure.sh` — `UserPromptSubmit`: failure report,
-  sweep, drift note → driving-the-transition.md, queued-prompts.md
+  sweep, drift note → driving-the-transition.md, queued-prompts.md,
+  sessions-sharing-a-root.md
 - `scripts/write-guard.sh` — `PreToolUse(Write|Edit)`: denies a direct write
   to the sentinel → the-write-path.md
 - `scripts/inject-checkpoint-root.sh` — `PreToolUse(Bash)`: exports
@@ -110,7 +112,9 @@ What you are touching → what to read first, under `docs/design/`:
   `report-drive-failure.sh`'s sweep, `.claude/autodrive` and its states, FR-G
   → `driving-the-transition.md`; a prompt arriving while the arming turn runs,
   the prompt marker → `queued-prompts.md`; the sentinel's lock,
-  `_drive_lock.py`, `handoff_lock_take` → `sentinel-lock.md`
+  `_drive_lock.py`, `handoff_lock_take` → `sentinel-lock.md`; a second session
+  in the root, `handoff_owner_live`, `HANDOFF_OWNER_LIVE_SECS`,
+  `autodrive.swept` → `sessions-sharing-a-root.md`
 - `handoff-approved`, `closing_directive`, `ledger_path`, `held`,
   `with-commit`, the gitlore seam, FR9, FR12 → `the-checkpoint-directive.md`
 - `worktree_root.py`, `handoff_root_read`, `inject-checkpoint-root.sh`,

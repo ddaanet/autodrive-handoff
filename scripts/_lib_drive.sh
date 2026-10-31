@@ -131,7 +131,7 @@ handoff_drive_read() {
     # `rm -f` removes the link and not what it names. The bound is the last
     # component: a symlinked `.claude/` is read and written where it points,
     # as the root and legacy files are, and one shared between roots is
-    # unsupported (docs/design/driving-the-transition.md).
+    # unsupported (docs/design/sessions-sharing-a-root.md).
     local read_status=""
     {
         IFS= read -r read_status || true

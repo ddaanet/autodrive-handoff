@@ -64,7 +64,7 @@ replaces a link put at the sentinel since it was read where `mv` would move
 the file into the directory it points at. The bound is the last component, as
 for the root files: a symlinked `.claude/` is read and written where it
 points, and one shared between roots is unsupported (see [Sessions sharing a
-root](#sessions-sharing-a-root)).
+root](sessions-sharing-a-root.md#limits)).
 
 A reader whose `python3 -I` helper fails prints nothing, which says nothing
 about the file. `handoff_drive_read` returns 2 for it rather than 1, and every
@@ -75,10 +75,9 @@ its own `unread` state and removes nothing.
 `held` is the checkpoint's, released by `handoff-approved`
 ([The checkpoint directive](the-checkpoint-directive.md)). Everything after it
 is a hook's: `drive-take.sh` moves `armed` to `pending`, dropping the owner, and
-the transition's own `SessionStart` loader removes `pending`. Every session
-sharing the root runs the same hooks and the same mod — the background session
-the harness starts after a `git commit` among them — so the owner is what tells
-one session's sentinel from another's.
+the transition's own `SessionStart` loader removes `pending`. Which session may
+take or sweep a file another session owns is in [Sessions sharing a
+root](sessions-sharing-a-root.md).
 
 ## Who runs it, and when
 
@@ -238,27 +237,9 @@ The hook also sweeps a sentinel still `armed`. `drive-take.sh` leaves it
 `pending` or removes it at the end of the turn that wrote it, so one still
 `armed` when a prompt arrives has not been taken, and unless that prompt was
 typed into the arming turn it never will ([A prompt queued into the arming
-turn](queued-prompts.md)). Another session's prompt can arrive while the
-owning turn is still running too. For a file owned by another session the hook
-asks whether that session
-is **live** — its transcript, `<owner>.jsonl` beside the one in the hook input's
-`transcript_path`, written within `HANDOFF_OWNER_LIVE_SECS` (600 s by default).
-That question is asked of `armed` alone, which lives only until its owner's
-turn ends. A live owner's `armed` file is left untouched and nothing is said;
-one whose owner is not live (stale or missing transcript, or no
-`transcript_path` in the input) is swept as below. Liveness is a heuristic,
-and each way it can be wrong sweeps an `armed` file that should have stayed —
-an owner turn that writes nothing to its transcript for the whole window;
-the argument is in [The armed sentinel has an
-owner](../changelog/2026-10-13-the-armed-sentinel-has-an-owner.md).
-
-A `held` file is never swept on liveness, whoever owns it. It waits on a human
-approval, which takes as long as it takes, and an idle transcript is exactly
-what a session waiting on its user looks like. A dead owner's `held` file stays
-on disk: it is a few short lines, arms nothing by itself (`handoff-approved`
-refuses a held file another session owns), and the next checkpoint in the root
-replaces it.
-[Cross-session limits, documented](../changelog/2026-10-14-cross-session-limits-documented.md)
+turn](queued-prompts.md)). What another session's prompt may sweep —
+liveness, the `held` exemption and the sweep's record — is in [Sessions sharing
+a root](sessions-sharing-a-root.md).
 
 For the owner's own `armed` file, or another's whose owner is not live, there are
 two causes the hook cannot tell apart (three, when the input carries no
@@ -276,22 +257,6 @@ without lines — it describes no transition anyone can complete. `held` is
 exempt whoever owns it, which is why the sweep names its states rather than
 taking anything that is not `pending`. Lines are offered only for the owner's
 own `armed` file: another session's would be replayed into this conversation.
-
-Each removal the sweep makes also appends a line to `.claude/autodrive.swept`:
-time, the removing session, the file's state, owner, kind and age, and the
-cwd. The sweep's report lands on the removing session's own channels, which
-the session that composed the file never sees, and background sessions
-sharing the root (the commit review) run this hook too; without the record a
-vanished sentinel names no remover. It is newest first, trimmed to 50 lines,
-never consumed, and a failed write never blocks the sweep. `.claude/` is the
-agent's to write, so the record is never followed through a symlink: one that
-is a link, or not a regular file, is left alone and nothing is recorded, the
-old record is read through one `O_NOFOLLOW` open rather than a test and a
-read, and the rewrite goes through a `mktemp` file beside it rather than a
-fixed name a planted link could redirect, renamed over the record by
-`os.replace`, which replaces a link put there meanwhile where `mv` would move
-the file into a directory it names. It says who took the file and how old it was; it
-does not decide whether the sweep was right.
 
 ## A prompt queued into the arming turn
 
@@ -312,29 +277,6 @@ armed. Every actor of the sentinel, the checkpoint, `handoff-approved`,
 that fails closed: an actor that cannot take it leaves the sentinel as it is
 and says so. The mechanism, its bounds and what each actor does are in [The
 sentinel's lock](sentinel-lock.md).
-
-## Sessions sharing a root
-
-The owner keeps one session from running or sweeping another live session's
-transition. It does not make a root safe for two sessions at once, and the
-rest is a known limit rather than a defect: making it safe needs per-session
-sentinels or checksums, out of proportion to a setup a worktree per session
-avoids (see [Rejected alternatives](rejected-alternatives.md)).
-
-- **Checkpoint against checkpoint.** The checkpoint renames its sentinel over
-  whatever is there. A later checkpoint in the root replaces an earlier
-  session's sentinel, and that session's turn end finds a file another session
-  owns and takes nothing, silently.
-- **`TASK.md` and `TODO.md` are last-writer-wins.** Each checkpoint writes what
-  it is given.
-- **A `.claude/` shared between roots**, by symlink or otherwise, is
-  unsupported. `pending` is ownerless by necessity — the session after a
-  `/clear` has a new id, so the file cannot name it — and the other root's
-  loader can consume it. The owner on `armed` and `held` does not cover it.
-
-The mitigation is one session per root at a time, or a worktree per session:
-the root is the enclosing worktree ([Scoping](scoping.md)), so each has its own
-`.claude/`, `TASK.md` and `TODO.md`.
 
 ## Verification
 

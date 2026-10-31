@@ -12,7 +12,7 @@ session). So a worktree session owns its own `.claude/`, `TASK.md` and
 sessions in one root share those files without any ordering of intent, and a `.claude/` shared
 between roots, by symlink or otherwise, is unsupported, since the ownerless
 `pending` sentinel can be consumed by the other root (see [Sessions sharing a
-root](driving-the-transition.md#sessions-sharing-a-root)). No symlinked
+root](sessions-sharing-a-root.md#limits)). No symlinked
 `.claude/` is refused: a trusted project directory can already ship hooks and
 settings, so a planted link adds no capability, and Claude Code documents
 symlinks only for `.claude/rules/` and skills, not for `.claude/` whole. The

@@ -224,6 +224,9 @@ Where the argument lives:
   is still running?
 - [The sentinel's lock](design/sentinel-lock.md) — What orders the sweep, the
   take, the checkpoint and the approval, which all read and rewrite one file?
+- [Sessions sharing a root](design/sessions-sharing-a-root.md) — What does a
+  second session in the same root do to a sentinel it does not own, and what
+  stays unsafe?
 - [Scoping](design/scoping.md) — Which root does a hook anchor on, and how is
   a session that drifts out of it reported?
 - [Release infrastructure](design/release-infrastructure.md) — Why is the
@@ -340,7 +343,7 @@ Ruled out, each argued in
   at a time, or a worktree per session (the root is worktree-scoped). What
   the plugin does guarantee across sessions is that one never runs or sweeps
   another live session's transition, nor ever sweeps a `held` one. See
-  [Driving the transition](design/driving-the-transition.md#sessions-sharing-a-root).
+  [Sessions sharing a root](design/sessions-sharing-a-root.md).
 - **Claude.ai portability.** The plugin depends on session JSONL,
   Claude Code hooks, and filesystem — all Claude Code-specific. A
   claude.ai variant would need an entirely different mechanism.
