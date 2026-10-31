@@ -95,54 +95,13 @@ scales with volume, and trimming changes length, not register.
 [Task frame drops the transcript and file
 list](../changelog/2026-07-17-task-frame-drops-transcript.md)
 
-**The agent supplies one fact; the code owns the branch.** Commit awareness
-— *does the ask this call serves imply a commit?* — is a fact about the
-conversation that no script can see, and everything downstream of the answer
-is deterministic. It changes whether the checkpoint prints a commit act, holds
-a driven transition behind it, and names the memory gitlink in it. It does not
-change how memory is committed or what memory *says*: the memory directive is
-the same text in both modes, and how memory bodies are written, present-tense
-truth included, is `gitlore:memory-writing`'s rule, which holds in every mode
-and which `gitlore:commit` has the agent apply before it drafts the summary.
-The transition fields are the same shape, which is why they are fields and not
-skills.
-[Commit awareness](../changelog/2026-07-25-commit-awareness.md),
-[Transitions become modes](../changelog/2026-08-05-transitions-become-modes.md),
-[Memory commits go through the
-skill](../changelog/2026-10-30-memory-commits-go-through-the-skill.md)
+**The agent supplies one fact; the code owns the branch.** The argument is in [The checkpoint directive](the-checkpoint-directive.md#decisions).
 
-**Ask the question the request can answer.** The rule this replaced counted
-a commit landing in a later session, because it framed the question as where
-the memory belongs rather than whether anything present decides it — and
-that is unanswerable in the prepare-only modes, where the agent has no
-evidence in front of it and guesses. The ask stops at the transition,
-uniformly: one sentence that holds for every mode is worth more than a
-carve-out for the compaction, which keeps the session alive and could
-legitimately look past it. Nothing about the memory commit rides on the answer
-any more, so a wrong guess costs a parent commit that is made or skipped, not
-an approved summary that goes unread.
-[Transitions become modes](../changelog/2026-08-05-transitions-become-modes.md)
+**Ask the question the request can answer.** The argument is in [The checkpoint directive](the-checkpoint-directive.md#decisions).
 
-**The directive points at the skill and holds no copy of the protocol.** The
-memory part is the dirty listing and a sentence naming `gitlore:commit`. The
-summary format, the review and the approval protocol are the skill's, and a
-restatement here would be a second owner to drift from the first. The reader is
-a fresh agent, so what it needs is the skill's name; the command, the file
-formats and the hooks gitlore once consumed are mechanism it cannot act on, and
-text that carries them is verified and narrated back. Nothing is named that
-would need forbidding.
-[Commit awareness](../changelog/2026-07-25-commit-awareness.md),
-[Memory commits go through the
-skill](../changelog/2026-10-30-memory-commits-go-through-the-skill.md)
+**The directive points at the skill and holds no copy of the protocol.** The argument is in [The checkpoint directive](the-checkpoint-directive.md#decisions).
 
-**A directive is correct only where in the turn it lands.** handoff runs its
-checkpoint in the same turn as the writes — deliberately, so the snapshot
-costs one round trip — so a directive about *how to write them* arrives
-after they exist. precompact reads its directive before it writes. Shared
-prompt text is shared only where the flows agree; naming the safe route is
-the load-bearing half of any prohibition.
-[A directive must fit where in the turn it
-lands](../changelog/2026-07-22-directive-fits-where-it-lands.md)
+**A directive is correct only where in the turn it lands.** The argument is in [The checkpoint directive](the-checkpoint-directive.md#where-in-the-turn-a-directive-lands).
 
 **Mechanical logic lives in a script or hook, not in a skill's prose; the
 skill body holds judgement only.** Detection, branching and decisions that can
@@ -272,14 +231,7 @@ and the cache may legitimately hold more (identity, ordering, per-item
 history) because that surplus is boundary-local.
 [A place for the todo list](../changelog/2026-07-22-a-place-for-the-todo-list.md)
 
-**With nothing to approve, the wrap-up completes in a single turn.** No
-detection round-trip exists between deciding and writing: the checkpoint is
-unconditional, and it decides for itself whether memory or a ledger is in
-play. When memory *is* pending, the directive asks for approval — a user
-response, which ends the turn — and a driven transition is therefore held
-and released only in the turn after the answer, or it would compact or
-clear away the conversation the answer applies to. Any rebalancing of the
-gitlore seam must preserve both halves.
+**With nothing to approve, the wrap-up completes in a single turn.** The argument is in [The checkpoint directive](the-checkpoint-directive.md#decisions).
 
 **A context-size nudge was tried and dropped.** `PostToolBatch` fired once a
 session's prompt crossed a fixed threshold, injecting a directive naming

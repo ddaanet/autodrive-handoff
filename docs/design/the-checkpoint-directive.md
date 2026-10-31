@@ -72,6 +72,15 @@ has no procedure after the call.
 [The directive owns the
 procedure](../changelog/2026-09-18-the-directive-owns-the-procedure.md)
 
+### Where in the turn a directive lands
+
+**A directive is correct only where in the turn it lands.** handoff runs its
+checkpoint in the same turn as the writes — deliberately, so the snapshot
+costs one round trip — so a directive about *how to write them* arrives
+after they exist. precompact reads its directive before it writes. Shared
+prompt text is shared only where the flows agree; naming the safe route is
+the load-bearing half of any prohibition.
+
 ## Held: a transition an approval has not released
 
 The checkpoint writes the sentinel `held` when it **names any command at all**
@@ -103,8 +112,7 @@ is called, which the printed order puts after the commit. The disjunct is
 scoped to a driven transition rather than to any command: an untyped
 handoff's only line is `/rename`, which costs nothing when it fires over a
 failed commit, and with clean memory there is no question for it to race
-(see "One hold predicate" under [Rejected
-alternatives](rejected-alternatives.md)).
+(see [One hold predicate, rejected](#one-hold-predicate-rejected)).
 
 `held` is the one state that outlives the turn that wrote it on purpose: the
 approval is answered in a later turn, and a failed commit is retried in one.
@@ -124,6 +132,20 @@ it, `handoff-approved` refuses a held file another session owns.
 `armed <owner>`, since the session that approved is the one whose turn end
 takes the transition, and `drive-take.sh` passes a bare `pending`, since past
 the take nothing is any one session's.
+
+### One hold predicate, rejected
+
+**One hold predicate** — hold whenever the sentinel types anything and
+either memory is owed or the turn carries a commit. A typed transition
+always types something and an untyped precompact types nothing, so this
+differs from the rule in exactly one cell: an untyped handoff under
+`with-commit` with clean memory. There it would hold a sentinel whose only
+line is `/rename`, protecting no state — the first disjunct's reason, a
+`/rename` typed into a pane showing
+the approval question, does not transfer, since clean memory asks nothing —
+and it would add a `handoff-approved` call to the most common invocation. A
+forgotten call there is silent: a same-session `held` is exempt from the
+sweep, and nothing reports one, so the title is lost unnoticed.
 
 ## The gitlore seam
 
@@ -157,3 +179,64 @@ progress ledgers (currently superpowers SDD). It detects **liveness**, not
 presence: the current layout glob plus an identity first line, most-recent
 mtime among several, fail open. Both the nudge and the todo-file boundary
 interpolate what it prints, so they cannot disagree about what exists.
+
+### Decisions
+
+**The agent supplies one fact; the code owns the branch.** Commit awareness
+— *does the ask this call serves imply a commit?* — is a fact about the
+conversation that no script can see, and everything downstream of the answer
+is deterministic. It does not change how memory is committed or what memory
+*says*: the memory directive is the same text in both modes, and how memory bodies are written, present-tense
+truth included, is `gitlore:memory-writing`'s rule, which holds in every mode
+and which `gitlore:commit` has the agent apply before it drafts the summary.
+The transition fields are the same shape, which is why they are fields and not
+skills.
+
+**Ask the question the request can answer.** The rule this replaced counted
+a commit landing in a later session, because it framed the question as where
+the memory belongs rather than whether anything present decides it — and
+that is unanswerable in the prepare-only modes, where the agent has no
+evidence in front of it and guesses. The ask stops at the transition,
+uniformly: one sentence that holds for every mode is worth more than a
+carve-out for the compaction, which keeps the session alive and could
+legitimately look past it. Nothing about the memory commit rides on the answer
+any more, so a wrong guess costs a parent commit that is made or skipped, not
+an approved summary that goes unread.
+
+**The directive points at the skill and holds no copy of the protocol.** The reader is a
+fresh agent, so what it needs is the skill's name; the command, the file
+formats and the hooks gitlore once consumed are mechanism it cannot act on, and
+text that carries them is verified and narrated back. Nothing is named that
+would need forbidding.
+
+**With nothing to approve, the wrap-up completes in a single turn.** No
+detection round-trip exists between deciding and writing: the checkpoint is
+unconditional, and it decides for itself whether memory or a ledger is in
+play. When memory *is* pending, the directive asks for approval — a user
+response, which ends the turn — and a driven transition is therefore held
+and released only in the turn after the answer, or it would compact or
+clear away the conversation the answer applies to. Any rebalancing of the
+gitlore seam must preserve both halves.
+
+### Rejected alternatives
+
+**Detecting commit awareness in the checkpoint, and defaulting the answer**
+— a transcript scrape is the maintenance trap this design already refuses,
+and a slash-command name is not the question; a default is the answer given
+by an agent that has not thought about it, and thinking about it is the
+entire contribution. A third mode value would branch identically and only
+rename a shade of prose.
+
+**A `PreCompact` hook for the memory flush** — `PreCompact(manual)` can
+annotate or block a compaction but cannot run an agent turn, and the flush
+needs one: summarize, get approval, commit. It stays a skill
+the user runs before compacting, where that turn exists. Compaction threatens
+conversation state only, so the flush can wait for any later turn. `precompact` has since committed
+memory before the compaction instead of letting it wait, because the summary
+the compaction leaves is a paraphrase of the conversation.
+
+**Merging handoff into gitlore**, **moving the checkpoint into gitlore**
+behind a `command -v` lookup, and **gitlore superseding handoff** — distinct
+timescales and machinery for the first; the detection round-trip the
+packaging exists to avoid for the second; for the third, supersession means
+gitlore carries all of handoff's machinery, vendored and kept in sync.

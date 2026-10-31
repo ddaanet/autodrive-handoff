@@ -23,21 +23,11 @@ versionable source, which also inlined raw transcript into anything that
 committed it. The frame is assembled in memory at read time instead.
 [Read-time assembly](../changelog/2026-06-05-read-time-assembly.md)
 
-**A `PreCompact` hook for the memory flush** — `PreCompact(manual)` can
-annotate or block a compaction but cannot run an agent turn, and the flush
-needs one: summarize, get approval, commit. It stays a skill
-the user runs before compacting, where that turn exists. Compaction threatens
-conversation state only, so the flush can wait for any later turn.
-[Session compaction](../changelog/2026-07-12-session-compaction.md),
-[The mechanical principle is narrowed; a reviewer waits for a
-measurement](../changelog/2026-10-15-the-mechanical-principle-is-narrowed.md)
+**A `PreCompact` hook for the memory flush** — it stays a skill, since a hook cannot run the agent turn the flush needs ([the directive](the-checkpoint-directive.md#rejected-alternatives)).
 
 **Merging handoff into gitlore**, **moving the checkpoint into gitlore**
-behind a `command -v` lookup, and **gitlore superseding handoff** — distinct
-timescales and machinery for the first; the detection round-trip the
-packaging exists to avoid for the second; for the third, supersession means
-gitlore carries all of handoff's machinery, vendored and kept in sync.
-[Session compaction](../changelog/2026-07-12-session-compaction.md)
+behind a `command -v` lookup, and **gitlore superseding handoff** — all three
+rejected ([the directive](the-checkpoint-directive.md#rejected-alternatives)).
 
 **Live `git status` in `load-handoff.sh`**, and **reorder + amend** (commit,
 regenerate the handoff, amend) — the first adds a git shell-out to a pure
@@ -72,13 +62,7 @@ text untouched, and cost a transition when text was restored to the box before
 the turn ended.
 [A prompt queued into the arming turn](../changelog/2026-10-16-a-prompt-queued-into-the-arming-turn.md)
 
-**Detecting commit awareness in the checkpoint, and defaulting the answer**
-— a transcript scrape is the maintenance trap this design already refuses,
-and a slash-command name is not the question; a default is the answer given
-by an agent that has not thought about it, and thinking about it is the
-entire contribution. A third mode value would branch identically and only
-rename a shade of prose.
-[Commit awareness](../changelog/2026-07-25-commit-awareness.md)
+**Detecting commit awareness in the checkpoint, and defaulting the answer** — both rejected ([the directive](the-checkpoint-directive.md#rejected-alternatives)).
 
 **Injecting the remainder at the first `UserPromptSubmit`** to place a new
 user task ahead of it — position is a weak lever (recency argues the other
@@ -162,19 +146,7 @@ doc sentence), and **`autocompact`/`autoclear` as skill names** (collides
 with the harness's own threshold auto-compaction, a real named feature).
 [Driven transitions](../changelog/2026-07-29-driven-transitions.md)
 
-**One hold predicate** — hold whenever the sentinel types anything and
-either memory is owed or the turn carries a commit. A typed transition
-always types something and an untyped precompact types nothing, so this
-differs from the rule in exactly one cell: an untyped handoff under
-`with-commit` with clean memory. There it would hold a sentinel whose only
-line is `/rename`, protecting no state — the first disjunct's reason, a
-`/rename` typed into a pane showing
-the approval question, does not transfer, since clean memory asks nothing —
-and it would add a `handoff-approved` call to the most common invocation. A
-forgotten call there is silent: a same-session `held` is exempt from the
-sweep, and nothing reports one, so the title is lost unnoticed.
-[The directive owns the
-procedure](../changelog/2026-09-18-the-directive-owns-the-procedure.md)
+**One hold predicate** — rejected: it would hold a sentinel that protects no state ([the directive](the-checkpoint-directive.md#one-hold-predicate-rejected)).
 
 **Keeping the sentinel a skill-body write** once the transition became a
 payload field — a minimal diff, but the fields would then be advisory: the
