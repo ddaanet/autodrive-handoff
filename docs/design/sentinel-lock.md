@@ -69,7 +69,7 @@ exactly as it was in every case:
   file before the lock's own `mkdir` meets it. The only thing a refused call may
   leave is an empty `.claude/`. The lock does not guard `TODO.md` against direct
   edits: the agent's Edit tool takes no lock, and concurrent sessions in one
-  root stay a non-goal (`CLAUDE.md`, "Non-goals").
+  root stay a [non-goal](../design.md#non-goals).
 - `handoff-approved` exits 2 naming the lock; the held file stays held.
 - `drive-take.sh` takes nothing and prints a `kind: null` plan whose message
   names the lock (`tests/mod/fixtures/lock-busy.json`, `failFile` empty as for

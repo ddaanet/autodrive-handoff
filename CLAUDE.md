@@ -1,959 +1,199 @@
 # Agent Instructions — autodrive-handoff plugin
 
-Plugin development conventions. Applies when working inside this repo
-to edit the plugin's skill, hook, mod, or script.
+## The plugin and its flow
 
-## Layout
+A boundary skill decides the content and issues one `handoff-checkpoint` Bash
+call, the whole wrap-up as a schema-validated JSON payload on stdin.
+`scripts/checkpoint.py` writes `TASK.md` and `TODO.md` in the project root,
+plain tracked files that nothing stages, and composes the sentinel,
+`.claude/autodrive`; it does no git work (NFR1). As the turn ends, the mod
+(`hooks/handoff.ts`) records the cwd and session id in `classic.Stop`; in
+`turn.complete`, `scripts/drive-take.sh` takes the sentinel this session owns
+and prints the plan, and the mod runs each line through `$.command.run` (a
+`/`-line) or `$.prompt.submit`. The transition's own
+`SessionStart(clear|compact)` loader consumes the `pending` sentinel and
+injects the frame; `SessionStart(startup)` injects it into a fresh session.
+The loaders start no continuation: the mod submits it. `README.md` has the
+user-facing version.
 
-High-level flow: the skill decides the task/todo/rename content, then issues
-one `handoff-checkpoint` Bash call carrying the whole wrap-up as a
-schema-validated JSON payload on stdin → `checkpoint.py` writes `TASK.md` and
-`TODO.md` in the project root (FR5 write semantics — content written as given,
-or a named action) and `.claude/autodrive`, and does no git work (NFR1):
-both files are plain tracked files and nothing stages them → the turn ends:
-`classic.Stop` records the cwd and session id and `turn.complete` runs the
-drive in `hooks/handoff.ts`, which has `scripts/drive-take.sh` take the
-sentinel (only one this session owns) and
-print the plan, then runs each line through `$.command.run` or
-`$.prompt.submit` → the transition's own `SessionStart(clear|compact)` loader
-consumes the `pending` sentinel and injects the frame (header + whichever of
-the two files has a body, each half falling back to its old path under
-`.claude/` while that bridge lasts) → `SessionStart(startup)` injects it into
-a fresh session. `README.md` has the user-facing version.
+`handoff` is the `/clear` boundary's skill, `precompact` the `/compact` one's,
+and `autoname` a rename only: the payload's `skill` field names it and keys
+what the checkpoint prints. Only `handoff` carries `task` (FR13: at most 1000
+characters of prose, no list item); `precompact` removes `TASK.md`, while
+`TODO.md` survives it. Both carry `todo`. `clear` (bool) under `handoff`,
+`compact` (bool, or a focus directive) under `precompact` and `continue`
+(bool) at both are required, with no default. `continue: true` is legal only
+when the transition is carried out (`typed` in the code), and under `handoff`
+is refused when neither file would have a body; the continuation is the fixed
+line `CONTINUATION` in `checkpoint.py`, which points at the files and carries
+nothing. `compact: false` writes a two-line marker that runs nothing (FR-G),
+on which `SessionStart(compact)` gates the todo's re-injection.
 
-The checkpoint also emits, on stdout, the procedure for the one cell the call
-is in: when a gitlore-memory submodule is dirty, a memory directive prints the
-dirty listing and sends the agent to the `gitlore:commit` skill, which owns the
-summary format and the approval protocol (show the summary, end the turn,
-commit on approval); it is the same text under both commit modes, and the
-plugin writes no file for gitlore. After the memory part it prints the commit
-act under `with-commit` (naming the memory gitlink `gitlore:commit` staged when
-memory was owed), then either the instruction to run `handoff-approved` (held)
-or the closing line the reply ends on — so the skills state none of it. The
-plugin needs a gitlore that ships `gitlore:commit`, with no shim for the file
-handshake it replaced. See
-`docs/changelog/2026-07-25-commit-awareness.md`,
-`docs/changelog/2026-07-27-one-channel-one-writer.md`,
-`docs/changelog/2026-09-18-the-directive-owns-the-procedure.md` and
-`docs/changelog/2026-10-30-memory-commits-go-through-the-skill.md`.
+The sentinel's line 1 is its state and line 2 its kind: `held <session>`
+waits on `bin/handoff-approved`, `armed <session>` on its owner's turn end,
+and an ownerless `pending` on the loader. It is held iff (it names a command
+∧ a memory directive was emitted) ∨ (driven ∧ `with-commit`). A plan of
+`kind: null` carries a message and runs nothing. The checkpoint is the
+sentinel's one composer (FR3): past it, `handoff_drive_arm` rewrites the
+state line, and `write-guard.sh` denies an agent `Write`/`Edit` to the file.
 
-**Two boundaries, two skills, one flow.** `handoff` for `/clear`, `precompact`
-for `/compact`; the `skill` field names it, which also keys the directive
-composition (memory gate + todo boundary for clear, memory gate + SDD ledger
-nudge for compact). Only `handoff` carries `task`, bounded by FR13 (at most
-1000 characters of prose, no list item); `precompact` forbids the key and
-removes `TASK.md`, because the summary carries the task. Both carry `todo`,
-the durable side of the seam: content that must survive verbatim, while the
-continuation is a fixed prompt that points at it and carries nothing. Whether
-the transition is carried out is a **field of the payload**:
-`clear` (bool) at one boundary, `compact` (bool or focus directive) at the
-other, plus `continue` (bool) at both, all required with
-no default — `true` is legal only when the transition is carried out, and the
-composer then writes the fixed line `CONTINUATION` (`checkpoint.py`) as the
-after-line; the code calls a carried-out transition `typed`, a name from when
-it was keystrokes. `checkpoint.py` composes `.claude/autodrive` from those
-fields and reads it back through `handoff_drive_read`, so the composer and the
-parser cannot drift; `compact: false` still writes the two-line expectation
-marker (FR-G), which runs nothing but is what `SessionStart(compact)` gates the
-todo's re-injection on. The sentinel is written **only** by the checkpoint
-(FR3), and a direct agent Write/Edit to it is denied by `write-guard.sh`;
-`autoname` is a third `skill` value on the same call rather than a template in
-its skill body. There is no restart skill or kind: `/restart` is a Claude Code
-built-in. See `docs/changelog/2026-08-05-transitions-become-modes.md`,
-`docs/changelog/2026-08-09-one-writer-for-the-sentinel.md`,
-`docs/changelog/2026-10-08-the-plugin-becomes-a-mod.md` and
-`docs/changelog/2026-10-11-task-and-todo-move-to-the-root.md`.
+The checkpoint's stdout is the procedure for the call's cell, which no skill
+restates. It includes a directive to the `gitlore:commit` skill when the
+`gitlore-memory` submodule is dirty (so the plugin needs a gitlore that ships
+that skill) and the commit act under `with-commit`, and ends with the
+`handoff-approved` instruction or the closing line. Parts and order:
+`docs/design/the-checkpoint-directive.md`. `.claude/handoff-task.md` and
+`.claude/handoff-todo.md` are legacy files, read as a fallback while the
+bridge lasts (`.claude/rules/legacy.md`). The mod needs Claude Code >= 2.1.287
+and does not load under `--safe-mode`, on an older Claude Code or under
+managed settings that omit the plugin; the sweep's note says so. The FR and
+NFR labels: `docs/design.md#requirements`.
 
-`TODO.md` is a scratch list the agent edits freely all session (FR4); the
-checkpoint's wrap-up call is where the final remainder gets folded in, not the
-only writer. It is the ledger; whatever todo tracker the harness exposes is a
-cache, and nothing in the plugin names one. A project that already has a
-`TODO.md` shares it. Neither file is guarded, gitignored or staged by a hook,
-and only `{"action": "clear"}` and the compact boundary remove one; what
-counts as empty is the loader's question, not the writer's. See
-`docs/changelog/2026-07-22-a-place-for-the-todo-list.md` and
-`docs/changelog/2026-10-11-task-and-todo-move-to-the-root.md`.
+## Components
 
-The one exception is the **legacy files**, `.claude/handoff-task.md` and
-`.claude/handoff-todo.md`, where 0.15 kept the two halves. The loaders read a
-half from its legacy file when the root file has no body, and the checkpoint
-moves or removes a legacy file inside plan resolution so it cannot come back as
-the frame; a root file with a body wins and its legacy file is reported ignored,
-never touched. Both ends decide by body and shadowing by the legacy file's
-existence. It is a bridge that goes once no sibling repository still has
-`.claude/handoff-*.md`: `grep -rni legacy scripts/ tests/` starts the one
-deletion pass, with one name per language (`HANDOFF_LEGACY_REL_*` in `_lib.sh`
-and again in `_checkpoint_plan.py`). The retirement names no version, in code,
-docs or tests. See
-`docs/changelog/2026-10-11-legacy-paths-are-read-and-moved.md`.
+One line each, with the node under `docs/design/` that holds its behaviour.
 
-The mod needs Claude Code >= 2.1.287. `plugin.json` has no minimum-version
-field, so that is stated in `README.md` and surfaced at runtime by the sweep
-note in `report-drive-failure.sh`.
-
-### Skills, manifest, hooks, mod
-
-- `.claude-plugin/plugin.json` — manifest.
-- `skills/handoff/SKILL.md` — the clear boundary's protocol
-  (`/autodrive-handoff:handoff`), driven or not, and the single source of truth for the
-  markdown templates of `TASK.md`/`TODO.md` and for the seam
-  between what the files carry and the fixed continuation. Three
-  steps: durable learnings to memory (the only tool calls allowed ahead of the
-  checkpoint); decide the three fields the payload cannot derive — driven or
-  not, continuation or not, **does the ask this call serves imply a commit** —
-  plus title/task/remainder, then one `handoff-checkpoint` call as a JSON
-  heredoc; follow what the checkpoint prints, in order, without re-deriving it.
-  Stays <= 2000 words.
-- `skills/precompact/SKILL.md` — the compact boundary's protocol, in the same
-  three steps (`compact` carries the focus directive; no `rename` and no
-  `task`, both schema-forbidden there). Defers templates and seam rules to
-  `handoff`.
-- `skills/autoname/SKILL.md` — decides a session title (no tool calls), then
-  one `handoff-checkpoint` call whose whole payload is
-  `{"skill": "autoname", "rename": "<title>"}`. Every other field is
-  schema-forbidden, which also keeps the memory directive from composing. It
-  stays a skill because a mod command cannot rename from inside its own
-  handler; the checkpoint composes a `rename` sentinel the drive runs.
-- `skills/pending/SKILL.md` — lists the task frame's `## Open decisions` and
-  `## Remaining` as already in context: no tool calls, nothing written.
-- `skills/handoff/references/design.md` — condensed design notes; the full
-  rationale is in `docs/design.md`.
-- `hooks/hooks.json` — declares `"modules": ["./handoff.ts"]` plus six
-  command hooks, every `${CLAUDE_PLUGIN_ROOT}` path double-quoted (the
-  validator warns otherwise): `UserPromptSubmit` (`report-drive-failure.sh`);
-  `PreToolUse(Write|Edit)` (`write-guard.sh`); `PreToolUse(Bash)`
-  (`inject-checkpoint-root.sh`); `SessionStart` on every source
-  (`session-pointer.sh`), on `startup|clear` (`load-handoff.sh`) and on
-  `compact` (`load-compact.sh`). The three that take the sentinel's lock have
-  a `timeout` of 10 s, the default wait plus 5 s (asserted in
-  `tests/test_drive_lock.py`).
-- `hooks/handoff.ts` — the mod. `classic.Stop` records the turn's cwd and
-  session id and nothing else (an interrupt fires no `Stop`, so an aborted turn arms nothing);
-  `turn.complete` consumes it and drives **inline** — the host refuses
-  `$.command.run` from a `Stop` hook's call context, `$.clock.after` from it
-  included, and timers die under `-p`. Fast path: a cwd equal to the session
-  root with no `.claude/autodrive` returns without a spawn. Otherwise it runs
-  `scripts/drive-take.sh <cwd> <session-id>`; empty stdout is nothing armed. It
-  does not read the prompt box and drives over whatever is typed there:
-  `command.run` and `prompt.submit` leave composer text untouched, so a guard
-  on it protected nothing and lost a transition when text was restored to the
-  box before the turn ended; a `/`-line is
-  `$.command.run({command, args})`, other prose
-  `$.prompt.submit({text, asUser: true})`; the first rejection writes
-  `failFile` and toasts, and ends the sequence. A `Stop` with no session id
-  writes the plan's message to `failFile` the same way. `failFile` is
-  `$.fs.stat`ed first and not written through a link (the mods API has no
-  replace-not-follow write; a link placed between stat and write is the
-  bound). It never reads the sentinel. A
-  hooks module may pass `$` only to top-level functions (a static check at
-  load). See `docs/design/driving-the-transition.md`.
-- `scripts/drive-take.sh <cwd> <session-id>` — takes this session's armed
-  transition. Parses through `handoff_drive_read`, acts only on `armed` whose
-  owner is the given session (every session sharing the root ends turns here),
-  moves it to an ownerless `pending` (`handoff_drive_arm`, atomic) or removes it
-  for `rename` (no confirming source), then prints one JSON line `{kind,
-  before[], after[], failFile, message}`; empty stdout for no file, `pending`,
-  `held`, or `armed` by another session. FR-G (empty
-  `before`) leaves `pending` and prints only the message; a malformed file is
-  removed and reported with `kind: null`, and so is a root that did not
-  resolve (nothing taken, the message alone). An `armed` file with no session
-  id given, or a reader whose `python3` helper failed, is left in place and
-  reported with `kind: null`. Its stdout is pinned by
-  `tests/mod/fixtures/*.json`. From its read to its exit it holds the
-  sentinel's lock (`handoff_lock_take`, below), re-testing the file once it has
-  the lock; a lock it cannot take (busy past the wait, or not set up) takes
-  nothing and prints a `kind: null` plan naming the lock
-  (`fixtures/lock-busy.json`), the file untouched.
-- `scripts/load-handoff.sh` — `SessionStart(startup|clear)`: assembles the
-  frame in memory (`handoff_frame`, given the legacy paths too) and injects it
-  via `additionalContext` plus a curt `systemMessage` with bytes and age. It
-  always reports: `No task frame` or `No todo` when one half has no body, `No
-  task frame or todo.` alone when neither has, on both channels, and a half
-  read from a legacy path or a legacy file left ignored beside a root file with
-  a body (the notes of `handoff_frame_notes`, after the frame and before the
-  gap note; the age is taken from the files that count, a legacy one included).
-  On `clear` it consumes a `pending`
-  transition of kind `clear` first, whatever the frame holds, reading and
-  removing it under the sentinel's lock; a lock not taken leaves it unread and
-  the frame is injected all the same, with a note on both channels. Starts no
-  continuation — the mod submits it.
-- `scripts/load-compact.sh` — `SessionStart(compact)`: consumes a `pending`
-  `compact`, its read and removal under the sentinel's lock (and only that
-  state and kind, so an `armed` file is left for the
-  sweep and an overtaken `clear` is not consumed), injects the frame when
-  there is one and tells the user `todo re-injected` or `No todo`, each
-  followed by `; <fragment>` per legacy note, the same notes as
-  `load-handoff.sh` and no change in bytes without one. With the lock not
-  taken it consumes nothing and still injects the frame, naming the left
-  sentinel on both channels (as `load-handoff.sh` does). Silent when
-  nothing is pending, which keeps a hand-typed `/compact` or a threshold
-  auto-compaction from re-injecting a stale list.
-- `scripts/report-drive-failure.sh` — `UserPromptSubmit`: reports and sweeps.
-  It consumes `.claude/autodrive.failed` (the mod's one record of a rejected
-  line), reports it on both channels and clears a transition stranded in
-  `pending`. It sweeps a sentinel still `armed` — never taken, because the turn
-  ended on Esc or the mod did not load — with a note naming the unloaded mod
-  (`--safe-mode`, Claude Code older than 2.1.287, or an organization-managed
-  Claude Code whose managed settings do not list the plugin) and printing the
-  lines for the user to run. A prompt sent while the arming turn still runs
-  fires this hook inside that turn, before its `Stop`, carrying that turn's
-  `prompt_id` (Claude Code 2.1.301), where a prompt after an Esc or at an idle
-  composer carries a fresh one. So for an `armed` file this session owns, with a
-  non-empty `prompt_id` in the input equal to the id in the prompt marker
-  (`$HANDOFF_POINTER_DIR/handoff-prompt-<session_id>`, read through
-  `marker_dir_ok` and `handoff_read_regular … own`, never written here), the
-  prompt is queued: a `rename` is left in place and nothing is said, a `clear`
-  or `compact` is swept, recorded, reported as `transition cancelled — a prompt
-  arrived before it ran` and met by a directive note (answer the prompt, then
-  run `handoff` or `precompact` again with the same transition), and no lines
-  are offered, since the transition and its continuation predate the prompt. No
-  `prompt_id` in the input sweeps as before, with the note also naming `a prompt
-  typed while that turn was still running`; no marker, a different id, any
-  other state or another session's file are as before, and an ordinary prompt
-  forks nothing new, the marker being read only behind the `armed`-and-owner
-  test. Cancelling rather than sparing, and writing the marker at the
-  checkpoint call rather than per prompt, are argued in
-  `docs/design/queued-prompts.md`. A file that does not parse is swept without lines,
-  a link at the sentinel as its own `link` state, unread; a reader whose `python3` helper
-  failed is `unread`, reported and never swept, and a lock not taken (busy or
-  not set up) is `locked`: not judged, left in place and reported on both
-  channels, a failure record left for the next prompt. `held` is exempt whoever owns
-  it: it waits on a human, and a dead owner's is replaced by the next
-  checkpoint. An `armed` file owned by another session is left untouched and
-  unreported while that session is live (`handoff_owner_live`: its
-  transcript, `<owner>.jsonl` beside the hook input's `transcript_path`, read
-  NUL-terminated, written within `HANDOFF_OWNER_LIVE_SECS`, default 600), and
-  swept otherwise, since background sessions share the root. A link at
-  `autodrive.failed` is removed unread and reported. It also
-  reports session-root drift, once per episode (marker
-  `/tmp/claude/handoff-drift-<session_id>`, the cwd NUL-terminated), with a
-  `systemMessage` that leads with an ANSI style reset and both paths shown
-  `%q`-quoted on both channels, so a cwd's newline, escape byte or backtick
-  reaches the agent as data; the marker directory is created 0700 and used
-  only when it is no link, this user's and writable by no one else, the marker
-  read no-follow and replaced through `handoff_replace`, and a prompt with no
-  marker forks nothing. The note's typed-ahead cause is also named when the
-  input has a `prompt_id` and the marker could not settle it (`marker_unsettled`:
-  `nodir`, `link`, `other`, `foreign` or an empty status from a failed helper).
-  From the sentinel's read to its exit it holds the sentinel's lock, so the
-  decision and every removal, `record_sweep` included, are one step against the
-  take, the checkpoint and the approval; taken only when a sentinel is on disk.
-  Every removal it makes (`armed`, `link`,
-  malformed, and a stranded `pending` cleared with a failure report) appends
-  one tab-separated line to `.claude/autodrive.swept` — UTC time,
-  `sweeper=<session id>`, `state=`, `owner=` (`-` for none), `kind=`,
-  `age=<s>s` by mtime, `cwd=` `%q`-quoted — newest first, trimmed to 50, never
-  consumed, and a write failure never blocks the sweep. A record that is a
-  symlink or not a regular file is left alone and nothing is recorded, and
-  the new record is built in a `mktemp` file beside it, never a fixed name,
-  renamed over the record by `os.replace` (`handoff_replace`).
-  The report goes to the
-  removing session's channels, invisible from the session that composed the
-  file, so this is the only trace of who took a sentinel.
-- `scripts/_lib.sh` — sourced helper (`# shellcheck source-path=SCRIPTDIR
-  source=_lib.sh` above each `source`; `# shellcheck disable=SC2034` for vars
-  only sourcing scripts read), the one file callers source. It keeps the path
-  constants, `handoff_owner_live`, `handoff_lock_take`, `handoff_root_read`,
-  `HANDOFF_UNRESOLVED_MSG` and `handoff_deny`, and after those sources three
-  parts from `$HANDOFF_LIB_DIR`, each under `# shellcheck
-  source-path=SCRIPTDIR/../scripts source=<part>`: `_lib_frame.sh`
-  (`handoff_frame`, `_handoff_has_body`, `handoff_frame_notes`),
-  `_lib_drive.sh` (the sentinel grammar: `_handoff_drive_*`,
-  `handoff_drive_read`, `handoff_drive_has_source`, `handoff_drive_arm`) and
-  `_lib_files.sh` (the file-safety primitives: `handoff_read_regular`,
-  `handoff_replace`, `marker_dir_ok`, `handoff_write_marker`,
-  `handoff_read_marker`). A part is never sourced by a caller; the
-  `../scripts` form is what lets shellcheck follow into it from `bin/` and
-  `tests/` too. `HANDOFF_REL_*` path constants
-  (`HANDOFF_REL_DRIVE_SWEPT`, the sweep's record, among them);
-  `HANDOFF_LEGACY_REL_*` beside them (the paths from before the move to the
-  root, the loaders' fallback and the one marker of it, with a Python mirror in
-  `_checkpoint_plan.py`);
-  `handoff_frame <task> <todo> [<legacy task> <legacy todo>]` (sets `FRAME` —
-  timestamp header plus each half that has a body, task first, the root file
-  when it has a body and else the legacy one — and, in the caller's scope,
-  `FRAME_TASK`/`FRAME_TODO` and four more flags, `FRAME_TASK_LEGACY`/
-  `FRAME_TODO_LEGACY` (the half came from its legacy path) and
-  `FRAME_TASK_SHADOWED`/`FRAME_TODO_SHADOWED` (the half came from the root file
-  and a legacy file exists beside it, whatever it holds; any of the four
-  paths that is a symlink, dangling or not, is treated as absent, so a
-  symlinked root file has no body and shadows nothing); prints nothing, rc 1
-  when `FRAME` is empty, and never puts a note in `FRAME`; "has a body" is
-  `_checkpoint_lib.py --has-body` exiting 0, the one status no crash produces,
-  so a headings-only file is not injected and neither is one the check fails
-  on); `handoff_frame_notes` (turns the flags into `FRAME_NOTES_CTX` for
-  the agent and `FRAME_NOTES_MSG` for the user, one producer for both loaders
-  and both channels);
-  `handoff_deny()` (PreToolUse deny emitter, `exit 0`s);
-  `handoff_root_read "<.cwd>"` setting `HANDOFF_ROOT` and
-  `HANDOFF_ROOT_BRANCH` (`inside`, `worktree`, `foreign`, `unrelated` — the last
-  two are drift) in the caller's scope, reading the resolver's answer
-  NUL-terminated so a root holding a newline survives (nothing prints the
-  root: a `$(...)` capture would strip a trailing newline); every cwd-scoped
-  hook anchors on it, an empty or project-root cwd
-  short-circuiting in bash and labelling its own branch, and a resolver that
-  crashed or answered no known label giving branch `unresolved` with an empty
-  root, rc 0, which every caller reports in `HANDOFF_UNRESOLVED_MSG`'s words
-  on its own channel (the write guard denies an `autodrive` write,
-  `inject-checkpoint-root.sh` leaves the command alone, `drive-take.sh` prints
-  a `kind: null` plan carrying the message);
-  `HANDOFF_POINTER_DIR` (`/tmp/claude`, overridable for tests);
-  `handoff_drive_read()` parsing and validating
-  the sentinel into `DRIVE_STATE`, `DRIVE_OWNER`, `DRIVE_KIND`, `DRIVE_BEFORE[]`,
-  `DRIVE_AFTER[]` or `DRIVE_ERR`, refusing a link at the sentinel (the bound
-  is the last component; a symlinked `.claude/` is followed), rc 2 when the
-  reader could not run; `handoff_drive_arm()` writing the line 1 it
-  is given atomically (a `mktemp` sibling, `handoff_replace`), so
-  `handoff-approved` carries the owner into `armed` and `drive-take.sh` drops
-  it on `pending`; `handoff_read_regular <path> [own]` (a status line, `ok`,
-  `absent`, `link`, `other` or `foreign`, then the bytes, from one
-  `O_NOFOLLOW` open; nothing printed when `python3` failed);
-  `handoff_replace <src> <dst>` (`os.replace`, replacing a link at the
-  destination rather than following it); `marker_dir_ok` (the guard for every
-  marker in `$HANDOFF_POINTER_DIR`: a directory that is no link, is this user's
-  and is writable by no one else) and `handoff_write_marker <path> <value>`
-  (the value NUL-terminated into a `<path>.XXXXXX` `mktemp` sibling renamed
-  over the name, so a link there is replaced and an orphan matches the marker's
-  own sweep glob), shared by the drift marker and the prompt marker;
-  `handoff_read_marker <path>` (`marker_dir_ok`, then the `own` read, into
-  `MARKER_STATUS` (`nodir` for a directory that exists and fails
-  `marker_dir_ok`, `absent` too for one that does not exist, `ok`, `link`,
-  `other`, `foreign`, or empty for a failed helper) and `MARKER_VALUE`, NUL-safe, in the caller's scope:
-  both markers are read through it);
-  `HANDOFF_REL_DRIVE_LOCK` and `handoff_lock_take <lockfile>` (take the
-  sentinel's lock on fd 9, held until the shell exits or closes fd 9; rc 1
-  busy past the wait, 2 unavailable, `HANDOFF_LOCK_MSG` set on either, and every
-  caller fails closed on both: the sentinel is left as it is; the `create` spawn
-  only when no regular lock file is there yet; see `_drive_lock.py`);
-  `handoff_owner_live <transcript_path> <owner>` (the sweep's liveness test); `handoff_drive_has_source()` (`rename` has no
-  confirming `SessionStart`; `compact` and `clear` do). Line 1 is the state
-  (`held <session-id>`, `armed <session-id>`, `pending`; the owner is one id,
-  required on `held` and `armed`, refused on `pending`), line 2
-  the kind, and the kind fixes the shape: `rename` 3 lines, `compact` 2, 3 or 4,
-  `clear` 4 or 5, counted over the whole file. Each command literal is pinned
-  to its slot and a prose line may not begin with `/`. Parsed with a `read`
-  loop, not `mapfile` (bash 3.2); callers expand the arrays as
-  `${DRIVE_BEFORE[@]+"${DRIVE_BEFORE[@]}"}`.
+- `.claude-plugin/plugin.json` — manifest, with no minimum-version field
+- `hooks/hooks.json` — the mod and six command hooks → driving-the-transition.md
+- `hooks/handoff.ts` — the mod, which runs the plan → driving-the-transition.md
+- `skills/handoff/SKILL.md` — clear boundary; templates, seam → the-skills.md
+- `skills/precompact/SKILL.md` — the compact boundary → the-skills.md
+- `skills/autoname/SKILL.md` — a session title → the-skills.md
+- `skills/pending/SKILL.md` — lists the frame's open items → the-skills.md
+- `skills/handoff/references/design.md` — condensed design notes that ship
+  with the skill
+- `bin/handoff-checkpoint` — PATH shim that execs `scripts/checkpoint.py`,
+  since `${CLAUDE_PLUGIN_ROOT}` is unset in the agent's Bash
+- `bin/handoff-approved` — leaves `held` → the-checkpoint-directive.md
+- `scripts/checkpoint.py` — the one write path → the-write-path.md,
+  the-checkpoint-directive.md
+- `scripts/_checkpoint_payload.py` — payload validation → the-write-path.md
+- `scripts/_checkpoint_plan.py` — the file plans → the-write-path.md
+- `scripts/_checkpoint_lib.py` — `err`, `is_empty_body`, the directive texts
+  → the-write-path.md, the-checkpoint-directive.md
+- `scripts/_drive_lock.py` — the sentinel's advisory lock → sentinel-lock.md
+- `scripts/worktree_root.py` — the session-root resolver → scoping.md
+- `scripts/_lib.sh` — the one sourced helper: constants, root resolver, lock,
+  owner liveness; sources the next three → scoping.md
+- `scripts/_lib_frame.sh` — `handoff_frame` and its notes → the-write-path.md
+- `scripts/_lib_drive.sh` — the sentinel's grammar → driving-the-transition.md
+- `scripts/_lib_files.sh` — no-follow reads, replacing writes → scoping.md
+- `scripts/drive-take.sh` — takes this session's `armed` sentinel, prints the
+  plan → driving-the-transition.md
+- `scripts/load-handoff.sh` — `SessionStart(startup|clear)` loader →
+  driving-the-transition.md
+- `scripts/load-compact.sh` — `SessionStart(compact)` loader →
+  driving-the-transition.md
+- `scripts/report-drive-failure.sh` — `UserPromptSubmit`: failure report,
+  sweep, drift note → driving-the-transition.md, queued-prompts.md
 - `scripts/write-guard.sh` — `PreToolUse(Write|Edit)`: denies a direct write
-  to the `autodrive` sentinel and to nothing else (and any write naming
-  `autodrive` when the root does not resolve). One jq parse and a
-  substring test on the given path, both fields read NUL-terminated; past
-  that one `python3` call resolves where the write lands, where this
-  project's sentinel lands, and the given path normalised without following
-  links. Landing on the sentinel is denied as checkpoint-only; a name of
-  `autodrive` at either end, anywhere else, as cross-project. So
-  `autodrive/`, `x/../autodrive` and a symlinked sentinel are all caught, and
-  a symlink whose own path does not mention the name is not. `TASK.md` and
-  `TODO.md` are not guarded.
-- `scripts/session-pointer.sh` — `SessionStart` on every source: sweeps
-  `$HANDOFF_POINTER_DIR` of `handoff-root-*` (leftovers of a retired mechanism),
-  `handoff-drift-*` and `handoff-prompt-*` older than 7 days, by name and
-  `-maxdepth 1`, since the directory is shared. Creates it `mkdir -m 700`, as the drift report does.
-- `scripts/worktree_root.py` — `worktree_root(cwd, project)`: walks up via
-  on-disk `.git` linkage to the enclosing linked-worktree root, else `project`;
-  returns `(root, branch)`, containment winning over the branch the walk took, so
-  a submodule inside the project is `inside`.
-- `scripts/inject-checkpoint-root.sh` — `PreToolUse(Bash)`: matches any command
-  containing `handoff-checkpoint` or `handoff-approved` (a loose substring test)
-  and rewrites it to `export HANDOFF_ROOT=<quoted>; <original>` via
-  `updatedInput`, since neither entry point can resolve the root itself. On that
-  path, once the root resolves and the input's `session_id` and `prompt_id` are
-  both non-empty, it also records the `prompt_id`, NUL-terminated, in
-  `$HANDOFF_POINTER_DIR/handoff-prompt-<session_id>` (the prompt marker, under
-  `marker_dir_ok` and `handoff_write_marker`; created `mkdir -m 700 -p`); a
-  write that fails changes nothing the hook prints. It is written here and not
-  per prompt, which would fork on every prompt. NFR2: the negative path is one
-  jq parse, now of `command`, `cwd`, `session_id` and `prompt_id`, and a
-  substring test.
-- `scripts/_drive_lock.py` — the sentinel's advisory lock,
-  `.claude/autodrive.lock` (`fcntl.flock`; `flock(1)` is not on macOS). `locked`
-  is the context manager `checkpoint.py` uses (it raises `LockBusyError` or
-  `LockUnavailableError` on entry, never yielding unlocked); the `create` and `wait`
-  commands are how bash holds it across steps through fd 9
-  (`handoff_lock_take`, `wait` exiting 75 for busy). The wait is bounded
-  (`HANDOFF_LOCK_WAIT_SECS`, default 5) and a lock not taken fails closed in
-  every actor, the checkpoint exiting 2 (`lock: …`) before it writes anything;
-  the three lock-taking hooks have a 10 s `timeout` in `hooks.json`, asserted
-  against the default read from here. The file is 0600, opened
-  `O_NOFOLLOW`, and never deleted. `HANDOFF_LOCK_BLOCKED_FILE`, when set, names
-  a FIFO a wait writes a byte to once it finds the lock held: the one test-only
-  seam, which the ordering rows block on instead of sleeping. `docs/design/sentinel-lock.md`.
-- `scripts/checkpoint.py` — the one write path (FR1). Takes its root from
-  `HANDOFF_ROOT` (`validate_root`, which refuses it when unset or not a
-  directory), has `_checkpoint_payload.py` validate the JSON payload, hands
-  the `task`/`todo` tagged union (content, or `clear`;
-  `keep` and `edit` on `todo` alone) to `_checkpoint_plan.py` to be resolved
-  into `FilePlan`s and applied, composes `.claude/autodrive` (creating
-  `.claude/` when absent; `check_sentinel_target` refuses a `.claude` that is
-  a file or a sentinel that is a directory before anything is written) through
-  `write_replacing` and reads it back, the whole read-plan-write (the reads
-  that resolve the plans included) under the sentinel's lock
-  (`_drive_lock.locked`; only the write's `OSError` is reported as `cannot write`,
-  and a read-back that fails or cannot run removes the unverified sentinel),
-  then prints the directive parts
-  for a boundary skill. The legacy reports (`legacy_reports`, from the plan
-  module) print ahead of the directive parts, which
-  `compose_directives(boundary, memory, ending, plans)` orders; the closing
-  line stays last. Every call needs `CLAUDE_CODE_SESSION_ID`, checked
-  (`require_session_id`) before anything is written, since line 1 names the
-  owner either way. The state is
-  `held <session>` iff `(sentinel names a command ∧ memory directive emitted) ∨
-  (driven ∧ with-commit)`, else `armed <session>` (`hold_decision`, one value that also
-  picks the arming instruction or the closing line). NFR1: no git work; the git
-  line for a moved or removed legacy file is printed, never run, and names the
-  paths relative to the root, which it hands to `git -C` (the reports name the
-  same relative paths).
-- `scripts/_checkpoint_payload.py` — the payload validation (FR2), which
-  `checkpoint.py` imports as `validation`. `read_payload` parses stdin,
-  and one `validate_*` per field narrows it or exits through `lib.err` naming
-  it; the key set is closed (`validate_top_level_keys`). `build_transition`
-  turns the boundary fields into the `Transition` the sentinel is composed
-  from. It reads the payload only: the two functions that read the environment
-  rather than the payload live in `checkpoint.py`.
-  `validate_task` and `validate_todo` return the tagged union as tuples for the
-  plan layer. `task` is required under `handoff`, where `validate_task_shape`
-  holds it to 1000 characters of body and no list item (FR13), and forbidden
-  under `precompact`, which removes `TASK.md`. `rename` is required under
-  `handoff` and `autoname` (a string) and forbidden under `precompact`;
-  `autoname` takes only `skill` and `rename`. It writes nothing.
-- `scripts/_checkpoint_plan.py` — the plan layer, which `checkpoint.py`
-  imports as `planning`. Resolves each half into a
-  `FilePlan` before anything is written (`plan_task`, `plan_todo`, `edited_body`
-  for `edit`), writing a content string as given and removing the root file only
-  on `clear`; `apply_plan` then performs them. The legacy migration is part of
-  that resolution (`read_half`, `legacy_fate`, the `Legacy` and `Half` records,
-  a `FilePlan.legacy` and a `move` act): a half's effective content is its root
-  file when it has a body, else its legacy file; `keep` moves a legacy todo
-  (`move_legacy`, a rename that falls back to a copy across devices,
-  `copy_across_devices`), a content write, `edit` result or `clear` removes the
-  legacy file unless the root file has a body before and after, in which case it
-  is left and reported ignored; a symlink or a directory at a root name (under
-  every action, with or without a legacy file), a root file that cannot be read
-  or, for `edit`, decoded, and a symlink to a file at the legacy path are
-  refused naming the field, and the legacy file is unlinked only after the root
-  file is written. A write goes through a sibling temporary file and
-  `os.replace` (`write_replacing`), which swaps a link at the name rather than
-  following it and keeps the replaced file's mode. `legacy_reports` returns the
-  one-line reports; `has_body_after` says whether a plan leaves its half a body,
-  which `checkpoint.py` asks of both under `handoff` to refuse `continue: true`
-  with nothing to point at. It holds `HANDOFF_REL_TASK`/`HANDOFF_REL_TODO` and
-  `HANDOFF_LEGACY_REL_TASK`/`_TODO`, the Python side of the pairs in `_lib.sh`;
-  errors go through `lib.err`.
-- `scripts/_checkpoint_lib.py` — `err` (the one exit for a schema or write-time
-  error: names the field, exits 2; shared by `checkpoint.py`,
-  `_checkpoint_payload.py` and `_checkpoint_plan.py`), `is_empty_body` (markdown's own heading
-  test; read by `handoff_frame` through the `--has-body` CLI, and its
-  `ATX_HEADING` by the task-shape check), `memory_directive(root)` (gated on the
-  `gitlore-memory` submodule and a dirty worktree, FR12; a plain string, empty
-  when nothing is owed: the `git status --porcelain` listing and one sentence
-  sending the agent to the `gitlore:commit` skill, identical under both modes;
-  couples only to the `.gitmodules` registration and that skill name), `commit_directive`
-  (`memory: bool`; names `TASK.md` and `TODO.md`, since nothing has staged
-  them, and the memory gitlink `gitlore:commit` staged when `memory` is true;
-  takes the legacy paths this call moved or removed, to lead with
-  `legacy_unstage_directive(root, paths)`: `git -C <root> rm --cached
-  --ignore-unmatch -q -- <path> …`, each path relative to the root, every
-  argument `shlex.quote`d. `-C` makes it run from any directory with no query
-  of where the root lies in its repository, and the root's name, a glob or `!x`
-  included, is a directory change and never a pathspec; the paths are fixed
-  names with no magic, so no literal-pathspec option is printed),
-  `arming_directive`, `closing_directive(skill, typed=…)` (literal text that
-  `bin/handoff-approved` repeats), `ledger_path` (liveness of a workflow-owned
-  ledger — SDD identity first line, newest mtime wins), `sdd_directive` and
-  `todo_boundary`.
-- `bin/handoff-checkpoint` — PATH shim that execs `scripts/checkpoint.py`
-  (`${CLAUDE_PLUGIN_ROOT}` is not available in the agent's Bash).
-- `bin/handoff-approved` — the one command that leaves `held`: no stdin, no
-  arguments, root from `HANDOFF_ROOT`. Moves the file to `armed <owner>`
-  through `handoff_drive_arm`, keeping the owner; exits 2 when it is absent or not `held`, when the held
-  file is another session's, or when the kind is not `rename|clear|compact`.
-  Prints its status fact, a blank line, then the closing line (literal per
-  `case` arm, byte-for-byte `closing_directive()`). Holds the sentinel's lock
-  from its read to its rewrite; exits 2 naming the lock, the file untouched,
-  when it cannot be taken.
+  to the sentinel → the-write-path.md
+- `scripts/inject-checkpoint-root.sh` — `PreToolUse(Bash)`: exports
+  `HANDOFF_ROOT`, records the prompt marker → scoping.md
+- `scripts/session-pointer.sh` — sweeps stale markers → scoping.md
 - `tests/gen_mod_fixtures.py` — renders `tests/mod/fixtures.ts` from
-  `tests/mod/fixtures/*.json`, because a hooks-module test can neither read
-  files nor import JSON. `tests/test_mod_fixtures.py` fails when they disagree.
-- `plugin-dev/` — vendored claude-plugin-dev toolkit, pinned by
-  `plugin-dev/VERSION` (read-only; see `docs/design/release-infrastructure.md`).
-  `release.just` owns version bumps, tagging, push, GH release and the
-  marketplace bump in `$MARKETPLACE_DIR` (it depends on `prerelease`, here
-  `precommit`); `resume-release` completes one that died partway;
-  `check-version` compares `plugin.json` and the marketplace. When
-  acknowledging a `release X.Y.Z` request, name both push targets up front —
-  "bumps `handoff` (tag + GH release) and `claude-plugins` (marketplace
-  entry)" — since auto-mode's permission harness reads only the current
-  message. `version-guard.sh` (wired in `.claude/settings.json`) refuses agent
-  edits that change `plugin.json`'s `.version`.
-- `.envrc` — exports `MARKETPLACE_DIR` (sibling `claude-plugins` repo), which
-  `just release` requires; `direnv allow` once per clone.
-- `docs/design.md` is the hub (Problem, Research, Analysis, Requirements,
-  routing table, one index line per decision and per rejected alternative,
-  Non-goals); `docs/design/` holds one node per mechanism, read before making a
-  claim about it. What you are touching → what to read first:
-  - `checkpoint.py`, `_checkpoint_payload.py`, `_checkpoint_plan.py`,
-    `_checkpoint_lib.py`, `write-guard.sh`, `handoff_frame`,
-    the two files, FR1–FR8, FR13, NFR1–NFR3 → `the-write-path.md`
-  - any `skills/*/SKILL.md`, a `skill` value, the `clear`/`compact`/`continue`/
-    `commit` fields → `the-skills.md`
-  - `hooks/handoff.ts`, `drive-take.sh`, `load-handoff.sh`, `load-compact.sh`,
-    `report-drive-failure.sh`'s sweep, `.claude/autodrive` and its states, FR-G
-    → `driving-the-transition.md`; a prompt arriving while the arming turn runs,
-    the prompt marker → `queued-prompts.md`; the sentinel's lock,
-    `_drive_lock.py`, `handoff_lock_take` → `sentinel-lock.md`
-  - `handoff-approved`, `closing_directive`, `ledger_path`, `held`,
-    `with-commit`, the gitlore seam, FR9, FR12 → `the-checkpoint-directive.md`
-  - `worktree_root.py`, `handoff_root_read`, `inject-checkpoint-root.sh`,
-    `session-pointer.sh`, `HANDOFF_ROOT` → `scoping.md`
-  - `plugin-dev/`, `release.just`, `$MARKETPLACE_DIR` →
-    `release-infrastructure.md`
-  - weighing or adding a standing call → `decisions.md`; re-proposing something
-    ruled out → `rejected-alternatives.md`
-- `docs/changelog.md` is the index (one line per design change, newest first,
-  `- [<date> — Title](changelog/<file>.md) — hook (vX.Y.Z)`, the version only
-  when the entry maps onto one release); `docs/changelog/` holds one dated file
-  per design change with the full write-time reasoning, **never edited after the
-  fact**: a later change that reverses one heads the affected section with a
-  `> **Superseded <date>** (see [<title>](<sibling>.md))` blockquote scoped to
-  what changed. A design change adds a file plus its index line and rewrites
-  whatever `docs/design.md` or `docs/design/` prose it invalidates, all in the
-  same pass.
-- `plans/` — prospective content (specs, proposals, implementation plans) and
-  its reports. Write-time records like changelog entries; a claim wrong at the
-  time it was written is corrected in place with a
-  `> **Corrected at review, <date>.**` blockquote that quotes the original
-  wording, names what was wrong, shows the evidence and says what still stands.
-- `inbox/` — what arrives from outside: a brief, note or finding from a session
-  in *another* repository. Never the repo root, never `plans/`. Triage means
-  acting on it and deleting it, or promoting it into `plans/`; a brief's
-  recommendation is input, not a decision. See `inbox/README.md`.
+  `tests/mod/fixtures/*.json`
+- `plugin-dev/` — vendored toolkit, read-only → release-infrastructure.md
+- `.envrc` — activates the venv and pulls in `~/code/.envrc`
+- `.claude/rules/` — editing conventions, each scoped by its `paths:`
+
+## Routing
+
+What you are touching → what to read first, under `docs/design/`:
+
+- `checkpoint.py`, `_checkpoint_payload.py`, `_checkpoint_plan.py`,
+  `_checkpoint_lib.py`, `write-guard.sh`, `handoff_frame`,
+  the two files, FR1–FR8, FR13, NFR1–NFR3 → `the-write-path.md`
+- any `skills/*/SKILL.md`, a `skill` value, the `clear`/`compact`/`continue`/
+  `commit` fields → `the-skills.md`
+- `hooks/handoff.ts`, `drive-take.sh`, `load-handoff.sh`, `load-compact.sh`,
+  `report-drive-failure.sh`'s sweep, `.claude/autodrive` and its states, FR-G
+  → `driving-the-transition.md`; a prompt arriving while the arming turn runs,
+  the prompt marker → `queued-prompts.md`; the sentinel's lock,
+  `_drive_lock.py`, `handoff_lock_take` → `sentinel-lock.md`
+- `handoff-approved`, `closing_directive`, `ledger_path`, `held`,
+  `with-commit`, the gitlore seam, FR9, FR12 → `the-checkpoint-directive.md`
+- `worktree_root.py`, `handoff_root_read`, `inject-checkpoint-root.sh`,
+  `session-pointer.sh`, `HANDOFF_ROOT` → `scoping.md`
+- `plugin-dev/`, `release.just`, `$MARKETPLACE_DIR` →
+  `release-infrastructure.md`
+- weighing or adding a standing call → `decisions.md`; re-proposing something
+  ruled out → `rejected-alternatives.md`
+
+## Where documents go
+
+- `docs/design.md` — the design hub; `docs/design/` — one node per
+  mechanism, read before making a claim about it.
+- `docs/changelog.md` — the index; `docs/changelog/` — one dated file per
+  design change, never edited after the fact.
+- `plans/` — specs, proposals, implementation plans and their reports.
+- `inbox/` — what arrives from a session in another repository.
+- The editing rules for all four: `.claude/rules/docs.md`.
 
 ## Conventions
 
-- Use `${CLAUDE_PLUGIN_ROOT}` in `hooks.json` for portability.
-- All hooks are mechanical and cwd-scoped. They anchor on `handoff_root_read`
-  (the enclosing git-worktree root, else `CLAUDE_PROJECT_DIR`) — never on the
-  raw hook-input `.cwd` (drift-prone) nor on `CLAUDE_PROJECT_DIR` directly
-  (pinned to the main tree in a worktree session).
-- Keep the skill body lean (≤2000 words); move detailed rationale to
-  references or `docs/design.md`.
-- Output paths: `TASK.md` and `TODO.md` in the project root (FR4), plain
-  tracked files that no hook guards or stages. Changing either's path or shape
-  is a breaking change and requires a version bump.
-- Both markdown templates live in `SKILL.md` (single source of truth).
-  Neither loader re-states them — each file carries its own `##` headings
-  and is inlined verbatim under the one `#` header the frame prepends.
-- `TODO.md` holds **open items only**. A finished item is dropped,
-  never checked off: what landed is reconstructable from `git log`, and a
-  done item still listed reads as outstanding and gets redone.
-- `_lib.sh`, the one remaining sourced bash helper (callers source it alone;
-  it sources `_lib_frame.sh`, `_lib_drive.sh` and `_lib_files.sh`), needs
-  `# shellcheck source-path=SCRIPTDIR source=_lib.sh` above the
-  `source` line so `shellcheck -x` follows it. Inside `_lib.sh` the nested
-  `source` of a part carries `# shellcheck source-path=SCRIPTDIR/../scripts
-  source=<part>` instead: a bare `SCRIPTDIR` resolves against the top-level
-  script's directory, so from `bin/` and `tests/` shellcheck would silently
-  skip the part. Add
-  `# shellcheck disable=SC2034` to vars consumed only by sourcing
-  scripts. `_checkpoint_lib.py`, `_checkpoint_payload.py` and
-  `_checkpoint_plan.py` are imported, not sourced, so this convention does not
-  apply to them.
+- `TASK.md` and `TODO.md` live in the project root (FR4), plain tracked
+  files that no hook guards or stages. Changing either's path or shape is a
+  breaking change and requires a version bump.
+- `TODO.md` holds **open items only**. A finished item is dropped, never
+  checked off: what landed is reconstructable from `git log`, and a done item
+  still listed reads as outstanding and gets redone.
+- `plugin-dev/` is vendored and read-only.
+- When acknowledging a `release X.Y.Z` request, name both push targets up
+  front — "bumps `handoff` (tag + GH release) and `claude-plugins`
+  (marketplace entry)" — since auto-mode's permission harness reads only the
+  current message.
+- `version-guard.sh` (wired in `.claude/settings.json`) refuses agent edits
+  that change `plugin.json`'s `.version`.
+- A design change lands with its changelog entry and rewrites the design
+  prose it invalidates, in the same pass.
 
-## Testing
+## Gates
 
-The shell hooks are tested with **bats**, the Python with **pytest**, the mod
-with **`claude plugin test`**. pytest runs off a uv-managed venv that
-**direnv** activates (`.envrc` exports `VIRTUAL_ENV` and prepends
-`$VIRTUAL_ENV/bin` to `PATH`), so the recipes call bare `pytest` — no
-`uv run`. Materialize/refresh the venv with `uv sync` (`uv.lock` is committed,
-`.venv/` is gitignored). `claude` is sandbox-excluded: every `claude` call
-from the agent's Bash, and so `just precommit`, `just validate-plugin` and
-`just mod-smoke`, needs `dangerouslyDisableSandbox`.
+The shell hooks are tested with bats, the Python with pytest, the mod with
+`claude plugin test` (`tests/mod/handoff.test.ts` against `tests/mod/rig.ts`).
+pytest runs off a uv-managed venv that direnv activates (`.envrc` exports
+`VIRTUAL_ENV` and prepends its `bin` to `PATH`), so the recipes call bare
+`pytest`, never `uv run`; `uv sync` materializes it (`uv.lock` is committed,
+`.venv/` gitignored). `claude` is excluded from the command sandbox: every
+`claude` call from the agent's Bash, and so `just precommit`,
+`just validate-plugin` and `just mod-smoke`, needs `dangerouslyDisableSandbox`.
 
-- `just precommit` — the gate (needs the direnv-activated venv). It depends on two
-  cached gates (`plugin-dev/gates.just` sentinels, which skip a gate whose
-  inputs are unchanged; `PLUGIN_DEV_GATE_FORCE=1 just precommit` runs both
-  regardless). `check-plugin` (inputs `.claude-plugin`, `.claude/settings.json`,
-  `.gitignore`, `bin`, `hooks`, `scripts`, `skills`, `tests`): `jq` over
-  `plugin.json`, `hooks.json` and `.claude/settings.json`; `just
-  validate-plugin`; `claude plugin test`; `shellcheck -x` over `bin/*`,
-  `scripts/*.sh`, `tests/*.bats` and `tests/*.bash`. `check-code` (inputs `bin`, `hooks`,
-  `scripts`, `tests`, `pyproject.toml`, `uv.lock`, `.gitignore`): ruff check and format,
-  docformatter, mypy, ty; `plugin-dev/run-bats.sh tests/*.bats` (the quiet bats
-  runner); `pytest`.
-  A new component directory the plugin validator reads (`agents/`, `commands/`)
-  goes into `check-plugin`'s list when it is created. The release recipe depends
-  on this name through `prerelease`.
-- `just validate-plugin` — `claude plugin validate --strict --json`, failing on
-  any error or warning except the one that cannot be fixed: the repo-root
-  `CLAUDE.md` "not loaded as project context" warning (it is this repo's own
-  agent instructions, not plugin content).
-- `claude plugin test` — runs `tests/mod/handoff.test.ts` against
-  `tests/mod/rig.ts`, a stub rig that answers every mods API call the mod makes
-  and logs them in order (the kit rejects an unstubbed call, including
-  `process.run`, `fs.*` and the clock). Asserts the exact `command.run` /
-  `prompt.submit` sequence per kind, `Stop` driving nothing, an aborted turn
-  (no `Stop`) driving nothing, the recorded cwd consumed once, the project-root
-  fast path, the worktree/subdir fall-through, empty stdout, FR-G, a malformed
-  plan, and
-  a Stop with no session id writing `failFile`, a link at `failFile` not
-  written through, stop-on-first-failure with the `failFile` write (no live test reaches that
-  path: no sentinel the parser accepts makes the host reject, see
-  `docs/design/driving-the-transition.md`). The load-bearing rows are
-  mutation-checked, not observed passing: driving inside `Stop`, continuing
-  after a rejection, dropping the consume-once reset, skipping the fast path. No
-  expected log contains a prompt-box read and the rig stubs no such call, so a
-  restored one fails as an unstubbed call. Its fixtures are the same plans
-  `drive-take.sh` prints, through the generated `tests/mod/fixtures.ts`.
-- `tests/drive-take.bats` — runs the real `drive-take.sh` over real sentinel
-  files and asserts stdout equals `tests/mod/fixtures/*.json` (`@ROOT@`
-  substituted), plus: no file, `pending`, `held` and `armed` by another session
-  print nothing and are untouched; no session id given and a failed reader
-  helper leave the file and print a `kind: null` plan; a take arms once
-  only and leaves `pending` ownerless; `rename` removes the file; FR-G stays
-  `pending`; malformed is discarded with `kind: null`; a worktree cwd takes the
-  worktree's file and leaves the project's alone, one ending in a newline
-  included. Mutation-checked: dropping the
-  file check, the `armed` gate, the owner check, the cwd, the arming, keeping
-  the owner on `pending`.
-- `tests/test_mod_fixtures.py` — `fixtures.ts` equals what
-  `tests/gen_mod_fixtures.py` renders; regenerate with
-  `python3 tests/gen_mod_fixtures.py`, never by hand. A second row ties every
-  prose line a fixture submits to `CONTINUATION`, so the mod's fixtures cannot
-  carry a continuation the composer would never write.
-- `just mod-smoke` (`pytest -m live tests/test_mod_live.py -v -rs`, the `live`
-  marker, deselected from `precommit`) — boots a real `claude -p --model haiku`
-  with this repo as `--plugin-dir` and a fixed `--session-id` in a throwaway git
-  repo, where the first turn writes `.claude/autodrive` armed and owned by that
-  id through one allowed `printf` Bash call (a
-  sentinel that predates the prompt is discarded by the `UserPromptSubmit`
-  sweep), then reads the session transcripts: a `custom-title` entry for
-  `rename`; for `clear`, the continuation as a different session's first user
-  prompt and the sentinel gone afterwards; for `compact`, an `isCompactSummary`
-  entry, the focus and the continuation. About 35 s and a few haiku turns, it
-  needs a real `claude`; its env is allowlisted. `-rs` so a
-  skip is never mistaken for a pass. Run it whenever the mod, a loader or the
-  sentinel's shape changes — it found the `Stop` call-context refusal that no
-  stub could.
-- `just hook-test` — `bats tests/*.bats` alone. `bats run` captures exit codes
-  and output without the `set +e` dance; see `tests/bats-best-practices.md`.
-  The hook scripts are covered against synthetic tool-event payloads by one
-  file per hook or library part, each sourcing `tests/hook-helpers.bash` under
-  a `# shellcheck source-path=SCRIPTDIR source=hook-helpers.bash` line. That
-  helper holds their `setup` and `teardown` and the helpers two or more of them
-  call; a helper only one file calls stays in that file.
-  - `tests/lib.bats` covers `_lib.sh`'s resolver: `handoff_root_read` and its
-    labels, a worktree whose path ends in a newline (the loaders' and the write
-    guard's rows for it are in `tests/load-handoff-cwd.bats`), a resolver that
-    crashes and what each hook says of it, `handoff_deny`, and
-    `handoff_read_regular`.
-  - `tests/lib-frame.bats` covers `handoff_frame` (called directly, never
-    through `run`, since it answers in variables: which file counts,
-    headings-only and whitespace-only ones not, `#tag` and a shebang yes, the
-    reset between calls, nothing printed; an unreadable root or legacy file is
-    no body, nor is a library that exits 1 or 2, raises or is missing, each
-    through a copy of `_lib.sh` and its parts sourced beside a stub library).
-  - `tests/lib-frame-legacy.bats` covers the legacy fallback in `handoff_frame`
-    (each half alone and both from the old path, the root file shadowing a
-    legacy one (also one with no body) and a headings-only root file not
-    shadowing it, the flags reset between calls, a symlinked legacy path
-    neither read nor shadowing).
-  - `tests/lib-drive.bats` covers the `handoff_drive_read` shape matrix and
-    `handoff_drive_arm`.
-  - `tests/load-handoff.bats` covers `load-handoff.sh`: the four frame states
-    with both channels asserted whole, and the `clear` consume (it consumes
-    only its own kind in state `pending`, leaves `armed` for the sweep and
-    spawns nothing; a clear with nothing to inject still consuming and saying
-    so).
-  - `tests/load-handoff-legacy.bats` covers the legacy fallback in
-    `load-handoff.sh`, and either root file's symlink refusal in both loaders
-    (a `TASK.md` or `TODO.md` that is a valid or dangling symlink is not
-    injected by either, and a symlinked `TODO.md` lets the legacy todo load
-    with no ignored note): each half alone and both from the old path, the
-    root file shadowing a legacy one (also one with no body) and a
-    headings-only root file not shadowing it, the age taken from the files that
-    count and a legacy file's age counting only when its half came from it, the
-    worktree's legacy file read rather than the project's, and both channels
-    asserted whole with the note order pinned.
-  - `tests/load-handoff-cwd.bats` covers a cwd holding a newline or ending in a
-    space (`load-handoff.sh` and `report-drive-failure.sh`, at the project root
-    and in a linked worktree; the fields that follow the cwd, `source` and
-    `session_id`, pinned apart from the root), a worktree whose path ends in a
-    newline (both loaders and the write guard; `handoff_root_read` itself is in
-    `tests/lib.bats`), and the drift marker against a cwd holding or ending in a
-    newline.
-  - `tests/load-compact.bats` covers `load-compact.sh` (it consumes only its
-    own kind in state `pending`, leaves `armed` for the sweep and spawns
-    nothing; `todo re-injected` and `No todo`) and its legacy paths: each half
-    alone and both from the old path, the root todo or task shadowing a legacy
-    one, a headings-only root todo not shadowing it, a symlinked legacy todo
-    and legacy files with no body.
-  - `tests/write-guard.bats` covers the write guard: the sentinel denied under
-    every spelling that normalises onto it — a trailing slash, a `/.`, a `..`
-    detour, a newline in a directory component — and when it is a symlink or
-    reached through an alias, in this project and across projects; `TASK.md`,
-    `TODO.md`, `autodrive.md` and a file under a directory named `autodrive`
-    allowed.
-  - `tests/session-pointer.bats` covers the pointer sweep (a long-stale prompt
-    marker removed, another live session's kept).
-  - `tests/sentinel-reader.bats` covers the sentinel reader's helper failing (a
-    failed reader helper leaves the file, in both loaders and the sweep) and the
-    sentinel as a symlink.
-  - `tests/sentinel-lock.bats` covers the sentinel's lock in the sweep and the
-    loaders, and a sentinel that does not parse swept with no lines offered.
-  - `tests/report-drive-failure.bats` covers `report-drive-failure.sh`: the
-    failure file, the stranded-`pending` clear, the sweep's note naming the mod
-    and printing the lines, and the sweep's record: one line per removal naming
-    the sweeper, newest 50 kept, an unwritable record, a failing `mktemp`, a
-    symlinked record and a symlink at the old fixed temporary name each not
-    blocking the sweep and none written through; the `|| true` after the trim
-    pipeline is pinned by the 4000-line row and the record call by the first
-    two rows.
-  - `tests/report-drive-failure-other-session.bats` covers a sentinel owned by
-    another session: a `held` file of another session left untouched whether
-    its owner's transcript is fresh, stale or missing, an `armed` file of
-    another live session left untouched and one whose owner's transcript is
-    stale or missing, or with no `transcript_path`, swept, the owner's own
-    aborted turn swept however fresh its transcript, and the
-    `HANDOFF_OWNER_LIVE_SECS` window.
-  - `tests/report-drive-failure-queued.bats` covers a prompt queued into the
-    arming turn (the input's `prompt_id` equal to the prompt marker's: an
-    owner's `armed` `rename` left byte-identical with no output and no sweep
-    record; `clear` and `compact` swept, recorded and cancelled with the
-    per-kind note, no lines offered and no unloaded-mod note; each beside the
-    fresh-id row that sweeps as an aborted turn; an id with spaces and a
-    trailing newline spared on an exact match and swept when it differs by
-    whitespace alone; no `prompt_id` swept with the typed-ahead note, and no
-    marker swept, with or without a pointer directory (a missing one is
-    `absent`, not unsettled); another session's `armed` file with a matching id
-    left to the liveness rule, a `held`, `pending` or malformed file
-    unaffected; the sweep writing no marker; a symlinked marker not read, with
-    the sweep still running).
-  - `tests/report-drive-failure-trust.bats` covers the marker's trust: a
-    symlinked marker directory and a group- or world-writable one not read,
-    with the sweep still running.
-  - `tests/report-drive-failure-drift.bats` covers session-root drift episodes
-    and its cwd quoted (newline, ESC, backtick), and an ordinary prompt with an
-    id and a marker forking no `find`.
+- `just precommit` — the gate, run before every commit; needs the venv. It
+  depends on `check-plugin` and `check-code`, cached gates that skip while
+  their inputs are unchanged (`PLUGIN_DEV_GATE_FORCE=1` runs them regardless),
+  and on `check-refs`, an uncached Markdown link check that runs every time.
+  `release` depends on `precommit` through `prerelease`.
+- The `justfile` lists each gate's inputs: a new component directory the
+  plugin validator reads (`agents/`, `commands/`) goes into `check-plugin`'s.
+- `just validate-plugin` — `claude plugin validate --strict --json`, failing
+  on any error or warning except two that cannot be fixed: the root
+  `CLAUDE.md` "not loaded as project context" warning, and the invalid-JSON
+  error for an empty root `.mcp.json` the command sandbox creates.
+- `just mod-smoke` — a live `claude -p` smoke test, deselected from
+  `precommit`; run it when the mod, a loader or the sentinel's shape changes.
+- `just hook-test` — `bats tests/*.bats` alone; `just py-test` — `pytest`.
+- `just release` needs `MARKETPLACE_DIR`, which `~/code/.envrc` exports and
+  this repo's `.envrc` pulls in with `source_up_if_exists`; `direnv allow`
+  once per clone. See `docs/design/release-infrastructure.md`.
 
-  Each state gate is paired with the positive
-  over the same fixture, and the loader, guard and sweep gates are
-  mutation-checked, as are the legacy rows: root-wins dropped, shadowing by
-  the legacy file's body instead of its existence, a missing flag reset, a
-  dropped task-shadowed note in `load-compact.sh`, the legacy files read
-  from `$CLAUDE_PROJECT_DIR` instead of the worktree, and either half's
-  symlink refusal dropped (a legacy path that is a valid or dangling symlink
-  is neither read nor shadowing, in `handoff_frame` and both loaders), and
-  either root file's symlink refusal dropped (a `TASK.md` or `TODO.md` that is
-  a valid or dangling symlink is not injected by either loader, and a
-  symlinked `TODO.md` lets the legacy todo load with no ignored note), and the
-  queued-prompt rows: owner test, non-empty `prompt_id` test, kind test (both
-  directions), `armed` state test, `marker_dir_ok` on the read, a marker write
-  in the sweep and the `handoff-prompt-*` glob of the pointer sweep each red a
-  row. The `own` argument of the prompt marker's read is the residual bound: no
-  unprivileged test can make a marker another user owns, so dropping it leaves
-  the suite green.
-  Three files cover what stayed bash around the checkpoint, and share their
-  `setup` and `make_repo` through `tests/checkpoint-helpers.bash`.
-  `tests/inject-checkpoint-root.bats` covers
-  `inject-checkpoint-root.sh` (a root holding whitespace or ending in a newline
-  round-trips; the prompt marker: a `handoff-checkpoint` and a
-  `handoff-approved` call each leave the `prompt_id` NUL-terminated in a
-  private directory, a later call replaces it, a command that is neither call,
-  a missing `session_id` or `prompt_id` and a resolver that crashed write
-  nothing, a symlinked marker is replaced with its target untouched, a marker
-  that cannot be written leaves the output byte-identical, and an id holding a
-  space or ending in a newline round-trips; dropping the marker write reds the
-  writer rows).
-  `tests/bin-commands.bats` covers `bin/handoff-approved` (output pinned whole, one
-  row per kind, against `closing_directive()` itself so the producers cannot
-  drift; a failed reader helper reported as unreadable, not malformed) and the `bin/handoff-checkpoint` shim, plus
-  the harness row that `make_repo` and `make_gitlore_repo` (via `run_git` in
-  `tests/probe-helpers.bash`, git minus `git rev-parse --local-env-vars`) leave a
-  decoy `GIT_DIR` repository byte-identical, mutation-checked.
-  `tests/validate-plugin.bats` covers the `validate-plugin` rows, which run
-  the real recipe under a stub `claude` printing a fixture: the empty
-  `.mcp.json` error and the `CLAUDE.md` warning pass (also under a root with a
-  space), and the same finding on another entry's file, a non-empty or absent
-  `.mcp.json`, or any other finding on an exempt file fails. `version-guard.sh` is tested
-  in the toolkit, not here.
-- `just py-test` — `pytest`: `tests/test_worktree_root.py` (the resolver's
-  branch matrix, including the containment rule that keeps a submodule `inside`,
-  and the `.git` file read as git reads it: a project path holding a newline
-  and a space linked, a `gitdir: ` line not first not),
-  `tests/test_mod_fixtures.py`, `tests/test_drive_lock.py` (the lock itself,
-  through `locked` and `handoff_lock_take`; each actor's ordering row is with
-  the actor, holding the lock from a background process, `tests/lock_holder.py`
-  (through `tests/lock-helpers.bash` in bats), and changing the sentinel only
-  once the actor has reported through `HANDOFF_LOCK_BLOCKED_FILE` that it waits
-  on the lock; the contention rows (lock held, wait 0.05 s, sentinel
-  byte-identical, fail-closed report; a link at the lock for the unavailable
-  cause) are with each actor, and no lock row sleeps or polls; the sweep's and
-  the loaders' rows are in `tests/sentinel-lock.bats`) and the
-  `tests/test_checkpoint_*.py` files,
-  which drive `scripts/checkpoint.py` end-to-end via subprocess.
-  `tests/conftest.py` holds what two or more of them use (the repository
-  builders `make_repo` and `make_gitlore_repo`, the payload builders, the
-  `run_checkpoint` runner (`with_session_id=False` for a run with no
-  `CLAUDE_CODE_SESSION_ID`), `run_git` (git, checked, under `git_free_env`),
-  `drive_state`, the ledger and memory fixtures, and
-  `git_free_env`, the environment minus git's repository-local variables
-  (`git rev-parse --local-env-vars`) that both builders and the runner pass to
-  git, since a gate run from inside a git hook inherits `GIT_DIR`,
-  `GIT_INDEX_FILE` and `GIT_WORK_TREE` for the outer repository), which
-  they import by name, since pytest's `pythonpath` carries `tests/`; a helper
-  only one file uses is in that file. It also defines the `_session_id` fixture
-  without `autouse`, so the other test files do not inherit it: each
-  `tests/test_checkpoint_*.py` applies it with a module-level `pytestmark`.
-  What each file covers:
-  - `tests/test_checkpoint_schema.py` — the session root (the `HANDOFF_ROOT`
-    refusals with the negative that a drifted cwd gets nothing written) and the
-    schema validation of the envelope: each required field missing, each literal
-    with an unknown value, the `skill` enum (`autoname` accepted, the retired
-    names rejected), `rename` rejected under `precompact`, required under
-    `handoff` and `autoname` and refused when not a string; `precompact`
-    rejecting `task` by key presence and removing the task file; each asserting
-    a non-zero exit and that the message names the field.
-  - `tests/test_checkpoint_fields.py` — the `task` and `todo` fields and the
-    closed key set: an action outside the field's own vocabulary, an object
-    carrying a key its action does not take, an `edit` with a missing or
-    mistyped string, malformed JSON, `null` and an absent key on `task` and
-    `todo`, a superfluous top-level key under each of the three skills — spelled
-    `bogus`, not a plausible field.
-  - `tests/test_checkpoint_writes.py` — the write semantics: a content string
-    written as given on both halves, a headings-only, whitespace-only or empty
-    one included; `clear` leaving no file whether or not there was one; `keep`
-    leaving a list, a headings-only file or no file exactly as it was; `edit`
-    application (`old_string` absent, ambiguous, file missing, successful,
-    striking the last item — each failure leaving both files' original bytes and
-    composing no sentinel); and the emptiness rule, `is_empty_body` itself and
-    its CLI's exit codes (whitespace-only, a `#!/bin/sh` body, `#tag`, seven
-    `#`, the indent boundary from both sides), each predicate half
-    mutation-checked.
-  - `tests/test_checkpoint_root_files.py` — what may sit at a root name, with
-    no legacy file: a symlink (relative, absolute, dangling) and a directory
-    refused under each action with the link's target byte-identical, a
-    non-UTF-8 and an unreadable todo refused under `edit`, a write keeping the
-    replaced file's mode and a new file taking the umask's. Mutation-checked:
-    the refusal dropped (exit-code red, target intact), then `write_text`
-    restored (target red), and the mode copy dropped.
-  - `tests/test_checkpoint_task_shape.py` — the task shape: the 1000-character
-    boundary from both sides, headings not counted, characters not bytes, each
-    list marker named by its line and only the first, `**bold**`, a mid-line
-    hyphen, a year and a decimal accepted, both facts in one error, nothing
-    written on a rejection.
-  - `tests/test_checkpoint_rename.py` — `rename` and `autoname`: a root with no
-    `.claude/` getting one for the sentinel, and a `.claude` that is a file or a
-    sentinel that is a directory refused naming the field with both frame files
-    untouched; `autoname`'s rows (exact sentinel,
-    both frame files left byte-identical, `rename` missing, each boundary field
-    rejected by name, and no directive against a dirty memory submodule).
-  - `tests/test_checkpoint_transition.py` — the transition fields: the
-    transition matrix (each of `clear`/`compact`/`continue` missing, mistyped,
-    the other boundary's field present, an empty or multi-line `compact`, which
-    is also refused on each of the line breaks `str.splitlines` knows, CR, VT,
-    FF, FS, GS, RS, NEL, LS and PS as well as LF, with no sentinel written);
-    `continue` as a boolean at every boundary, driven or not (null, a string,
-    an empty string, a number, a list and an object each refused with no
-    sentinel written; `true` refused against a transition not carried out and
-    legal against one carried out; `false` legal everywhere); and the
-    continuation constant itself, one line that does not begin with `/`.
-  - `tests/test_checkpoint_sentinel.py` — `continue: true` under `handoff`
-    refused when neither half would have a body after the plans (six bodyless
-    shapes, files byte-identical, no sentinel), legal when either has one, with
-    `false`, and under `precompact`; the legal combinations pinning the
-    sentinel's exact bytes, `CONTINUATION` imported from `checkpoint.py` rather
-    than restated, read back through `handoff_drive_read`.
-  - `tests/test_checkpoint_directives.py` — the memory directive (the status
-    line and the `gitlore:commit` sentence, byte-identical under both modes,
-    none of the retired file handshake's words), the commit act (present under
-    `with-commit` and absent without; the sentence naming the memory gitlink
-    exactly when memory is dirty), the order of the parts and the ledger-liveness
-    matrix; and the harness's own isolation, `make_repo` and `run_checkpoint`
-    under a decoy `GIT_DIR`/`GIT_WORK_TREE`/`GIT_INDEX_FILE` leaving the decoy
-    byte-identical. Mutation-checked: the commit act ignoring `memory`, in both
-    directions, and the memory part differing by mode.
-  - `tests/test_checkpoint_composition.py` — the directive composition per skill
-    (memory then SDD under `precompact`, absent under `handoff`), stdout exactly
-    the closing line through one helper, part order pinned per skill with the
-    closing line last, the memory part located by `gitlore:commit`.
-  - `tests/test_checkpoint_hold.py` — the arming instruction, the hold rule, the
-    held state and its owner, the armed state's owner, and the check of
-    `CLAUDE_CODE_SESSION_ID` on both paths. Mutation-checked: the held/armed
-    pair over one fixture (never hold ⟹ the held row alone reds; hold whatever
-    the sentinel names ⟹ the names-nothing row alone reds) and the
-    `(driven ∧ with-commit)` disjunct.
-  - `tests/test_checkpoint_readback.py` — the sentinel's write waiting on the
-    lock, an `edit` planned under it, a lock held past the wait or that cannot
-    be set up failing closed with nothing written, and a read-back that cannot
-    run, fails or raises removing the sentinel.
-  - `tests/test_checkpoint_legacy.py` — the whole legacy migration, one file
-    whatever its length, since it is deleted in one pass when the fallback is
-    retired: a legacy todo moved on `keep` with its modification time, across
-    devices through a harness that fails `rename`; carried by an `edit` and
-    replaced by a content write, removed on `clear` and under `precompact`; a
-    headings-only root file replaced by the move; a root file with a body
-    winning and the legacy file left ignored, one report each; a write that
-    leaves the root file bodyless removing the legacy file; a directory at the
-    root name and a symlink to a file at the legacy path refused with every file
-    as it was, a dangling symlink no legacy file; a rejected payload leaving
-    legacy and root files byte-identical; a root write that fails leaving the
-    legacy file; a root file that cannot be read staying unread with no legacy
-    file; the reports ahead of every directive part and the closing line last; the
-    `git rm --cached` line only under `with-commit`, naming only what moved or
-    went, run from a subdirectory over a tracked legacy file to the staged
-    deletion and, once the new file is added, a rename, and a silent no-op over
-    an untracked one, and, for a root at the top of its repository, below it
-    (`pkg`, `pkg dir`) or named `!x`, `^x`, `a*b`, `a?b` or `a[1]` beside
-    tracked sibling legacy files, the command run through a shell exactly as
-    printed from a directory of the repository and from one outside it, taking
-    the root's own file out of the index and no sibling's; `autoname` touching
-    nothing. Mutation-checked: root-wins dropped, migrating before validation,
-    the reports after the closing line, the legacy file unlinked ahead of the
-    root write, `-C` dropped (every one of those rows red), the quoting dropped
-    (the spaced and the glob roots red), a root file read on `keep` with no legacy file, the symlink check disabled, and the rename
-    replaced by a copy and an unlink; and `continue: true` counting the
-    effective todo, a legacy file included, the refusal moving nothing.
+## Non-goals and the frame
 
-  The load-bearing rows are mutation-checked, as listed under each file, and
-  with them `handoff-approved`'s bare-name row in `tests/bin-commands.bats`.
+- The frame is a timestamp header plus the inlined `TASK.md` and `TODO.md`,
+  with no transcript, session id or file list:
+  `docs/design/the-write-path.md#the-seam`.
+- Non-goals: `docs/design.md#non-goals`. The one that changes what an agent
+  does: concurrent sessions in one root are unsupported, so one session per
+  root, or a worktree each.
 
-Test files live under `tests/`. The justfile recipes are one-liners that
-delegate. Add new scenarios to the existing `.bats`/`test_*.py` files rather
-than adding new just recipes. A new mod row goes in `tests/mod/handoff.test.ts`;
-a new plan shape is a fixture JSON plus a regeneration.
+## What this file holds
 
-## Frame assembly
-
-Neither loader touches the transcript. The frame is a timestamp header
-plus the inlined agent-authored `TASK.md` and `TODO.md` (task first; either
-alone is enough, and a file with no body is left out; a half whose root file
-has no body falls back to its legacy file, and a legacy file a root file
-shadows is named, not read), assembled by
-`handoff_frame()` and injected at both transitions — `load-handoff.sh` on
-`startup|clear`, which says so when a half or the whole is missing, and
-`load-compact.sh` on `compact`, where the task file is gone by construction.
-There is no session id, no files-touched list, and no verbatim prompt
-transcript — the working set is the harness's own `gitStatus` block at
-load time, and reproducing prior exchanges verbatim manufactured false
-continuity. See
-`docs/changelog/2026-07-17-task-frame-drops-transcript.md`.
-
-## Non-goals
-
-- Concurrent sessions in one root. A later checkpoint replaces an earlier
-  session's sentinel, `TASK.md`/`TODO.md` are last-writer-wins, the take is
-  two steps, and a `.claude/` shared between roots is unsupported (the
-  ownerless `pending` can cross); one session per root, or a worktree each.
-  See `docs/design/driving-the-transition.md#sessions-sharing-a-root`.
-
-- Summarising the conversation. Extraction is deterministic; summary
-  is already handled by `/compact`, Session Memory, and training.
-- Validating the markdown templates. `handoff-checkpoint` validates the JSON
-  envelope (FR2) and two properties of the task's markdown, its length and
-  the absence of a list (FR13); the templates in `SKILL.md` are trusted, not
-  schema-checked.
-- Cross-session thread management. This plugin handles one `/clear`
-  transition; auto-memory handles durable state.
+These are the conventions for editing the plugin's skill, hook, mod or script
+inside this repo. Every session here loads this file, so it holds only what
+is needed before any file is opened: the flow, one line per component, the
+routing, the always-on conventions and the gates; no mechanism prose, no test
+inventory. A behaviour goes in its design node, a test's coverage in the test
+file, an editing convention in the `.claude/rules/` file whose `paths:` cover
+the files it governs, and a new component adds one line to the index.
 
 @memory/ddaanet/shared-claude.md

@@ -122,12 +122,12 @@ git / memory.
 
 ## Requirements
 
-These labels are cited throughout `CLAUDE.md`, the skill bodies and the
-scripts' own comments, so they are fixed points: the numbering is never
-compacted, and a requirement that dies leaves its number retired rather than
-reused. They arrived from two plans with independent numbering, which is why
-the driven-transition pair is lettered — `FR-G` and `FR-H` would have
-collided as numbers. `FR6`, `FR7` and `FR-H` are retired.
+These labels are cited in `CLAUDE.md` and the `.claude/rules/` files, the
+skills and the scripts' own comments, so they are fixed points: the numbering
+is never compacted, and a requirement that dies leaves its number retired
+rather than reused. They arrived from two plans with independent numbering,
+which is why the driven-transition pair is lettered — `FR-G` and `FR-H`
+would have collided as numbers. `FR6`, `FR7` and `FR-H` are retired.
 
 **[The write path](design/the-write-path.md).**
 
