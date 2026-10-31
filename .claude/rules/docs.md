@@ -11,17 +11,14 @@ paths:
   routing table, one index line per decision and per rejected alternative,
   Non-goals. `docs/design/` holds one node per mechanism; read the node
   before making a claim about its mechanism.
-- `docs/changelog.md` is the index: one line per design change, newest
-  first, `- [<date> — Title](changelog/<file>.md) — hook (vX.Y.Z)`, the
-  version only when the entry maps onto one release.
-- `docs/changelog/` holds one dated file per design change with the full
-  write-time reasoning, never edited after the fact. A later change that
-  reverses one heads the affected section with a
-  `> **Superseded <date>** (see [<title>](<sibling>.md))` blockquote scoped
-  to what changed.
-- A design change adds its changelog file and index line and rewrites
-  whatever `docs/design.md` or `docs/design/` prose it invalidates, all in the
-  same pass.
+- `docs/changelog.md` and `docs/changelog/` are a frozen archive of the
+  write-time records written up to 2026-10-31. Nothing adds a record or an
+  index line, and nothing edits a record; links into the archive stay valid.
+- A design change rewrites whatever `docs/design.md` or `docs/design/` prose it
+  invalidates, in the same commit. The node keeps the reason the decision
+  stands; the commit body carries why it changed now. A rewrite that reverses a
+  decision whose node cites an archived record as its argument drops or
+  replaces that link.
 - `plans/` holds prospective content (specs, proposals, implementation plans)
   and its reports, write-time records like changelog entries. A claim wrong
   at the time it was written is corrected in place with a

@@ -38,7 +38,7 @@ docstrings, not in `CLAUDE.md` or here.
   `hooks/hooks.json` against the lock's default wait: change them together.
 - Each state gate is paired with the positive row over the same fixture.
 - A load-bearing row is mutation-checked: a mutant of the code it pins turns
-  it red. The mutant is recorded in the changelog entry or plan report of the
+  it red. The mutant is recorded in the commit body or plan report of the
   change, not here. Where no test can red a mutant, name the residual bound
   (the prompt marker read's `own` argument: no unprivileged test can make a
   marker another user owns).

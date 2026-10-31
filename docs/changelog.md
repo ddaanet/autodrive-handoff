@@ -1,12 +1,8 @@
 # Changelog
 
-One entry per design change, newest first. Each links the full write-time
-record under `changelog/` — what the defect was, what was weighed, what was
-believed at the time. Those files are never edited after the fact; a change
-that reverses one heads the affected section with a superseding pointer.
-
-[`design.md`](design.md) is the other half: present tense, current truth,
-rewritten rather than annotated when a decision is reversed.
+The frozen index of the archive in `changelog/`: the write-time records of
+design changes, written up to 2026-10-31. Design history after it is in
+`git log`; [`design.md`](design.md) is the current truth.
 
 - [2026-10-30 — Memory commits go through the skill](changelog/2026-10-30-memory-commits-go-through-the-skill.md) — gitlore's D70 retired the message file, the trigger file, `PostToolBatch` and the clause key, leaving the directive to write files nothing consumed or refuse with advice that could not fix it; the memory directive now prints the dirty listing and one sentence sending the agent to the `gitlore:commit` skill, identical under both commit modes, the commit act names the memory gitlink `gitlore:commit` staged when memory was owed, the hold rule is unchanged, and no shim keeps the old handshake
 - [2026-10-17 — The checkpoint's lock covers the plan](changelog/2026-10-17-the-lock-covers-the-plan.md) — the checkpoint took the sentinel's lock after resolving its `TASK.md`/`TODO.md` plans, so an `edit` that waited was applied over a body read before the wait and lost the holder's change; the lock now precedes the first read, one scope for read, plan, write

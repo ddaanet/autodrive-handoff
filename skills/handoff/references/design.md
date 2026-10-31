@@ -1,7 +1,7 @@
 # handoff — Design Notes
 
 Condensed rationale. Full design doc is <https://github.com/ddaanet/autodrive-handoff/blob/main/docs/design.md>; the
-dated write-time record of each design change is in
+dated write-time records of design changes up to 2026-10-31 are in
 <https://github.com/ddaanet/autodrive-handoff/tree/main/docs/changelog>.
 
 ## The residual

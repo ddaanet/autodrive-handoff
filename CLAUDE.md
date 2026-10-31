@@ -124,8 +124,8 @@ What you are touching → what to read first, under `docs/design/`:
 
 - `docs/design.md` — the design hub; `docs/design/` — one node per
   mechanism, read before making a claim about it.
-- `docs/changelog.md` — the index; `docs/changelog/` — one dated file per
-  design change, never edited after the fact.
+- `docs/changelog.md` — the index; `docs/changelog/` — a frozen archive of
+  the write-time records up to 2026-10-31. Later design history is `git log`.
 - `plans/` — specs, proposals, implementation plans and their reports.
 - `inbox/` — what arrives from a session in another repository.
 - The editing rules for all four: `.claude/rules/docs.md`.
@@ -145,8 +145,8 @@ What you are touching → what to read first, under `docs/design/`:
   current message.
 - `version-guard.sh` (wired in `.claude/settings.json`) refuses agent edits
   that change `plugin.json`'s `.version`.
-- A design change lands with its changelog entry and rewrites the design
-  prose it invalidates, in the same pass.
+- A design change rewrites the design prose it invalidates, in the same
+  commit; the commit body says why it changed.
 
 ## Gates
 

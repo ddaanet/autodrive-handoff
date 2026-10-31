@@ -4,10 +4,9 @@ Living document. States what this plugin is, how it works today, and why
 each standing decision was made. Present tense throughout: when a decision
 is reversed, this document is rewritten rather than annotated.
 
-The write-time record of every design change lives in `changelog/`, one
-file per change, dated, indexed by [`changelog.md`](changelog.md). Those files are never
-edited after the fact — they say what was true and what was believed when
-they were written, which is what makes them worth keeping.
+The write-time records of design changes up to 2026-10-31 are a frozen
+archive in `changelog/`, indexed by [`changelog.md`](changelog.md). Later
+history, and why a design changed, is in `git log`.
 
 This document is a **hub**. `docs/design/` holds one node per mechanism or
 argument; read the node before making a claim about, or changing, what it
@@ -359,11 +358,6 @@ plugin keeps a local task frame and re-injects it verbatim, `ddaa-handoff`
 delivered to Notion when available. The trigger phrases are shared on purpose,
 so the same words work whichever is installed, which is also why a project
 enables exactly one handoff provider: with both, one phrase reaches both.
-
-## Changelog
-
-[`changelog.md`](changelog.md) — one line per design change, newest first,
-each linking the full write-time record under `changelog/`.
 
 ## References
 
