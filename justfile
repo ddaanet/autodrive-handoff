@@ -40,7 +40,7 @@ check-plugin:
     jq . .claude/settings.json > /dev/null
     just validate-plugin
     claude plugin test
-    shellcheck -x bin/* scripts/*.sh tests/*.bats
+    shellcheck -x bin/* scripts/*.sh tests/*.bats tests/*.bash
     record-sentinel
 
 # Python lint + type checks and the bats + pytest suites; skipped while its inputs are unchanged
@@ -52,7 +52,7 @@ check-code:
     docformatter --check scripts/*.py tests/*.py
     mypy
     ty check
-    plugin-dev/run-bats.sh tests/hook-test.bats tests/checkpoint.bats tests/drive-take.bats
+    plugin-dev/run-bats.sh tests/*.bats
     pytest
     record-sentinel
 
@@ -100,7 +100,7 @@ ty:
 
 # Run the hook + rename test suites (bats) against synthetic tool-event input
 hook-test:
-    bats tests/hook-test.bats tests/checkpoint.bats tests/drive-take.bats
+    bats tests/*.bats
 
 # Run the Python unit tests (pytest) — worktree_root.py, checkpoint.py, the mod fixtures
 py-test:

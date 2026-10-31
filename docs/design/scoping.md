@@ -89,7 +89,7 @@ turn it runs in, NUL-terminated, in `$HANDOFF_POINTER_DIR/handoff-prompt-<sessio
 the **prompt marker**, which `report-drive-failure.sh` compares a queued
 prompt's id with ([A prompt queued into the arming
 turn](queued-prompts.md)). It is written here and by nothing else, with the
-drift marker's guards, which live in `_lib.sh` (`marker_dir_ok`,
+drift marker's guards, which live in `_lib_files.sh` (`marker_dir_ok`,
 `handoff_write_marker`) because two hooks use them. A marker that cannot be
 written changes nothing the hook prints, and the negative path stays one `jq`
 parse, now of four fields, and a substring test: the marker block sits after

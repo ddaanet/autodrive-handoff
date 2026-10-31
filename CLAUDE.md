@@ -252,7 +252,19 @@ note in `report-drive-failure.sh`.
   file, so this is the only trace of who took a sentinel.
 - `scripts/_lib.sh` — sourced helper (`# shellcheck source-path=SCRIPTDIR
   source=_lib.sh` above each `source`; `# shellcheck disable=SC2034` for vars
-  only sourcing scripts read). `HANDOFF_REL_*` path constants
+  only sourcing scripts read), the one file callers source. It keeps the path
+  constants, `handoff_owner_live`, `handoff_lock_take`, `handoff_root_read`,
+  `HANDOFF_UNRESOLVED_MSG` and `handoff_deny`, and after those sources three
+  parts from `$HANDOFF_LIB_DIR`, each under `# shellcheck
+  source-path=SCRIPTDIR/../scripts source=<part>`: `_lib_frame.sh`
+  (`handoff_frame`, `_handoff_has_body`, `handoff_frame_notes`),
+  `_lib_drive.sh` (the sentinel grammar: `_handoff_drive_*`,
+  `handoff_drive_read`, `handoff_drive_has_source`, `handoff_drive_arm`) and
+  `_lib_files.sh` (the file-safety primitives: `handoff_read_regular`,
+  `handoff_replace`, `marker_dir_ok`, `handoff_write_marker`,
+  `handoff_read_marker`). A part is never sourced by a caller; the
+  `../scripts` form is what lets shellcheck follow into it from `bin/` and
+  `tests/` too. `HANDOFF_REL_*` path constants
   (`HANDOFF_REL_DRIVE_SWEPT`, the sweep's record, among them);
   `HANDOFF_LEGACY_REL_*` beside them (the paths from before the move to the
   root, the loaders' fallback and the one marker of it, with a Python mirror in
@@ -534,9 +546,14 @@ note in `report-drive-failure.sh`.
 - `TODO.md` holds **open items only**. A finished item is dropped,
   never checked off: what landed is reconstructable from `git log`, and a
   done item still listed reads as outstanding and gets redone.
-- `_lib.sh`, the one remaining sourced bash helper, needs
+- `_lib.sh`, the one remaining sourced bash helper (callers source it alone;
+  it sources `_lib_frame.sh`, `_lib_drive.sh` and `_lib_files.sh`), needs
   `# shellcheck source-path=SCRIPTDIR source=_lib.sh` above the
-  `source` line so `shellcheck -x` follows it. Add
+  `source` line so `shellcheck -x` follows it. Inside `_lib.sh` the nested
+  `source` of a part carries `# shellcheck source-path=SCRIPTDIR/../scripts
+  source=<part>` instead: a bare `SCRIPTDIR` resolves against the top-level
+  script's directory, so from `bin/` and `tests/` shellcheck would silently
+  skip the part. Add
   `# shellcheck disable=SC2034` to vars consumed only by sourcing
   scripts. `_checkpoint_lib.py`, `_checkpoint_payload.py` and
   `_checkpoint_plan.py` are imported, not sourced, so this convention does not
@@ -560,10 +577,10 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
   `.gitignore`, `bin`, `hooks`, `scripts`, `skills`, `tests`): `jq` over
   `plugin.json`, `hooks.json` and `.claude/settings.json`; `just
   validate-plugin`; `claude plugin test`; `shellcheck -x` over `bin/*`,
-  `scripts/*.sh` and `tests/*.bats`. `check-code` (inputs `bin`, `hooks`,
+  `scripts/*.sh`, `tests/*.bats` and `tests/*.bash`. `check-code` (inputs `bin`, `hooks`,
   `scripts`, `tests`, `pyproject.toml`, `uv.lock`, `.gitignore`): ruff check and format,
-  docformatter, mypy, ty; `plugin-dev/run-bats.sh tests/hook-test.bats
-  tests/checkpoint.bats tests/drive-take.bats` (the quiet bats runner); `pytest`.
+  docformatter, mypy, ty; `plugin-dev/run-bats.sh tests/*.bats` (the quiet bats
+  runner); `pytest`.
   A new component directory the plugin validator reads (`agents/`, `commands/`)
   goes into `check-plugin`'s list when it is created. The release recipe depends
   on this name through `prerelease`.
@@ -618,65 +635,108 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
   skip is never mistaken for a pass. Run it whenever the mod, a loader or the
   sentinel's shape changes — it found the `Stop` call-context refusal that no
   stub could.
-- `just hook-test` — `bats tests/hook-test.bats tests/checkpoint.bats
-  tests/drive-take.bats` alone. `bats run` captures exit codes and output
-  without the `set +e` dance; see `tests/bats-best-practices.md`.
-  `tests/hook-test.bats` covers the hook scripts against synthetic tool-event
-  payloads: `handoff_frame` (called directly, never through `run`, since it
-  answers in variables: which file counts, headings-only and whitespace-only
-  ones not, `#tag` and a shebang yes, the reset between calls, nothing
-  printed; an unreadable root or legacy file is no body, nor is a library that
-  exits 1 or 2, raises or is missing, each through a copy of `_lib.sh` sourced
-  beside a stub library), the `handoff_drive_read` shape matrix, `load-handoff.sh` and
-  `load-compact.sh` (consume only their own kind in state `pending`, leave
-  `armed` for the sweep, spawn nothing; the four frame states of
-  `load-handoff.sh` with both channels asserted whole, the age taken from the
-  files that count, a clear with nothing to inject still consuming and saying
-  so; `load-compact.sh`'s `todo re-injected` and `No todo`), the legacy
-  fallback (`handoff_frame` and both loaders: each half alone and both from the
-  old path, the root file shadowing a legacy one (also one with no body) and a
-  headings-only root file not shadowing it, the flags reset between calls, a
-  legacy file's age counting only when its half came from it, the worktree's
-  legacy file read rather than the project's, and both channels asserted whole
-  with the note order pinned), `report-drive-failure.sh` (the failure file,
-  the stranded-`pending` clear, the sweep's note naming the mod and printing the
-  lines, a `held` file of another session left untouched whether its owner's
-  transcript is fresh, stale or missing, an `armed` file of another live
-  session left untouched and one whose owner's transcript is stale or
-  missing, or with no `transcript_path`, swept, a failed reader helper
-  leaving the file, the
-  owner's own aborted turn swept however fresh its transcript, a prompt
-  queued into the arming turn (the input's `prompt_id` equal to the prompt
-  marker's: an owner's `armed` `rename` left byte-identical with no output and
-  no sweep record; `clear` and `compact` swept, recorded and cancelled with the
-  per-kind note, no lines offered and no unloaded-mod note; each beside the
-  fresh-id row that sweeps as an aborted turn; an id with spaces and a trailing
-  newline spared on an exact match and swept when it differs by whitespace
-  alone; no `prompt_id` swept with the typed-ahead note, and no marker swept, with or without a pointer directory (a missing one is
-  `absent`, not unsettled);
-  another session's `armed` file with a matching id left to the liveness rule,
-  a `held`, `pending` or malformed file unaffected; the sweep writing no
-  marker; a symlinked marker, a symlinked marker directory and a group- or
-  world-writable one not read, with the sweep still running; and an ordinary
-  prompt with an id and a marker forking no `find`), the
-  `HANDOFF_OWNER_LIVE_SECS` window, each gate mutation-checked, a malformed file
-  with none, session-root drift episodes and its cwd quoted (newline, ESC,
-  backtick), the sweep's record: one line per
-  removal naming the sweeper, newest 50 kept, an unwritable record, a
-  failing `mktemp`, a symlinked record and a symlink at the old fixed
-  temporary name each not blocking the sweep and none written through; the `|| true` after the trim pipeline is pinned by the
-  4000-line row and the record call by the first two rows), a cwd holding a newline or ending in
-  a space (`load-handoff.sh` and `report-drive-failure.sh`, at the project root
-  and in a linked worktree; the fields that follow the cwd, `source` and
-  `session_id`, pinned apart from the root), a worktree whose path ends in a
-  newline (`handoff_root_read`, both loaders and the write guard), the drift
-  marker against a cwd holding or ending in a newline, the write guard (the sentinel
-  denied under every spelling that normalises onto it — a trailing slash, a
-  `/.`, a `..` detour, a newline in a directory component — and when it is a
-  symlink or reached through an alias, in this project and across projects;
-  `TASK.md`, `TODO.md`, `autodrive.md` and a file under a directory named
-  `autodrive` allowed), the pointer sweep (a long-stale prompt marker removed,
-  another live session's kept), and `handoff_root_read`'s labels. Each state gate is paired with the positive
+- `just hook-test` — `bats tests/*.bats` alone. `bats run` captures exit codes
+  and output without the `set +e` dance; see `tests/bats-best-practices.md`.
+  The hook scripts are covered against synthetic tool-event payloads by one
+  file per hook or library part, each sourcing `tests/hook-helpers.bash` under
+  a `# shellcheck source-path=SCRIPTDIR source=hook-helpers.bash` line. That
+  helper holds their `setup` and `teardown` and the helpers two or more of them
+  call; a helper only one file calls stays in that file.
+  - `tests/lib.bats` covers `_lib.sh`'s resolver: `handoff_root_read` and its
+    labels, a worktree whose path ends in a newline (the loaders' and the write
+    guard's rows for it are in `tests/load-handoff-cwd.bats`), a resolver that
+    crashes and what each hook says of it, `handoff_deny`, and
+    `handoff_read_regular`.
+  - `tests/lib-frame.bats` covers `handoff_frame` (called directly, never
+    through `run`, since it answers in variables: which file counts,
+    headings-only and whitespace-only ones not, `#tag` and a shebang yes, the
+    reset between calls, nothing printed; an unreadable root or legacy file is
+    no body, nor is a library that exits 1 or 2, raises or is missing, each
+    through a copy of `_lib.sh` and its parts sourced beside a stub library).
+  - `tests/lib-frame-legacy.bats` covers the legacy fallback in `handoff_frame`
+    (each half alone and both from the old path, the root file shadowing a
+    legacy one (also one with no body) and a headings-only root file not
+    shadowing it, the flags reset between calls, a symlinked legacy path
+    neither read nor shadowing).
+  - `tests/lib-drive.bats` covers the `handoff_drive_read` shape matrix and
+    `handoff_drive_arm`.
+  - `tests/load-handoff.bats` covers `load-handoff.sh`: the four frame states
+    with both channels asserted whole, and the `clear` consume (it consumes
+    only its own kind in state `pending`, leaves `armed` for the sweep and
+    spawns nothing; a clear with nothing to inject still consuming and saying
+    so).
+  - `tests/load-handoff-legacy.bats` covers the legacy fallback in
+    `load-handoff.sh`, and either root file's symlink refusal in both loaders
+    (a `TASK.md` or `TODO.md` that is a valid or dangling symlink is not
+    injected by either, and a symlinked `TODO.md` lets the legacy todo load
+    with no ignored note): each half alone and both from the old path, the
+    root file shadowing a legacy one (also one with no body) and a
+    headings-only root file not shadowing it, the age taken from the files that
+    count and a legacy file's age counting only when its half came from it, the
+    worktree's legacy file read rather than the project's, and both channels
+    asserted whole with the note order pinned.
+  - `tests/load-handoff-cwd.bats` covers a cwd holding a newline or ending in a
+    space (`load-handoff.sh` and `report-drive-failure.sh`, at the project root
+    and in a linked worktree; the fields that follow the cwd, `source` and
+    `session_id`, pinned apart from the root), a worktree whose path ends in a
+    newline (both loaders and the write guard; `handoff_root_read` itself is in
+    `tests/lib.bats`), and the drift marker against a cwd holding or ending in a
+    newline.
+  - `tests/load-compact.bats` covers `load-compact.sh` (it consumes only its
+    own kind in state `pending`, leaves `armed` for the sweep and spawns
+    nothing; `todo re-injected` and `No todo`) and its legacy paths: each half
+    alone and both from the old path, the root todo or task shadowing a legacy
+    one, a headings-only root todo not shadowing it, a symlinked legacy todo
+    and legacy files with no body.
+  - `tests/write-guard.bats` covers the write guard: the sentinel denied under
+    every spelling that normalises onto it — a trailing slash, a `/.`, a `..`
+    detour, a newline in a directory component — and when it is a symlink or
+    reached through an alias, in this project and across projects; `TASK.md`,
+    `TODO.md`, `autodrive.md` and a file under a directory named `autodrive`
+    allowed.
+  - `tests/session-pointer.bats` covers the pointer sweep (a long-stale prompt
+    marker removed, another live session's kept).
+  - `tests/sentinel-reader.bats` covers the sentinel reader's helper failing (a
+    failed reader helper leaves the file, in both loaders and the sweep) and the
+    sentinel as a symlink.
+  - `tests/sentinel-lock.bats` covers the sentinel's lock in the sweep and the
+    loaders, and a sentinel that does not parse swept with no lines offered.
+  - `tests/report-drive-failure.bats` covers `report-drive-failure.sh`: the
+    failure file, the stranded-`pending` clear, the sweep's note naming the mod
+    and printing the lines, and the sweep's record: one line per removal naming
+    the sweeper, newest 50 kept, an unwritable record, a failing `mktemp`, a
+    symlinked record and a symlink at the old fixed temporary name each not
+    blocking the sweep and none written through; the `|| true` after the trim
+    pipeline is pinned by the 4000-line row and the record call by the first
+    two rows.
+  - `tests/report-drive-failure-other-session.bats` covers a sentinel owned by
+    another session: a `held` file of another session left untouched whether
+    its owner's transcript is fresh, stale or missing, an `armed` file of
+    another live session left untouched and one whose owner's transcript is
+    stale or missing, or with no `transcript_path`, swept, the owner's own
+    aborted turn swept however fresh its transcript, and the
+    `HANDOFF_OWNER_LIVE_SECS` window.
+  - `tests/report-drive-failure-queued.bats` covers a prompt queued into the
+    arming turn (the input's `prompt_id` equal to the prompt marker's: an
+    owner's `armed` `rename` left byte-identical with no output and no sweep
+    record; `clear` and `compact` swept, recorded and cancelled with the
+    per-kind note, no lines offered and no unloaded-mod note; each beside the
+    fresh-id row that sweeps as an aborted turn; an id with spaces and a
+    trailing newline spared on an exact match and swept when it differs by
+    whitespace alone; no `prompt_id` swept with the typed-ahead note, and no
+    marker swept, with or without a pointer directory (a missing one is
+    `absent`, not unsettled); another session's `armed` file with a matching id
+    left to the liveness rule, a `held`, `pending` or malformed file
+    unaffected; the sweep writing no marker; a symlinked marker not read, with
+    the sweep still running).
+  - `tests/report-drive-failure-trust.bats` covers the marker's trust: a
+    symlinked marker directory and a group- or world-writable one not read,
+    with the sweep still running.
+  - `tests/report-drive-failure-drift.bats` covers session-root drift episodes
+    and its cwd quoted (newline, ESC, backtick), and an ordinary prompt with an
+    id and a marker forking no `find`.
+
+  Each state gate is paired with the positive
   over the same fixture, and the loader, guard and sweep gates are
   mutation-checked, as are the legacy rows: root-wins dropped, shadowing by
   the legacy file's body instead of its existence, a missing flag reset, a
@@ -693,7 +753,9 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
   row. The `own` argument of the prompt marker's read is the residual bound: no
   unprivileged test can make a marker another user owns, so dropping it leaves
   the suite green.
-  `tests/checkpoint.bats` covers what stayed bash around the checkpoint:
+  Three files cover what stayed bash around the checkpoint, and share their
+  `setup` and `make_repo` through `tests/checkpoint-helpers.bash`.
+  `tests/inject-checkpoint-root.bats` covers
   `inject-checkpoint-root.sh` (a root holding whitespace or ending in a newline
   round-trips; the prompt marker: a `handoff-checkpoint` and a
   `handoff-approved` call each leave the `prompt_id` NUL-terminated in a
@@ -702,12 +764,14 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
   nothing, a symlinked marker is replaced with its target untouched, a marker
   that cannot be written leaves the output byte-identical, and an id holding a
   space or ending in a newline round-trips; dropping the marker write reds the
-  writer rows), `bin/handoff-approved` (output pinned whole, one
+  writer rows).
+  `tests/bin-commands.bats` covers `bin/handoff-approved` (output pinned whole, one
   row per kind, against `closing_directive()` itself so the producers cannot
   drift; a failed reader helper reported as unreadable, not malformed) and the `bin/handoff-checkpoint` shim, plus
   the harness row that `make_repo` and `make_gitlore_repo` (via `run_git` in
   `tests/probe-helpers.bash`, git minus `git rev-parse --local-env-vars`) leave a
-  decoy `GIT_DIR` repository byte-identical, mutation-checked. The `validate-plugin` rows run
+  decoy `GIT_DIR` repository byte-identical, mutation-checked.
+  `tests/validate-plugin.bats` covers the `validate-plugin` rows, which run
   the real recipe under a stub `claude` printing a fixture: the empty
   `.mcp.json` error and the `CLAUDE.md` warning pass (also under a root with a
   space), and the same finding on another entry's file, a non-empty or absent
@@ -724,8 +788,9 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
   once the actor has reported through `HANDOFF_LOCK_BLOCKED_FILE` that it waits
   on the lock; the contention rows (lock held, wait 0.05 s, sentinel
   byte-identical, fail-closed report; a link at the lock for the unavailable
-  cause) are with each actor, and no lock row sleeps or polls; the loaders' rows
-  are in `tests/hook-test.bats`) and the `tests/test_checkpoint_*.py` files,
+  cause) are with each actor, and no lock row sleeps or polls; the sweep's and
+  the loaders' rows are in `tests/sentinel-lock.bats`) and the
+  `tests/test_checkpoint_*.py` files,
   which drive `scripts/checkpoint.py` end-to-end via subprocess.
   `tests/conftest.py` holds what two or more of them use (the repository
   builders `make_repo` and `make_gitlore_repo`, the payload builders, the
@@ -791,14 +856,14 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
     `continue` as a boolean at every boundary, driven or not (null, a string,
     an empty string, a number, a list and an object each refused with no
     sentinel written; `true` refused against a transition not carried out and
-    legal against one carried out; `false` legal everywhere); `continue: true`
-    under `handoff` refused when neither half would have a body after the plans
-    (six bodyless shapes, files byte-identical, no sentinel), legal when either
-    has one, with `false`, and under `precompact`; the legal
-    combinations pinning the sentinel's exact bytes, `CONTINUATION` imported
-    from `checkpoint.py` rather than restated, read back through
-    `handoff_drive_read`; and the constant itself, one line that does not begin
-    with `/`.
+    legal against one carried out; `false` legal everywhere); and the
+    continuation constant itself, one line that does not begin with `/`.
+  - `tests/test_checkpoint_sentinel.py` — `continue: true` under `handoff`
+    refused when neither half would have a body after the plans (six bodyless
+    shapes, files byte-identical, no sentinel), legal when either has one, with
+    `false`, and under `precompact`; the legal combinations pinning the
+    sentinel's exact bytes, `CONTINUATION` imported from `checkpoint.py` rather
+    than restated, read back through `handoff_drive_read`.
   - `tests/test_checkpoint_directives.py` — the memory directive (the status
     line and the `gitlore:commit` sentence, byte-identical under both modes,
     none of the retired file handshake's words), the commit act (present under
@@ -814,11 +879,14 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
     closing line last, the memory part located by `gitlore:commit`.
   - `tests/test_checkpoint_hold.py` — the arming instruction, the hold rule, the
     held state and its owner, the armed state's owner, and the check of
-    `CLAUDE_CODE_SESSION_ID` on both paths, the sentinel's write waiting on the
-    lock, and a read-back that cannot run removing the sentinel. Mutation-checked: the held/armed pair over one
-    fixture (never hold ⟹ the held row alone reds; hold whatever the sentinel
-    names ⟹ the names-nothing row alone reds) and the `(driven ∧ with-commit)`
-    disjunct.
+    `CLAUDE_CODE_SESSION_ID` on both paths. Mutation-checked: the held/armed
+    pair over one fixture (never hold ⟹ the held row alone reds; hold whatever
+    the sentinel names ⟹ the names-nothing row alone reds) and the
+    `(driven ∧ with-commit)` disjunct.
+  - `tests/test_checkpoint_readback.py` — the sentinel's write waiting on the
+    lock, an `edit` planned under it, a lock held past the wait or that cannot
+    be set up failing closed with nothing written, and a read-back that cannot
+    run, fails or raises removing the sentinel.
   - `tests/test_checkpoint_legacy.py` — the whole legacy migration, one file
     whatever its length, since it is deleted in one pass when the fallback is
     retired: a legacy todo moved on `keep` with its modification time, across
@@ -848,7 +916,7 @@ from the agent's Bash, and so `just precommit`, `just validate-plugin` and
     effective todo, a legacy file included, the refusal moving nothing.
 
   The load-bearing rows are mutation-checked, as listed under each file, and
-  with them `handoff-approved`'s bare-name row in `tests/checkpoint.bats`.
+  with them `handoff-approved`'s bare-name row in `tests/bin-commands.bats`.
 
 Test files live under `tests/`. The justfile recipes are one-liners that
 delegate. Add new scenarios to the existing `.bats`/`test_*.py` files rather

@@ -1,3 +1,10 @@
 ## Current task
 
-Implement `plans/2026-10-30-line-cap-split/plan.md`, which my human partner approved on 2026-10-30. It splits the seven files over the 400-line cap: `_lib.sh` into three sourced parts, `hook-test.bats` by hook, `checkpoint.bats`, two pytest files and two guideline docs. Content moves verbatim and the test counts stay the same. My human partner asked for the steps to run as parallel agents, with the per-commit code reviews also run in parallel; that replaces the plan's single sequential executor. Next action: cut `line-cap-split` from `dev`, then dispatch the steps.
+Merge `line-cap-split` into `dev`, proposed on 2026-10-31 with a default of yes
+and not objected to. Release 0.19.0 is out from `main`, and the branch's review
+against `dev` is triaged, its one medium fixed on the branch. `dev` is two
+commits behind `main`: the README fix and the release bump. First action:
+commit this frame on `line-cap-split`, since an uncommitted `TASK.md` and
+`TODO.md` block the checkout; then check out `dev`, fast-forward it to `main`,
+merge `line-cap-split` with `TASK.md` and `TODO.md` resolved to the branch's
+side, and run `just precommit` before committing the merge.
