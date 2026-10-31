@@ -230,10 +230,9 @@ rename a shade of prose.
 **A `PreCompact` hook for the memory flush** — `PreCompact(manual)` can
 annotate or block a compaction but cannot run an agent turn, and the flush
 needs one: summarize, get approval, commit. It stays a skill
-the user runs before compacting, where that turn exists. Compaction threatens
-conversation state only, so the flush can wait for any later turn. `precompact` has since committed
-memory before the compaction instead of letting it wait, because the summary
-the compaction leaves is a paraphrase of the conversation.
+the user runs before compacting, where that turn exists. `precompact` commits
+memory before the compaction, because the summary the compaction leaves is a
+paraphrase of the conversation.
 
 **Merging handoff into gitlore**, **moving the checkpoint into gitlore**
 behind a `command -v` lookup, and **gitlore superseding handoff** — distinct
