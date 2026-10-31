@@ -20,7 +20,9 @@ toolkit, vendored at `plugin-dev/` via `git subtree`. Rationale:
   recipes: `precommit`, the per-plugin checks that must pass before
   every commit, and `prerelease`, the gate `release` actually depends
   on. handoff's `precommit` lints its own manifests, syntax-checks
-  scripts, and runs the handoff-specific hook + pytest suites; its
+  scripts, and runs the handoff-specific hook + pytest suites, then the
+  toolkit's `check-refs` and `check-size`, the second reading the root
+  `size.exempt` for the files kept over its byte caps; its
   `prerelease` is exactly `precommit`. The indirection exists so a
   plugin whose release gate is wider than its commit gate — slow or
   paid checks — can widen `prerelease` without slowing every commit.
@@ -31,5 +33,5 @@ toolkit, vendored at `plugin-dev/` via `git subtree`. Rationale:
   bump is invisible to end-users, so the recipe treats both pushes as
   one atomic release.
 
-Updates: `just update-plugin-dev vX.Y.Z` (recipe imported from
-`release.just`).
+Updates: `just update-plugin-dev dist-vX.Y.Z` (recipe imported from
+`release.just`; it refuses the bare `vX.Y.Z` source tag).

@@ -8,8 +8,9 @@ export PLUGIN_DEV_GATE_TOOLS := "bats --version\nshellcheck --version\njq --vers
 
 # autodrive-handoff plugin — dev recipes
 #
-# `precommit` is the gate that runs before every commit. It is two cached gates,
-# split because the cheap plugin checks read `skills/` and `.claude-plugin/`,
+# `precommit` is the gate that runs before every commit: two cached gates, then
+# two uncached ones. The cached pair is split because the cheap plugin checks
+# read `skills/` and `.claude-plugin/`,
 # which the slow code checks never do: a skill edit must not pay for the
 # bats and pytest runs. `check-plugin` lints the manifests + settings, validates
 # the plugin, runs the mod tests and shellchecks; `check-code` lints/type-checks
@@ -17,7 +18,9 @@ export PLUGIN_DEV_GATE_TOOLS := "bats --version\nshellcheck --version\njq --vers
 # through; its version is locked, so gating it can't break the build
 # spontaneously) and runs the hook + pytest suites. Each skips itself while the
 # files it reads are unchanged; `PLUGIN_DEV_GATE_FORCE=1 just precommit` runs
-# them regardless, as before a release.
+# them regardless, as before a release. `check-refs` (Markdown links) and
+# `check-size` (the byte caps, with `size.exempt`) come from the toolkit and run
+# on every call, since they read files no cached gate's inputs cover.
 #
 # `prerelease` is the gate the imported `release` recipe depends on.
 # Here it is exactly `precommit`; widen it if the release ever needs
@@ -27,9 +30,9 @@ export PLUGIN_DEV_GATE_TOOLS := "bats --version\nshellcheck --version\njq --vers
 _default:
     @just --list
 
-# Run both cached gates: the plugin checks and the code checks
-precommit: check-plugin check-code check-refs
-    @echo "precommit: check-plugin check-code passed"
+# Run the commit gate: the plugin and code checks, the link check, the size check
+precommit: check-plugin check-code check-refs check-size
+    @echo "precommit: check-plugin check-code check-refs check-size passed"
 
 # Manifests, settings, plugin validation, mod tests, shellcheck; skipped while its inputs are unchanged
 check-plugin:

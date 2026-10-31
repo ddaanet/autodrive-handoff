@@ -162,8 +162,10 @@ pytest runs off a uv-managed venv that direnv activates (`.envrc` exports
 - `just precommit` — the gate, run before every commit; needs the venv. It
   depends on `check-plugin` and `check-code`, cached gates that skip while
   their inputs are unchanged (`PLUGIN_DEV_GATE_FORCE=1` runs them regardless),
-  and on `check-refs`, an uncached Markdown link check that runs every time.
-  `release` depends on `precommit` through `prerelease`.
+  and on `check-refs` and `check-size`, uncached checks that run every time:
+  Markdown links, and the toolkit's byte caps (20000, 10000 for a `SKILL.md`).
+  A file kept over a cap is listed in the root `size.exempt`, with what ends
+  its overage. `release` depends on `precommit` through `prerelease`.
 - The `justfile` lists each gate's inputs: a new component directory the
   plugin validator reads (`agents/`, `commands/`) goes into `check-plugin`'s.
 - `just validate-plugin` — `claude plugin validate --strict --json`, failing
