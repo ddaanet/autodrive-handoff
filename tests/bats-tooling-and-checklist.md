@@ -71,26 +71,28 @@ ShellCheck understands bats's non-standard `@test "…" { }` syntax
 natively as of **ShellCheck 0.7** (per the bats-core gotchas page);
 this repo lints with **0.10.0**, which parses `.bats` files directly —
 no `shellcheck.sh` wrapper, no `--shell=bats` flag. Pass `.bats` files
-straight to `shellcheck` (the precommit does exactly this:
-`shellcheck -x scripts/*.sh tests/*.sh tests/*.bats`). Verified on
+straight to `shellcheck -x` (the `check-plugin` gate does exactly
+this; see that recipe in `justfile` for the file lists). Verified on
 0.10.0: `@test` blocks are analyzed and real issues (SC2086, SC2155,
 …) are reported inside the body.
 
 - ShellCheck 0.10.0 is bats-aware enough that it does **not** fire
-  SC2154 for `$status`/`$output`/`$lines`/`$stderr` (verified). If a
-  `$BATS_*` var or a bats-injected var ever does trip SC2154, suppress
-  narrowly, not globally:
+  SC2154 for `$status`/`$output`/`$lines` (verified). It does fire for
+  `$stderr`, which bats sets only under `run --separate-stderr`. If
+  that, a `$BATS_*` var or another bats-injected var trips SC2154,
+  suppress narrowly, not globally:
 
 ```bash
-# shellcheck disable=SC2154   # set by bats `run` / harness
+# shellcheck disable=SC2154   # $stderr is set by bats `run --separate-stderr`
 ```
 
-- For a sourced helper or script-under-test, add a source directive so
-  `shellcheck -x` follows it:
+- For a sourced helper or script-under-test, `source` it by path under
+  a source directive so `shellcheck -x` follows it; shellcheck does not
+  follow `load`:
 
 ```bash
-# shellcheck source=tests/helpers.bash
-load helpers
+# shellcheck source-path=SCRIPTDIR source=hook-helpers.bash
+source "$BATS_TEST_DIRNAME/hook-helpers.bash"
 ```
 
 - Keep `.bats` files lint-clean under the same `shellcheck` invocation
@@ -289,6 +291,7 @@ ShellCheck **0.10.0**), 2026-06-08:
   the floor silences it. `bats_pipe` added in 1.10.0.
 - ShellCheck 0.10.0 lints `.bats` directly (no wrapper), analyzes
   `@test` bodies (SC2086/SC2155 fire), and does **not** raise SC2154
-  for `$status`/`$output`/`$lines`/`$stderr`.
+  for `$status`/`$output`/`$lines` (it does for `$stderr`, which bats
+  sets only under `run --separate-stderr`).
 - `BATS_RUN_SKIPPED` is **absent** from the 1.11.1 install (only the
   internal `BATS_TEST_SKIPPED` exists).

@@ -183,3 +183,11 @@ At the branch tip, the plan's Verification scan lists only
 20 new `.bats` files gives 331 blocks on each side. Exactly one is changed, the
 `-I` row, which step 1 changed on purpose. The two pytest pairs give 51 blocks
 and `verbatim: OK`.
+
+The branch review against `dev` (`reports/branch-review.md`, Opus, read from
+`c2fff7c...1304efb` only) drew one medium, F1:
+`tests/bats-tooling-and-checklist.md` §7 prescribed `load` under a `source=`
+directive, quoted a gate command that fails, and claimed `$stderr` does not
+trip SC2154. A fresh Sonnet agent fixed
+it in an export (`reports/branch-review-fix.md`), landed through `git apply`.
+It is doc drift, with no re-review. F2 and F3 were low, and declined.

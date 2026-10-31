@@ -329,6 +329,7 @@ ShellCheck **0.10.0**), 2026-06-08:
   the floor silences it. `bats_pipe` added in 1.10.0.
 - ShellCheck 0.10.0 lints `.bats` directly (no wrapper), analyzes
   `@test` bodies (SC2086/SC2155 fire), and does **not** raise SC2154
-  for `$status`/`$output`/`$lines`/`$stderr`.
+  for `$status`/`$output`/`$lines` (it does for `$stderr`, which bats
+  sets only under `run --separate-stderr`).
 - `BATS_RUN_SKIPPED` is **absent** from the 1.11.1 install (only the
   internal `BATS_TEST_SKIPPED` exists).
