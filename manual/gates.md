@@ -41,29 +41,30 @@ command, and just still interpolates `{{ }}` in it. Dependencies
 (`precommit: format-docs`) run first, as for any recipe, and every time; a
 formatter moves into the body instead, as below.
 
-The sentinel is a file under the gitdir (`git rev-parse --git-path
-plugin-dev/gates/<gate>`), so it never shows in `git status` or in its own hash,
-and each clone and worktree has its own. The hash covers the names, contents and
-execute bits of every non-ignored file matching the pathspecs, tracked or not,
-so a rename, a deletion, a `chmod +x` and a brand-new file each count; ignored
-files do not. A symlink counts by where it points as well as by what it points
-at: the target path joins the hash, and the execute bit and contents of a file
-target are followed. Two inputs are always hashed beside the pathspecs you give:
-the justfile, since the commands of the gate are part of what it checks, and the
-vendored `plugin-dev` tree, so that a toolkit update invalidates every pass.
-They are listed apart from your pathspecs, by the absolute paths just reports,
-so an exclude of yours never subtracts from them, and a justfile named
-`Justfile`, a recipe that runs under `[working-directory]` and a gate in a
-module all hash the same two inputs. That needs `gates.just` inside the
-repository, as `plugin-dev/` is. A pathspec of yours that matches no file is
-refused, so a typo cannot cache forever; an exclude (`:!…`, `:^…`, their `:/`
-forms, or `exclude` among the magic words of `:(…)`) has no files of its own and
-is not held to it. Pathspecs resolve against the directory the recipe runs in,
-as git resolves them: a list of excludes alone subtracts from that directory's
-files, so under `[working-directory]` or in a module `':!docs'` lists only the
-files below it, and so does `':(top,exclude)docs'`, which anchors the exclude
-and not the listing. A gate over the whole repository minus `docs` lists
-`:/` beside the exclude: `:/ ':(top,exclude)docs'`, or `:/ ':/!docs'`.
+The sentinel is a file under the gitdir
+(`git rev-parse --git-path plugin-dev/gates/<gate>`), so it never shows in
+`git status` or in its own hash, and each clone and worktree has its own. The
+hash covers the names, contents and execute bits of every non-ignored file
+matching the pathspecs, tracked or not, so a rename, a deletion, a `chmod +x`
+and a brand-new file each count; ignored files do not. A symlink counts by where
+it points as well as by what it points at: the target path joins the hash, and
+the execute bit and contents of a file target are followed. Two inputs are
+always hashed beside the pathspecs you give: the justfile, since the commands of
+the gate are part of what it checks, and the vendored `plugin-dev` tree, so that
+a toolkit update invalidates every pass. They are listed apart from your
+pathspecs, by the absolute paths just reports, so an exclude of yours never
+subtracts from them, and a justfile named `Justfile`, a recipe that runs under
+`[working-directory]` and a gate in a module all hash the same two inputs. That
+needs `gates.just` inside the repository, as `plugin-dev/` is. A pathspec of
+yours that matches no file is refused, so a typo cannot cache forever; an
+exclude (`:!…`, `:^…`, their `:/` forms, or `exclude` among the magic words of
+`:(…)`) has no files of its own and is not held to it. Pathspecs resolve against
+the directory the recipe runs in, as git resolves them: a list of excludes alone
+subtracts from that directory's files, so under `[working-directory]` or in a
+module `':!docs'` lists only the files below it, and so does
+`':(top,exclude)docs'`, which anchors the exclude and not the listing. A gate
+over the whole repository minus `docs` lists `:/` beside the exclude:
+`:/ ':(top,exclude)docs'`, or `:/ ':/!docs'`.
 
 ### A formatter in the gate
 
@@ -90,9 +91,9 @@ and only the formatter saw the tree before it. Nothing but a formatter belongs
 between the guard and `hash-sentinel`, since whatever runs there is not vouched
 for by the hash recorded. It is refused with no guard before it, and a re-hash
 that fails leaves `record-sentinel` refusing the pass as for any hash that
-cannot be computed. A cached run skips the formatter too, so list its version
-in `PLUGIN_DEV_GATE_TOOLS`: a new release that wraps differently then reruns
-the gate instead of leaving the tree as the old one formatted it.
+cannot be computed. A cached run skips the formatter too, so list its version in
+`PLUGIN_DEV_GATE_TOOLS`: a new release that wraps differently then reruns the
+gate instead of leaving the tree as the old one formatted it.
 
 ### What is never recorded
 
@@ -101,22 +102,22 @@ by `hash-sentinel`, and records nothing when it cannot vouch for it:
 
 - **The inputs moved during the run** (another session edited one): the recipe
   prints `inputs changed while the checks ran; the pass was NOT recorded` and
-  keeps the checks' own verdict, exiting 0 when they passed. Only the sentinel is
-  withheld, so the next run does the work again.
+  keeps the checks' own verdict, exiting 0 when they passed. Only the sentinel
+  is withheld, so the next run does the work again.
 - **The hash could not be computed** (a listed tool is missing, an input file
-  cannot be read): the checks run,
-  the recipe passes, and `could not hash inputs; the pass was NOT recorded` goes
-  to stderr. A gate that never caches is slow, not wrong, but the message is how
-  you hear that it stopped caching.
+  cannot be read): the checks run, the recipe passes, and
+  `could not hash inputs; the pass was NOT recorded` goes to stderr. A gate that
+  never caches is slow, not wrong, but the message is how you hear that it
+  stopped caching.
 - **A check failed**: the recipe ends at the failure, before `record-sentinel`.
 
 ### One gate per recipe body
 
 `sentinel-guard` leaves shell variables behind for `record-sentinel`, so a
-second guard in the same body would overwrite the first's. The prolog refuses
-it (`each gate needs its own recipe`), and `record-sentinel` or `hash-sentinel`
-with no guard before it. Split gates into recipes, each with its own guard and its own
-pathspecs, and have `precommit` depend on them:
+second guard in the same body would overwrite the first's. The prolog refuses it
+(`each gate needs its own recipe`), and `record-sentinel` or `hash-sentinel`
+with no guard before it. Split gates into recipes, each with its own guard and
+its own pathspecs, and have `precommit` depend on them:
 
 ```just
 precommit: check-distribution lint
@@ -156,8 +157,8 @@ pathspecs:
   paths the other gate misses.
 
 The justfile and `plugin-dev` are inputs of every gate already. A module's own
-file is not the justfile: list it. Besides the paths
-your checks name, a plugin almost always needs:
+file is not the justfile: list it. Besides the paths your checks name, a plugin
+almost always needs:
 
 - Any justfile the root `justfile` `import`s; the root one is already an input.
 - Lockfiles and tool configuration the checks read: `uv.lock`, `pyproject.toml`,
@@ -177,15 +178,15 @@ Name the paths; do not hash the whole tree. Naming keeps the sandbox's phantom
 home dotfiles, scratch directories and build output out of the hash. The
 pathspecs are shell words in the recipe, so a path with whitespace in it needs
 quoting, and a pathspec with magic such as `':(exclude)tests/slow/*'` goes in
-single quotes so the shell does not glob it first. Written into a just
-variable and interpolated, they are split on whitespace instead.
+single quotes so the shell does not glob it first. Written into a just variable
+and interpolated, they are split on whitespace instead.
 
 ### A gitlink cannot be hashed
 
 A submodule path, such as a gitlore `memory/` mount, is hashed by name only.
 `git ls-files` lists the one path and there is nothing to read: neither an edit
-inside it nor a new commit of it moves the hash. A check that reads a gitlink,
-a memory-hygiene checker for one, would be skipped on exactly the commit that
+inside it nor a new commit of it moves the hash. A check that reads a gitlink, a
+memory-hygiene checker for one, would be skipped on exactly the commit that
 changes what it reads. Run that check **uncached, ahead of the guard**, in the
 same recipe body:
 
@@ -224,9 +225,9 @@ per line, each printing a version.
 export PLUGIN_DEV_GATE_TOOLS := "bats --version\nshellcheck --version\njq --version"
 ```
 
-Empty by default, so nothing is hashed unless you list it. A listed command
-that fails leaves the hash uncomputable, which the run reports as above. List
-the tools your checks use and that no lockfile in the pathspecs pins.
+Empty by default, so nothing is hashed unless you list it. A listed command that
+fails leaves the hash uncomputable, which the run reports as above. List the
+tools your checks use and that no lockfile in the pathspecs pins.
 
 ## The quiet bats runner
 

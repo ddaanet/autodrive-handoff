@@ -27,6 +27,7 @@ set -euo pipefail
 # The flow's functions live in sibling files sourced below, from this script's
 # own directory: release-preflight.sh (checks before any side effect),
 # release-tags.sh (release history, and the version this run publishes),
+# release-resume.sh (whether there is a release to finish),
 # release-publish.sh (commit, tag, pushes, dist, GitHub release) and
 # release-marketplace.sh (the marketplace entry). They share this shell, so the
 # `set` line at the top and the globals set here hold in all of them.
@@ -61,6 +62,8 @@ dist_on=0
 source "$here/release-preflight.sh"
 # shellcheck source=release-tags.sh
 source "$here/release-tags.sh"
+# shellcheck source=release-resume.sh
+source "$here/release-resume.sh"
 # shellcheck source=release-publish.sh
 source "$here/release-publish.sh"
 # shellcheck source=release-marketplace.sh

@@ -57,6 +57,10 @@
 # dist.include, one from a shipped file to an unshipped one. No recipe here
 # runs it: a plugin wires it into its own gate, `precommit: check-refs`.
 #
+# `check-size` refuses a file over the size cap, counted in bytes.
+# Like `check-refs`, no recipe here runs it: a plugin wires it into its own
+# gate, `precommit: check-refs check-size`.
+#
 # Requirements: bash, jq, git, gh, rsync.
 
 toolkit_url := "git@github.com:ddaanet/claude-plugin-dev.git"
@@ -82,6 +86,10 @@ check-version:
 # Refuse broken Markdown links, and shipped files linking outside dist.include.
 check-refs:
     bash "{{toolkit_prefix}}/check-refs.sh"
+
+# Refuse a file over the size cap in bytes, minus size.exempt.
+check-size:
+    bash "{{toolkit_prefix}}/check-size.sh"
 
 # Pull the vendored toolkit up to a dist tag; no ref = newest on the remote.
 update-plugin-dev ref='':

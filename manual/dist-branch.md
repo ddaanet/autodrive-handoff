@@ -26,16 +26,16 @@ To opt in:
    documentation and design material apart: put what a user reads in `manual/`
    and list `manual`; never list `docs`, where design records live, since
    listing it ships them. The README links into `manual/` relatively, and
-   reaches design by at most one absolute URL, in a Development line. A
-   relative link into an unlisted directory dangles in the `dist` tree.
-   `just check-refs` finds such links at commit time; a link to a file not yet
-   committed passes it and still refuses the release.
+   reaches design by at most one absolute URL, in a Development line. A relative
+   link into an unlisted directory dangles in the `dist` tree. `just check-refs`
+   finds such links at commit time; a link to a file not yet committed passes it
+   and still refuses the release.
 
 2. Commit it. A release reads the list from the release commit, not the
    worktree.
-3. Run `just release`. The first release creates `dist` as a root commit;
-   each later one adds a commit on top. Each also pushes a `dist-vX.Y.Z` tag at
-   that commit, and the marketplace entry gets `ref: dist`.
+3. Run `just release`. The first release creates `dist` as a root commit; each
+   later one adds a commit on top. Each also pushes a `dist-vX.Y.Z` tag at that
+   commit, and the marketplace entry gets `ref: dist`.
 4. Point the plugin directory submission at the `dist` branch.
 
 Opting in needs `claude` on PATH, because the release validates the tree with

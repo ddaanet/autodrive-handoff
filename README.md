@@ -8,7 +8,7 @@ dotfiles).
 ## Contents
 
 - **`release.just`** — the recipes imported into the consumer's `justfile`:
-  `release`, `resume-release`, `check-version`, `check-refs`,
+  `release`, `resume-release`, `check-version`, `check-refs`, `check-size`,
   `update-plugin-dev` and `dogfood`. All are one-line wrappers: `release` and
   `resume-release` around `release.sh`, `check-refs` around `check-refs.sh`,
   `update-plugin-dev` around `update.sh`, `dogfood` around `dogfood.sh sync`.
@@ -19,16 +19,16 @@ dotfiles).
 - **`release.sh`** — the release flow itself. Validates state, bumps
   `.claude-plugin/plugin.json`, commits, tags, pushes, creates a GitHub release,
   and bumps (or creates) the plugin's entry in `marketplace.json`. A plugin with
-  a `dist.include` also publishes its `dist` branch. Its
-  `--resume` mode completes a release that landed only partially — a rejected
-  push, a failed `gh` call — by probing what already happened and doing only
-  what is missing. It is a no-op that says so when everything already landed.
-  Its steps live in four `release-*.sh` files beside it, which it sources;
-  they are not run on their own.
+  a `dist.include` also publishes its `dist` branch. Its `--resume` mode
+  completes a release that landed only partially — a rejected push, a failed
+  `gh` call — by probing what already happened and doing only what is missing.
+  It is a no-op that says so when everything already landed. Its steps live in
+  five `release-*.sh` files beside it, which it sources; they are not run on
+  their own.
 - **`dist.sh`** — the dist branch's script, used by `release.sh` and
   `dogfood.sh`. It reads `dist.include` and builds, checks, validates and
-  commits the tree holding only the listed paths. Not opted in, it does
-  nothing. See [The dist branch](#the-dist-branch).
+  commits the tree holding only the listed paths. Not opted in, it does nothing.
+  See [The dist branch](#the-dist-branch).
 - **`check-refs.sh`** — refuses a Markdown link whose target is missing, and,
   with a `dist.include`, one from a shipped file to an unshipped one. Run from
   `precommit`; the dist build runs it again on the tree it builds. Its parser
@@ -47,18 +47,19 @@ dotfiles).
 - **`dogfood.sh`** — the dogfood launcher's script, with three subcommands.
   `sync` mirrors the plugin tree (only the `dist.include` paths, where the
   plugin has one), minus git-ignored paths (a submodule's own ignores included)
-  and `.git`, into `dist/plugin/`. `pre-tool` is the
-  `PreToolUse` hook that refuses edits into that copy, and `session-start` the
-  `SessionStart` hook that warns when a session does not load it. See
-  [Dogfooding](#dogfooding).
+  and `.git`, into `dist/plugin/`. `pre-tool` is the `PreToolUse` hook that
+  refuses edits into that copy, and `session-start` the `SessionStart` hook that
+  warns when a session does not load it. See [Dogfooding](#dogfooding).
 - **`bin/claude`** — the dogfood shim. First on PATH, it points
   `CLAUDE_CODE_PLUGIN_DIRS` at `dist/plugin/`, appends the copy's `bin/` to
   PATH, and execs the next `claude` on PATH. It never syncs, and sets both
-  whether or not the copy exists yet: `/reload-plugins` loads one made later.
-  It never warns about a missing copy; the `SessionStart` check does.
+  whether or not the copy exists yet: `/reload-plugins` loads one made later. It
+  never warns about a missing copy; the `SessionStart` check does.
 - **`gates.just`** — opt-in, imported beside `release.just`. Defines the prolog
   that turns a gate recipe into one that skips itself while the files it reads
   are unchanged. See [Gate sentinels](#gate-sentinels).
+- **`check-size.sh`** — opt-in, wired as `precommit: check-refs check-size`.
+  Refuses a file over the byte cap. See [Size check](#size-check).
 - **`run-bats.sh`** — opt-in quiet runner for `bats`: failures and a pass count
   instead of the TAP stream.
 - **`install.sh`** — one-shot install script: vendors the toolkit (resolving the
@@ -210,18 +211,18 @@ commit.
 
 A plugin that lists its shipped paths in a `dist.include` at its root has each
 release publish a `dist` branch holding only those paths, plus a `dist-vX.Y.Z`
-tag, and its marketplace entry follows that branch. Nothing changes for a
-plugin without one. How to opt in, and what each check refuses or warns about,
-is in [manual/dist-branch.md](manual/dist-branch.md).
+tag, and its marketplace entry follows that branch. Nothing changes for a plugin
+without one. How to opt in, and what each check refuses or warns about, is in
+[manual/dist-branch.md](manual/dist-branch.md).
 
 ## Reference check
 
 `just check-refs` refuses a broken Markdown reference: a link, image or
 reference definition, `[text](target)`, `![alt](target)` or `[label]: target`,
-whose relative target, resolved beside the file that holds it, is not a file
-git lists (tracked, or untracked and not ignored) or a directory holding one.
-An ignored target is refused, a target above the repository root too, and the
-match is exact-case even on a case-insensitive disk. Links with a scheme, pure
+whose relative target, resolved beside the file that holds it, is not a file git
+lists (tracked, or untracked and not ignored) or a directory holding one. An
+ignored target is refused, a target above the repository root too, and the match
+is exact-case even on a case-insensitive disk. Links with a scheme, pure
 `#anchors`, root `/paths`, fenced code, inline code spans and HTML comments are
 not checked, and neither are backticked paths. It reads every Markdown file on
 disk that git does not ignore, tracked or not, apart from `plugin-dev/` and
@@ -242,9 +243,9 @@ that exists, exempt or not: the `dist` tree holds only the listed paths, and
 anything else dangles there. List the target in `dist.include`, or drop the
 link. `dist.sh` checks the tree it builds from the release commit as well, and
 the two differ in one case: a link to an untracked file passes `precommit`,
-which lets you link a file before adding it, and the release refuses it until
-it is committed. `plugin-dev/check-refs.sh --shipped
-<path>...` checks against the given paths instead of `dist.include`.
+which lets you link a file before adding it, and the release refuses it until it
+is committed. `plugin-dev/check-refs.sh --shipped <path>...` checks against the
+given paths instead of `dist.include`.
 
 Each broken reference is one line on stderr, `docs/a.md:12: target — reason`,
 and the exit is 1. A pass prints one line with the counts.
@@ -256,8 +257,15 @@ itself when the files it reads are unchanged, and `run-bats.sh` prints a bats
 run as failures and a count. A plugin that imports neither is unaffected, and
 the `precommit` and `prerelease` contract does not change. How to choose the
 inputs so a cached pass stays true, and how to convert an existing `precommit`,
-is in [manual/gates.md](manual/gates.md) and
-`plugin-dev/migrations/v0.11.0.md`.
+is in [manual/gates.md](manual/gates.md) and `plugin-dev/migrations/v0.11.0.md`.
+
+## Size check
+
+Optional. `just check-size` refuses a file over 20000 bytes, or 10000 for a
+`SKILL.md`, minus the entries of a root `size.exempt`. Wire it as
+`precommit: check-refs check-size`; it runs uncached. The metric, what is
+skipped, the `size.exempt` format and the report are in
+[manual/size-check.md](manual/size-check.md).
 
 ## Dogfooding
 
@@ -266,9 +274,9 @@ edit to it, so the dogfood launcher loads the plugin from a copy at
 `dist/plugin/` instead: agents edit the source, and the copy changes only when
 you run `just dogfood`. Setting up the shim and the copy, launching, what each
 kind of change needs to go live, and the two dogfood hooks are in
-[manual/dogfood.md](manual/dogfood.md), whose [Setup](manual/dogfood.md#setup) is the
-first step after an install. A plugin that vendored the toolkit before the
-launcher shipped takes the steps in `plugin-dev/migrations/v0.9.0.md`.
+[manual/dogfood.md](manual/dogfood.md), whose [Setup](manual/dogfood.md#setup)
+is the first step after an install. A plugin that vendored the toolkit before
+the launcher shipped takes the steps in `plugin-dev/migrations/v0.9.0.md`.
 
 ## Conventions
 
@@ -284,16 +292,17 @@ launcher shipped takes the steps in `plugin-dev/migrations/v0.9.0.md`.
   already listed there can still take its first release. The version published
   is usually whatever `/plugin-dev:create-plugin` seeded into the manifest; to
   ship a different one, set `.version` and **commit** that edit before releasing
-  — the clean-tree check refuses a dirty manifest. That edit is the
-  maintainer's to make, and the one the version-guard hook refuses from an
-  agent. Passing a bump on a first release is refused. Afterwards the
-  last-released rule above applies as normal.
+  — the clean-tree check refuses a dirty manifest. That edit is the maintainer's
+  to make, and the one the version-guard hook refuses from an agent. Passing a
+  bump on a first release is refused. Afterwards the last-released rule above
+  applies as normal.
 - An agent issues `just release` and `just resume-release` **bare**: alone in
   the Bash call, with no `cd … &&` prefix and no trailing `; echo`. Both write
   the marketplace checkout and push, which the command sandbox blocks, so list
-  `"just release *"` and `"just resume-release *"` in `sandbox.excludedCommands`.
-  A compound call is not covered by the entry and stays sandboxed, and under
-  auto mode the `dangerouslyDisableSandbox` flag gets the call denied.
+  `"just release *"` and `"just resume-release *"` in
+  `sandbox.excludedCommands`. A compound call is not covered by the entry and
+  stays sandboxed, and under auto mode the `dangerouslyDisableSandbox` flag gets
+  the call denied.
 - Default branch is auto-detected from `origin/HEAD`; recipes don't hardcode
   `main`.
 - The version-guard hook fires on Write/Edit events targeting
@@ -302,7 +311,8 @@ launcher shipped takes the steps in `plugin-dev/migrations/v0.9.0.md`.
 
 ## Requirements
 
-`bash`, `jq`, `git`, `gh`, `rsync`; `claude` on PATH for a plugin that publishes a `dist` branch.
+`bash`, `jq`, `git`, `gh`, `rsync`; `claude` on PATH for a plugin that publishes
+a `dist` branch.
 
 ## License
 
