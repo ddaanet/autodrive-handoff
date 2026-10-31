@@ -116,7 +116,7 @@ owner's is replaced by the next checkpoint.
 the most likely trigger is an Esc in the *same* session, so the id matches
 and the next `Stop` arms it anyway; a timeout is a guess about how long a
 turn may run, and a wrong guess silently drops a wanted compaction. Both stay
-rejected for the owner's own sentinel, which its next prompt sweeps
+rejected for the owner's own sentinel, which its next prompt sweeps as an aborted turn
 unless that prompt was queued into the arming turn. Across sessions the owner
 rides on line 1 rather than in a sidecar, and what is timed is the owner's transcript, never the sentinel.
 

@@ -54,7 +54,7 @@ against the stateless `.git` walk.
 root](../changelog/2026-06-09-per-worktree-handoff-root.md)
 
 **A session-id sidecar or a recency timeout for a stale sentinel** —
-neither is used: the owner's own sentinel is swept by its next prompt,
+neither is used: the owner's own sentinel is swept by its next prompt as an aborted turn,
 unless that prompt was queued into the arming turn, and across sessions the owner rides on line 1 and its transcript is what is timed;
 the argument is in [Sessions sharing a
 root](sessions-sharing-a-root.md#rejected-alternatives).
