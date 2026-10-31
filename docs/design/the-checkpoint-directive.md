@@ -111,7 +111,7 @@ approval is answered in a later turn, and a failed commit is retried in one.
 It names its owner, the session whose release it waits on, carried on line 1
 as `held <session-id>` — and `armed` names its owner the same way, because
 other sessions sharing the root take prompts and end turns while it waits for
-its own (see [Driving the transition](driving-the-transition.md)). That
+its own (see [Sessions sharing a root](sessions-sharing-a-root.md#the-owner)). That
 release comes from that session or not at all. Another session's prompt never
 sweeps it, live owner or not: it waits on a human approval of unbounded
 length, and an idle transcript is what that wait looks like. A dead owner's

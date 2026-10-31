@@ -24,20 +24,26 @@ is **live** — its transcript, `<owner>.jsonl` beside the one in the hook input
 That question is asked of `armed` alone, which lives only until its owner's
 turn ends. A live owner's `armed` file is left untouched and nothing is said;
 one whose owner is not live (stale or missing transcript, or no
-`transcript_path` in the input) is swept as below. Liveness is a heuristic,
+`transcript_path` in the input) is swept as in [Reporting a failure, sweeping
+a stale sentinel](driving-the-transition.md#reporting-a-failure-sweeping-a-stale-sentinel).
+Liveness is a heuristic,
 and each way it can be wrong sweeps an `armed` file that should have stayed —
 an owner turn that writes nothing to its transcript for the whole window.
-The sweep's first premise, that a `UserPromptSubmit` which sees an
-`armed` file is a turn later than the one that wrote it, holds within one
-session only, and the hook runs in every session sharing the root: a
-background review session's prompt, two seconds after the write, swept a live
-owner's file as stale. Two more ways to read a live owner as gone: a long
-subagent dispatch, whose messages go to a transcript of their own (not
-observed), and a transcript in another project directory, which reads as
-not live and has its file swept. The reverse error, keeping a file whose
+The likely cause of such a stretch is a long subagent dispatch, whose messages
+go to a transcript of their own (not observed). A transcript in another
+project directory also reads as not live, and its file is swept. The reverse
+error, keeping a file whose
 owner has quit, needs a transcript written inside the window by a session that
 is gone, and no other session's turn end takes such a file, since
 `drive-take.sh` checks the owner; the first prompt after the window sweeps it.
+
+Before the owner, the sweep rested on the premise that a `UserPromptSubmit`
+which sees an `armed` file is a turn later than the one that wrote it. That
+holds within one session only, and there only for a prompt not queued into the
+arming turn ([A prompt queued into the arming turn](queued-prompts.md)); the
+hook runs in every session sharing the root, and a background review session's
+prompt, two seconds after the write, swept a live owner's file as one that
+outlived its turn.
 
 ## The `held` exemption
 
