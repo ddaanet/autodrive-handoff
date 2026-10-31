@@ -20,8 +20,8 @@ Behaviour lives in `docs/design/driving-the-transition.md`; read it first.
   `classic.Stop` only records; `turn.complete` drives, inline.
 - A hooks module may pass `$` only to top-level functions (a static check at
   load).
-- The mod reads neither the sentinel nor the prompt box: `drive-take.sh` is
-  the one reader, and its stdout is the plan the mod runs.
+- The mod reads neither the sentinel nor the prompt box: it runs
+  `drive-take.sh` and executes the plan on its stdout.
 - `claude plugin test` runs `tests/mod/handoff.test.ts` against
   `tests/mod/rig.ts`, a stub rig that answers every mods API call the mod makes
   and logs them in order. The kit rejects an unstubbed call, `process.run`,
