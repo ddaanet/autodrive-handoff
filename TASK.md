@@ -1,10 +1,3 @@
 ## Current task
 
-Merge `line-cap-split` into `dev`, proposed on 2026-10-31 with a default of yes
-and not objected to. Release 0.19.0 is out from `main`, and the branch's review
-against `dev` is triaged, its one medium fixed on the branch. `dev` is two
-commits behind `main`: the README fix and the release bump. First action:
-commit this frame on `line-cap-split`, since an uncommitted `TASK.md` and
-`TODO.md` block the checkout; then check out `dev`, fast-forward it to `main`,
-merge `line-cap-split` with `TASK.md` and `TODO.md` resolved to the branch's
-side, and run `just precommit` before committing the merge.
+Execute the approved CLAUDE.md split, `plans/2026-10-31-claude-md-split/proposal.md`. My human partner approved it on 2026-10-31 with all six questions at their defaults: `.claude/rules/` with `paths:` everywhere, the test inventory deleted, component prose deleted once the inventory has homed every orphan sentence, the line-cap exemption and the split item dropped once the root is under 400, the three host facts to the ddaanet tier after the split if the mod-authoring skill lacks them, and `legacy.md` taking the 2026-11-16 date. Next action: Sequencing step 1, a dispatched inventory (output file) of every sentence in the component and testing bullets with no home in a design node, the code or a planned rules file; orphans that belong in a design node land in a commit of their own first. Then the stub-rule probes, then the split commit carrying only the move and the inbound references it forces.
