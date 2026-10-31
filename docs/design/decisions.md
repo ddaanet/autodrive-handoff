@@ -182,8 +182,9 @@ checks, which is the same guarantee stated directly: `drive-take.sh` will not ta
 something already in flight, and the sweep will not take something
 legitimately mid-window. Adding a state is now a value, not a filename and
 four new gates. The state being content rather than a name also makes a
-wrong one writable, which is why the file has a single writer: the
-checkpoint composes it, and a direct agent Write or Edit is denied outright.
+wrong one writable, which is why the file's writers are a closed set: the
+checkpoint composes it, `handoff_drive_arm` rewrites only its state line, and
+a direct agent Write or Edit is denied outright.
 [One transition, one file, explicit
 state](../changelog/2026-08-03-one-transition-one-file.md)
 
