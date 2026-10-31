@@ -60,6 +60,7 @@ under `with-commit` it prints the `git rm --cached` line that makes git record
 a rename, as `git -C <root> rm …` over paths relative to
 the root, which runs from any directory. The fallback is a
 bridge: it goes once no sibling repository still has `.claude/handoff-*.md`,
+and not before 2026-11-16, a month past the day that first held (2026-10-16),
 with no version in code, docs or tests, and `grep -rni legacy scripts/ tests/`
 starts the one deletion pass. **Reopen if** the condition is not what ends it:
 a repository that keeps a shadowed legacy file is told so at every start, by

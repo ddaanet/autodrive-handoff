@@ -136,8 +136,10 @@ collided as numbers. `FR6`, `FR7` and `FR-H` are retired.
   binary.
 - **FR2** — The payload is JSON on stdin, validated against a schema. A
   violation exits non-zero and names the offending field and what was wrong.
-- **FR3** — `.claude/autodrive` is written only by the checkpoint. An agent
-  `Write`/`Edit` that resolves to a file of that name is denied.
+- **FR3** — `.claude/autodrive` is composed only by the checkpoint; past
+  that, the plugin's own scripts only rewrite its state line
+  (`handoff_drive_arm`) or remove it. An agent `Write`/`Edit` that resolves
+  to a file of that name is denied.
 - **FR4** — `TASK.md` and `TODO.md` are plain tracked files in the project
   root, and the agent may edit either. The todo file is a scratch list by
   design, edited freely all session; the checkpoint is only the wrap-up path.

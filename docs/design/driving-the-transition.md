@@ -39,9 +39,10 @@ and `armed <session-id>`: the session that composed or approved the
 transition, whose turn end takes it. `pending` names none, because past the
 take the transition belongs to the confirming `SessionStart` in whichever
 session it opened.
-`checkpoint.py` is the file's one writer: it composes the sentinel and reads
-its own output back through `handoff_drive_read`, so composer and parser
-cannot drift, and a direct agent Write or Edit is denied at `PreToolUse`.
+`checkpoint.py` is the file's one composer (`handoff_drive_arm` rewrites only
+line 1): it reads its own output back through `handoff_drive_read`, so
+composer and parser cannot drift, and a direct agent Write or Edit is denied
+at `PreToolUse`.
 Everything after the first two lines is a command or a prompt, one per line,
 and validation anchors it — the *n*th line of kind *k* must begin with the
 expected command literal, and a prose line may not begin with `/` — so the

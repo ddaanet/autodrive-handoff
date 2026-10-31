@@ -26,7 +26,8 @@ toolkit, vendored at `plugin-dev/` via `git subtree`. Rationale:
   paid checks — can widen `prerelease` without slowing every commit.
 - The release recipe also bumps the plugin's entry in the sibling
   `claude-plugins` marketplace repo (path from `$MARKETPLACE_DIR`,
-  set in `.envrc`) and pushes that repo. A tag without a marketplace
+  set in `~/code/.envrc`, which this repo's `.envrc` pulls in with
+  `source_up_if_exists`) and pushes that repo. A tag without a marketplace
   bump is invisible to end-users, so the recipe treats both pushes as
   one atomic release.
 
