@@ -4,14 +4,6 @@
 # of one turn (or one turn end -> transition window) before a hook consumes it.
 .claude/autodrive*
 
-# The checkpoint's IPC to gitlore, written on the memory directive's
-# instruction and consumed by gitlore's own hooks. Listed because a `git add
-# -A` in the same turn races the consumer and commits a spent trigger.
-# `.claude/gitlore-hook-setup` is deliberately NOT here — that one is gitlore's
-# tracked install state, not IPC.
-.claude/gitlore-memory-message
-.claude/gitlore-commit-memory
-
 # Local-only Claude Code settings
 .claude/settings.local.json
 

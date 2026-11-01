@@ -77,7 +77,9 @@ procedure](../changelog/2026-09-18-the-directive-owns-the-procedure.md)
 **A directive is correct only where in the turn it lands.** handoff runs its
 checkpoint in the same turn as the writes — deliberately, so the snapshot
 costs one round trip — so a directive about *how to write them* arrives
-after they exist. precompact reads its directive before it writes. Shared
+after they exist. precompact is no different: the SDD nudge's "Keep them out
+of TODO.md" prints in the call that writes `TODO.md`, and `skills/precompact/SKILL.md`
+says nothing of it beforehand, so it guides the next edit, not that write. Shared
 prompt text is shared only where the flows agree; naming the safe route is
 the load-bearing half of any prohibition.
 

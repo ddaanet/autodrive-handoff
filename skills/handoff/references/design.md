@@ -23,7 +23,7 @@ Three are derivable from state:
 | Field | Derived from |
 |---|---|
 | Status | code + `git status` |
-| Goal (if task-scoped) | last user prompts |
+| Goal (if task-scoped) | current task |
 | Next step | current task + open decisions |
 
 That leaves two fields only the agent can fill:

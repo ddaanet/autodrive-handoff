@@ -91,6 +91,10 @@ avoids (see [Rejected alternatives](#rejected-alternatives)).
   unsupported. `pending` is ownerless by necessity — the session after a
   `/clear` has a new id, so the file cannot name it — and the other root's
   loader can consume it. The owner on `armed` and `held` does not cover it.
+- **`.claude/autodrive.failed` has no owner.** The mod's record of a rejected
+  line names no session, so a live session's next prompt consumes and reports
+  a failure another session recorded, and clears that session's stranded
+  `pending`.
 
 The mitigation is one session per root at a time, or a worktree per session:
 the root is the enclosing worktree ([Scoping](scoping.md)), so each has its own
