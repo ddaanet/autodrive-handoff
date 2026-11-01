@@ -94,7 +94,9 @@ says every item landed. When the call has nothing to say about the list, send
 `{"action": "keep"}`, which leaves it untouched: a scratch list must survive a
 call that is silent about it, so `keep` is the default and `clear` is a
 deliberate stand-down.
-`{"action": "edit", …}` strikes a finished item without regenerating it.
+`{"action": "edit", …}` replaces one exact occurrence of `old_string` in
+the file with `new_string`, so an item is added or dropped without rewriting
+the list.
 `keep` and `edit` apply to `todo` only; `edit` needs the file to exist and
 `old_string` to appear in it exactly once. `null` is an error on both, as
 is omitting a key, or adding one inside an action object.

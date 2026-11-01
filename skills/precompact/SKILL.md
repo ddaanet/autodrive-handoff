@@ -15,17 +15,17 @@ itself, and the prompt that resumes the work on the far side.
 ### Step 1: Write durable learnings to memory
 
 If durable learnings surfaced this session, write them to auto-memory now.
-Skip if nothing durable surfaced — do not force. These writes and, when the
-rules matter, Step 2's read of the files reference are the only tool calls
-allowed before `handoff-checkpoint`.
+Skip if nothing durable surfaced — do not force. These writes and Step 2's
+read of the files reference are the only tool calls allowed before
+`handoff-checkpoint`.
 
 ### Step 2: Decide, then checkpoint
 
 The `handoff` skill holds the full templates, the rules behind them, and
 the seam between what the files carry and the fixed continuation, in
 `../handoff/references/files.md`, relative to this skill's own directory.
-Read that file, before deciding, when the rules matter. It ships with the
-plugin, so it cannot go stale.
+Read that file before deciding. It ships with the plugin, so it cannot go
+stale.
 
 **Make no tool call between deciding and `handoff-checkpoint`.**
 
@@ -91,8 +91,9 @@ JSON
 every item landed. When the call has nothing to say about the
 list, send `{"action": "keep"}`, which leaves it untouched: a scratch list
 must survive a call that is silent about it, so `keep` is the default and
-`clear` is a deliberate stand-down. `{"action": "edit", …}` strikes a
-finished item without regenerating it; it needs the file to exist and
+`clear` is a deliberate stand-down. `{"action": "edit", …}` replaces one
+exact occurrence of `old_string` with `new_string`, so an item is added or
+dropped without rewriting the list; it needs the file to exist and
 `old_string` to appear in it exactly once. `null` is an error, as is
 omitting the key, or adding one inside an action object.
 
@@ -104,8 +105,8 @@ whatever you run may print the next part. The checkpoint owns the decision —
 do not re-derive or verify it. A non-zero exit names the offending field on
 stderr — fix the payload and retry.
 
-The normal case — nothing durable, clean memory, no commit — is one
-checkpoint call, and its output is one part, naming the line to end on.
+The normal case — nothing durable, clean memory, no commit — is the files
+reference read and one checkpoint call, and its output is one part, naming the line to end on.
 
 ## Anti-patterns
 

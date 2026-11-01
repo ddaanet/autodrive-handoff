@@ -18,17 +18,13 @@ Three are handled by auto-memory:
 | Decisions (durable) | auto-memory (feedback files) |
 | Avoid | auto-memory (feedback files) |
 
-Three are derivable from state:
+Status is derivable from state (code and `git status`).
 
-| Field | Derived from |
-|---|---|
-| Status | code + `git status` |
-| Goal (if task-scoped) | current task |
-| Next step | current task + open decisions |
+That leaves three fields only the agent can fill, kept as two: Goal and Next
+step fold into the current task, and Open questions are the open decisions.
 
-That leaves two fields only the agent can fill:
-
-- **Current task** — a one-sentence pointer to what was in progress
+- **Current task** — what was in progress, where it stands and the next
+  concrete action, in at most 1000 characters of prose
 - **Open decisions** — unmade choices still blocking progress
 
 These are the irreducible residual. **Current task** lives alone in
@@ -57,7 +53,7 @@ of a task list, like an unmade decision, is judgment — not state.
 
 ## Why no verbatim transcript or file list
 
-The frame is the task file alone; the transcript is never read.
+The frame is the task and todo files; the transcript is never read.
 Reproducing prior exchanges verbatim
 read as *memory* rather than as a report about a past session, and
 manufactured false continuity — a fresh session narrating a prior

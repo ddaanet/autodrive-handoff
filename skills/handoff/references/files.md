@@ -60,18 +60,23 @@ Todo file rules:
   that can proceed without the answer is listed as work.
 - **No commit or push status here either**, and no item saying "commit the
   work" or "push the branch". A release still owed is an item.
+- **A content string replaces the whole file**, so it carries every open
+  item still listed. To add or drop an item without the whole list in
+  context, use `edit` or `keep`.
 - It is a remainder plus the open questions blocking it, not a plan of
   record — but it is versioned like the task file, so write it as
   something that reads well in history.
 - A `TODO.md` that is already there in another shape keeps its shape: add to
-  it and strike from it with `edit` rather than rewriting it into this
+  it and drop from it with `edit` rather than rewriting it into this
   template.
 
 ## The seam: files vs. continuation
 
-Both files are re-injected verbatim on the far side of the transition, and
-they are the only carrier. The continuation is a fixed prompt that points at
-them and says nothing of its own, so a fact left out of the files is gone.
+At the clear boundary both files are re-injected verbatim on the far side,
+and they are the only carrier. The continuation is a fixed prompt that points
+at them and says nothing of its own, so a fact left out of the files is gone.
+At the compact boundary the checkpoint removes the task file and the summary
+carries the task, so in-progress task state stays out of `## Remaining`.
 
 - **Task file** — current task state alone: in-flight threads, what needs
   to resume, and the next concrete action, what the fresh session does first

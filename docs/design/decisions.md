@@ -257,7 +257,7 @@ rule in every mode, so the commit answer does not set their tense. They
 still precede the checkpoint call, whose memory directive keys on a dirty
 submodule. The other is a Read of `skills/handoff/references/files.md`, the
 templates and the seam, which both boundary skills read as part of drafting
-(`handoff` always, `precompact` when the rules matter). It is instructions
+(both always). It is instructions
 the plugin ships, not project state, so nothing can go stale between its
 read and the write, and staleness was the reason for the rule; the incident's
 reason stays against reading state. The read comes before deciding, so the

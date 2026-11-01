@@ -19,10 +19,9 @@ scripts/drive-take.sh and run by the drive mod.
 
 Port of checkpoint.sh. The composer reads its own sentinel back through
 handoff_drive_read, which stays the single bash implementation of the sentinel
-grammar, which four other scripts still use: drive-take.sh, load-compact.sh,
-load-handoff.sh and report-drive-failure.sh. So this shells out to it rather
-than reimplementing the grammar a second time, which is exactly the drift the
-single-parser design exists to prevent.
+grammar. So this shells out to it rather than reimplementing the grammar a
+second time, which is exactly the drift the single-parser design exists to
+prevent.
 """
 
 from __future__ import annotations

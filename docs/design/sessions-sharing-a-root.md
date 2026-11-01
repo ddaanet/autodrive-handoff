@@ -112,8 +112,8 @@ arming turn. Another session sweeps an `armed` file
 only once the owner is not live by its transcript's mtime. That test is a
 heuristic, and every way it can be wrong sweeps a file that should have
 stayed, so it is not applied to `held`, which waits on a human for as long as
-that takes: no session but the owner ever sweeps a `held` file, and a dead
-owner's is replaced by the next checkpoint.
+that takes: no session ever sweeps a `held` file, its owner included, and a
+dead owner's is replaced by the next checkpoint.
 
 ## Rejected alternatives
 

@@ -20,8 +20,8 @@ and removes the task file, because the compaction's summary says it
 The templates of the two files, their rules and the seam between what the
 files carry and the continuation are in one place,
 `skills/handoff/references/files.md`, which both skills read before they
-draft: `handoff` always, `precompact` when the rules matter. That read is the
-one tool call, besides memory writes, ahead of the checkpoint
+draft, always. That read is the one tool
+call, besides memory writes, ahead of the checkpoint
 ([Between deciding and the checkpoint, no tool call](decisions.md)).
 
 There is no restart skill: Claude Code's own `/restart` relaunches with
@@ -29,7 +29,7 @@ There is no restart skill: Claude Code's own `/restart` relaunches with
 boundary for this plugin to cross and no frame to carry.
 
 `/autodrive-handoff:pending` has no design surface at all: it reports
-the `## Current task`, `## Open decisions` and `## Remaining` sections of the
+the `## Open decisions` and `## Remaining` sections of the
 frame already injected into context, making no tool call and writing no file.
 It appears nowhere else in the design because there is nothing else to say
 about it.
