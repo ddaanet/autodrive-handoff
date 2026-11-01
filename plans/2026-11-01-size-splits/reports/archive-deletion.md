@@ -1,0 +1,11 @@
+# Archive deletion report
+
+- Tag: local `changelog-archive` (lightweight) on ff2a35359aeee01064b0c3d92782419b824477dd. Not pushed.
+- Commit: f21110fc4aecc5ec8c994ce0b9c251c25bb1a28f (subject uses the 📝 emoji; the commit-msg hook rejected 🔥).
+- Files touched: the archive (`docs/changelog/`, `docs/changelog.md`) deleted; `size.exempt` (two lines dropped); `CLAUDE.md`, `.claude/rules/docs.md`, `TODO.md`; `docs/design.md` and nine nodes under `docs/design/` (decisions, driving-the-transition, queued-prompts, rejected-alternatives, scoping, sentinel-lock, the-checkpoint-directive, the-skills, the-write-path), each with one header sentence (design.md rewrote its archive paragraph); code comments and docstrings in `bin/handoff-checkpoint`, `scripts/{_checkpoint_lib.py,checkpoint.py,_lib.sh,load-handoff.sh}`, `tests/{bin-commands.bats,checkpoint-helpers.bash,conftest.py,inject-checkpoint-root.bats,probe-helpers.bash,test_checkpoint_directives.py}`; `skills/handoff/references/design.md`.
+- Link form: each link became "DATE Title" (title from the record's first heading, its date prefix and parenthesised date removed). Code comments read `the changelog-archive tag's DATE record, "Title"`. docformatter rewrapped four Python docstrings (precommit demanded it).
+- Step 4: kept the URL but pointed it at the tag: `blob/changelog-archive/docs/changelog/2026-07-17-task-frame-drops-transcript.md` (line 70) and `tree/changelog-archive/docs/changelog` (line 5). Both resolve only after the tag is pushed. TODO.md has the push item.
+- Remaining `git grep -n 'changelog/'` outside `plans/` and `plugin-dev/`: only the nine "`docs/changelog/`." header-sentence tails, the `docs/design.md` header, and the two URLs in the shipped design note.
+- Not touched: `plugin-dev/` (vendored; its README and migration note mention `docs/changelog/` as an exempt path), `tests/mypy-guidelines.md` (mypy's own changelog), `TASK.md` (unstaged; its text still says `size.exempt` holds the archive's entries), `plans/` (frozen, may dangle).
+- Sizes: rejected-alternatives.md 18872 bytes; design.md 19213; no file over cap.
+- `just precommit`: passed (check-plugin, check-code with 520 pytest and 17 mod tests, check-refs, check-size).
