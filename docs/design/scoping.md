@@ -47,8 +47,11 @@ only the message to toast.
 
 The last two labels are **drift** — the session cwd has left the launch repo
 while the root, and every handoff file under it, has not. Nothing else
-announces that: the environment block, `gitStatus` and the project
-`CLAUDE.md` all follow cwd. `report-drive-failure.sh` reports it at
+announces that, and it is silent in both directions: the environment block,
+`gitStatus` and the project `CLAUDE.md` all follow cwd, while the transcript,
+the scratchpad, `CLAUDE_PROJECT_DIR` and every handoff file do not, so the
+agent reasons about the repo under cwd while the plugin reads and writes the
+one under the root. `report-drive-failure.sh` reports it at
 `UserPromptSubmit`, where the root is resolved every turn anyway, because
 drift can be transient and a later gate would see nothing while the split
 was live for the whole blip. The cwd is the hook input's, any string, and the

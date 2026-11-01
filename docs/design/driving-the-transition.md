@@ -224,7 +224,8 @@ it always said. The bridge, and the condition that retires it, are argued in
 A rejected line has no turn left to speak in, so the mod's report is the
 `autodrive.failed` file and `report-drive-failure.sh`, which reads it at the
 next `UserPromptSubmit` — the first moment anything can act on the news — and
-reports on both channels. A failure part-way through a sequence strands the
+reports on both channels. The mod writes the record only on a rejection it
+observed itself. A failure part-way through a sequence strands the
 sentinel in `pending`, because the confirming `SessionStart` never fires; the
 same hook clears it with the report. Nothing is inferred from a file merely
 being `pending`, which is the legitimate state for the whole window between
@@ -243,7 +244,7 @@ a root](sessions-sharing-a-root.md).
 
 For the owner's own `armed` file, or another's whose owner is not live, there are
 two causes the hook cannot tell apart (three, when the input carries no
-`prompt_id` to rule out a prompt typed ahead): an aborted turn, and **the mod
+`prompt_id` to rule out a prompt typed ahead): an aborted turn (an Esc, which fires no `Stop`, a crash or a quit), and **the mod
 not being loaded** —
 `--safe-mode`, a Claude Code older than 2.1.287, or an organization-managed
 Claude Code that does not list the plugin in managed settings (Claude Code
@@ -254,8 +255,9 @@ where the requirement surfaces: it names the mod as the likely cause, discards t
 file so it cannot fire into unrelated work days later, and prints the lines it
 held for the user to run in order. A file that will not parse is swept too,
 without lines — it describes no transition anyone can complete. `held` is
-exempt whoever owns it, which is why the sweep names its states rather than
-taking anything that is not `pending`. Lines are offered only for the owner's
+exempt whoever owns it: it waits on an approval whose answer arrives at this
+very hook, so surviving the turn boundary is what it is for, and that is why
+the sweep names its states rather than taking anything that is not `pending`. Lines are offered only for the owner's
 own `armed` file: another session's would be replayed into this conversation.
 
 ## A prompt queued into the arming turn

@@ -114,7 +114,7 @@ What you are touching → what to read first, under `docs/design/`:
   the prompt marker → `queued-prompts.md`; the sentinel's lock,
   `_drive_lock.py`, `handoff_lock_take` → `sentinel-lock.md`; a second session
   in the root, `handoff_owner_live`, `HANDOFF_OWNER_LIVE_SECS`,
-  `autodrive.swept` → `sessions-sharing-a-root.md`
+  `autodrive.swept`, the sweep's `foreign` state → `sessions-sharing-a-root.md`
 - `handoff-approved`, `closing_directive`, `ledger_path`, `held`,
   `with-commit`, the gitlore seam, FR9, FR12 → `the-checkpoint-directive.md`
 - `worktree_root.py`, `handoff_root_read`, `inject-checkpoint-root.sh`,

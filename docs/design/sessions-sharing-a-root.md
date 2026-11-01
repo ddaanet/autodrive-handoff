@@ -22,7 +22,8 @@ asks whether that session
 is **live** — its transcript, `<owner>.jsonl` beside the one in the hook input's
 `transcript_path`, written within `HANDOFF_OWNER_LIVE_SECS` (600 s by default).
 That question is asked of `armed` alone, which lives only until its owner's
-turn ends. A live owner's `armed` file is left untouched and nothing is said;
+turn ends. A live owner's `armed` file is left untouched and nothing is said (the sweep
+classifies it as the state `foreign`, which it never removes);
 one whose owner is not live (stale or missing transcript, or no
 `transcript_path` in the input) is swept as in [Reporting a failure, sweeping
 a stale sentinel](driving-the-transition.md#reporting-a-failure-sweeping-a-stale-sentinel).

@@ -75,7 +75,8 @@ exactly as it was in every case:
   names the lock (`tests/mod/fixtures/lock-busy.json`, `failFile` empty as for
   an unread sentinel); the mod toasts it and runs nothing, and the file stays
   `armed` for the next prompt's sweep.
-- The sweep judges nothing: the file is neither read nor removed, no line is
+- The sweep judges nothing (its state `locked`, as `unread` is for a reader that
+  could not run): the file is neither read nor removed, no line is
   offered, and both channels say it was not judged because of the lock
   (`autodrive not judged — …; left in place`). A `.claude/autodrive.failed`
   record is left too, since its report and the clearing of a stranded `pending`
