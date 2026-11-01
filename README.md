@@ -195,7 +195,7 @@ run is denied). To run the checkpoint without a prompt, allow all three in
 |---|---|
 | `TASK.md`, `TODO.md` (project root) | the task frame; plain tracked files |
 | `.claude/` | created by `handoff-checkpoint` when absent |
-| `.claude/autodrive` | the transition to carry out; written only by `handoff-checkpoint`, direct writes denied by the `PreToolUse(Write\|Edit)` guard |
+| `.claude/autodrive` | the transition to carry out; composed only by `handoff-checkpoint`; past that, the plugin's own scripts only rewrite its state line or remove it, and direct writes are denied by the `PreToolUse(Write\|Edit)` guard |
 | `.claude/autodrive.lock` | an empty lock file, mode 0600, held while the plugin reads or changes `.claude/autodrive`; never deleted |
 | `.claude/autodrive.failed` | written by the mod when a line is rejected; consumed at your next prompt |
 | `.claude/autodrive.swept` | one line per stale transition file removed; last 50 kept |
@@ -234,7 +234,8 @@ and writes](#what-the-plugin-runs-and-writes) lists every file.
 
 [`skills/handoff/SKILL.md`](skills/handoff/SKILL.md) and
 [`skills/precompact/SKILL.md`](skills/precompact/SKILL.md) are the protocols the
-agent follows.
+agent follows; the first also holds the templates for the two files they
+write.
 
 ## Development
 

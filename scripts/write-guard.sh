@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# PreToolUse hook for Write|Edit. The autodrive sentinel is written only by
-# handoff-checkpoint, which composes it from the payload's transition fields and
-# reads it back through the parser. A direct agent Write/Edit to a file of that
+# PreToolUse hook for Write|Edit. The autodrive sentinel is composed only by
+# handoff-checkpoint, from the payload's transition fields, and read back through
+# the parser; past that, the plugin's own scripts only rewrite its state line
+# (handoff_drive_arm) or remove it. A direct agent Write/Edit to a file of that
 # name is denied outright, in this project or outside it.
 set -euo pipefail
 

@@ -1,8 +1,8 @@
 # handoff — Design Notes
 
 Condensed rationale. Full design doc is <https://github.com/ddaanet/autodrive-handoff/blob/main/docs/design.md>; the
-dated write-time record of each design change is in
-<https://github.com/ddaanet/autodrive-handoff/tree/main/docs/changelog>.
+dated write-time records of design changes up to 2026-10-31 are in
+<https://github.com/ddaanet/autodrive-handoff/tree/changelog-archive/docs/changelog>.
 
 ## The residual
 
@@ -18,22 +18,18 @@ Three are handled by auto-memory:
 | Decisions (durable) | auto-memory (feedback files) |
 | Avoid | auto-memory (feedback files) |
 
-Three are derivable from state:
+Status is derivable from state (code and `git status`).
 
-| Field | Derived from |
-|---|---|
-| Status | code + `git status` |
-| Goal (if task-scoped) | last user prompts |
-| Next step | current task + open decisions |
+That leaves three fields only the agent can fill, kept as two: Goal and Next
+step fold into the current task, and Open questions are the open decisions.
 
-That leaves two fields only the agent can fill:
-
-- **Current task** — a one-sentence pointer to what was in progress
+- **Current task** — what was in progress, where it stands and the next
+  concrete action, in at most 1000 characters of prose
 - **Open decisions** — unmade choices still blocking progress
 
 These are the irreducible residual. **Current task** lives alone in
 `TASK.md` — a snapshot of a moment, agent-authored from the template in
-`SKILL.md` and written whole by `handoff-checkpoint`, which holds it to 1000
+the skill body and written whole by `handoff-checkpoint`, which holds it to 1000
 characters of prose. **Open decisions** lives in `TODO.md`, alongside the
 **remainder** below: both are open questions the agent keeps revisiting over
 a session, so both belong in the scratch list it edits directly all session
@@ -57,7 +53,7 @@ of a task list, like an unmade decision, is judgment — not state.
 
 ## Why no verbatim transcript or file list
 
-The frame is the task file alone; the transcript is never read.
+The frame is the task and todo files; the transcript is never read.
 Reproducing prior exchanges verbatim
 read as *memory* rather than as a report about a past session, and
 manufactured false continuity — a fresh session narrating a prior
@@ -67,7 +63,7 @@ redundant second capture in the one register that does the harm. The
 per-session file list is likewise dropped: the honest working set is
 the harness's own `gitStatus` block at load time, current after the
 prior session's commits landed. See
-<https://github.com/ddaanet/autodrive-handoff/blob/main/docs/changelog/2026-07-17-task-frame-drops-transcript.md>.
+<https://github.com/ddaanet/autodrive-handoff/blob/changelog-archive/docs/changelog/2026-07-17-task-frame-drops-transcript.md>.
 
 ## Why markdown template, not JSON schema
 

@@ -1,54 +1,15 @@
 #!/usr/bin/env bash
 # UserPromptSubmit: reconcile the armed-transition state at the start of a turn,
-# and report anything that went wrong in the last one.
+# and report anything that went wrong in the last one. Three jobs:
 #
-# 1. The drive mod's non-delivery. A rejected command or prompt in
-#    the mod has no one to tell: the turn it ran after is over. Left
-#    alone, a line that never runs is silent, and the agent carries on believing
-#    it armed a transition. The mod writes its reason to .claude/autodrive.failed;
-#    this reads it at the first moment anything can act on it. It is written
-#    only on a rejection the mod observed itself — never inferred from a file
-#    still in state `pending`, which is legitimate for the whole turn-end ->
-#    transition window.
+# 1. Report the drive mod's non-delivery, read from .claude/autodrive.failed
+#    (docs/design/driving-the-transition.md, "Reporting a failure, sweeping a
+#    stale sentinel").
+# 2. Sweep an autodrive still `armed` that outlived its turn (the same section,
+#    docs/design/queued-prompts.md, docs/design/sessions-sharing-a-root.md).
+# 3. Report a session cwd that left the launch repo (docs/design/scoping.md).
 #
-# 2. An autodrive that outlived its turn. The file is armed by the mod's
-#    drive-take.sh at the turn end that follows the write, which leaves it
-#    `pending` or removes it, so one still in state `armed` when a prompt
-#    arrives has not run. Three causes: that turn ended abnormally (Esc — Stop
-#    does not fire on an interrupt — or a crash, or a quit); the drive mod did
-#    not load at all (--safe-mode, a Claude Code older than 2.1.287, or an
-#    organization-managed one that does not list the plugin in managed
-#    settings); or the prompt was typed while the arming turn still ran, which
-#    fires this hook inside that turn, before its Stop. Left on disk a stale file
-#    would be taken by a later turn end, days later and possibly in an unrelated
-#    session, driving a stale transition into work it was never written for.
-#    The prompt_id tells the third cause apart: a prompt typed at an idle
-#    composer, an Esc included, carries a fresh one, while a queued prompt
-#    carries the arming turn's own (handoff-checkpoint and handoff-approved
-#    record it in a per-session prompt marker through
-#    inject-checkpoint-root.sh). So an owner's armed file whose prompt
-#    marker matches this input's prompt_id is a queued case, not a stale one: a
-#    rename is left for the drive to take at that turn's end, and a clear or
-#    compact is swept and said so, with no lines offered, since the transition
-#    and its continuation were composed before the prompt arrived. Another
-#    session's prompt can fire this hook too — every session sharing the root
-#    runs it, the background session the harness starts after a `git commit`
-#    included — so the file names its owner, and one owned by another session
-#    is swept only when that session is no longer live (its transcript has gone
-#    quiet); a `held` one, waiting on its owner's user, never. For
-#    an armed file the report also prints the lines it held, one per line, for
-#    the user to type in order, unless the file was queued.
-#
-# 3. A session cwd that left the launch repo. Everything derived from cwd —
-#    the environment block's working directory, gitStatus, the project
-#    CLAUDE.md — follows it; the transcript, the scratchpad,
-#    CLAUDE_PROJECT_DIR and every handoff file do not. Nothing announces the
-#    split, and it is silent in both directions: the agent reasons about the
-#    repo under cwd while the plugin reads and writes the one under the root.
-#
-# UserPromptSubmit: the mod drives *after* the turn that armed it, so the first
-# moment anything can act on a failure is the next prompt. It fires on every
-# prompt, so the no-file path must be silent and cheap.
+# It fires on every prompt, so the no-file path must be silent and cheap.
 set -euo pipefail
 
 # shellcheck source-path=SCRIPTDIR source=_lib.sh
@@ -188,18 +149,13 @@ drive_owner=""
 drive_kind=""
 drive_lines=()   # the lines an armed file held, before then after
 drive_err=""
-# The sentinel's other actors, the take at a turn's end among them, judge it
-# and rewrite or remove it under the lock, and the host does not order this
-# hook against them. So from the read to the exit, the sweep's decision and the
-# removal it makes are one step: a take that ran first leaves `pending` for the
-# sweep to find, and one that runs after waits for the sweep. This includes
-# record_sweep and the failure branch's removal of a stranded `pending`. A lock
-# that cannot be taken fails closed, busy past the wait (HANDOFF_LOCK_WAIT_SECS)
-# or not set up at all: the file is neither read nor judged, so no state below
-# acts on it, and the report says it was left (the state `locked`, as `unread` is
-# for a reader that could not run). Taken only for a file that is there, so the
-# ordinary prompt forks nothing; the second test is for one removed while this
-# waited.
+# Held from the read to the exit, so the sweep's decision and every removal it
+# makes, record_sweep and the failure branch's removal of a stranded `pending`
+# included, are one step. A lock that cannot be taken fails closed: the file is
+# neither read nor judged and the state is `locked`, as `unread` is for a reader
+# that could not run (docs/design/sentinel-lock.md). Taken only for a file that
+# is there, so the ordinary prompt forks nothing; the second test is for one
+# removed while this waited.
 lock_rc=0
 if [[ -L "$drive" || -f "$drive" ]]; then
     handoff_lock_take "$cwd/$HANDOFF_REL_DRIVE_LOCK" || lock_rc=$?
@@ -227,30 +183,17 @@ elif [[ -L "$drive" || -f "$drive" ]]; then
     fi
 fi
 
-# `armed` and `held` both name their owner, and every session sharing this root
-# runs this hook — the background session the harness starts after a `git
-# commit` included — so another session's prompt says nothing about whether
-# the owner is gone.
-#
-# Another session's `armed` file lives only until its owner's turn ends. One
-# whose owner is still live (its transcript written within
-# HANDOFF_OWNER_LIVE_SECS, handoff_owner_live) is left untouched and nothing
-# is said; one whose owner is not live is swept as a stale autodrive.
-#
-# A `held` file, whoever owns it, is not judged by liveness at all and stays in
-# its state, which the sweep below exempts: it waits on a human approval,
-# which takes as long as it takes, and an idle transcript is exactly what a
-# session waiting on its user looks like. A dead owner's held file stays on
-# disk: it is a few short lines, arms nothing by itself (only its owner's
-# handoff-approved releases it) and the next checkpoint in this root replaces
-# it.
+# Another session's `armed` file whose owner is live is reclassified `foreign`:
+# left untouched, nothing said. Only `armed` is asked about liveness; a `held`
+# file, whoever owns it, is never judged by it (docs/design/sessions-sharing-a-root.md).
 if [[ "$drive_state" == "armed" && -n "$session_id" && "$drive_owner" != "$session_id" ]] \
     && handoff_owner_live "$transcript_path" "$drive_owner"; then
     drive_state="foreign"
 fi
 
-# The mod writes the record only on a rejection it observed, and never a link:
-# a link there, dangling or not, is no evidence of one, and following it would
+# The mod writes the record only on what it observed itself, a rejected line or
+# a turn end with no session id, and never a link: a link there, dangling or
+# not, is no record the mod wrote, and following it would
 # quote another file's first line onto both channels. It is removed unread and
 # said so, and a pending transition is not cleared on its account.
 #
@@ -288,16 +231,10 @@ elif [[ "$failed_status" == ok ]]; then
     notes+=("The handoff transition drive failed to run its line: $reason. The transition or continuation it was driving did not happen, and any lines after it in the sequence were never run.")
 fi
 
-# A prompt queued into the arming turn (the header's point 2) carries that
-# turn's prompt_id, which handoff-checkpoint or handoff-approved recorded in the
-# session's prompt marker. Only an armed file this session owns is judged, so no other state
-# reads the marker and an ordinary prompt forks nothing here. Nothing is written.
-#
-# `marker_unsettled` is set when the input has an id and the marker could not
-# answer: its directory fails marker_dir_ok, or the read is neither `ok` nor
-# `absent` (a link, a directory, another user's file, or a helper that failed).
-# Then the prompt may be a queued one, which the sweep below cannot tell from
-# a stale file, and its note says so as it does for an input with no id.
+# Only an armed file this session owns is judged against the prompt marker, so no
+# other state reads it and an ordinary prompt forks nothing here; nothing is
+# written. `marker_unsettled` is set when the input has an id and the marker
+# could not answer (docs/design/queued-prompts.md).
 queued=0
 marker_unsettled=0
 prompt_marker="$HANDOFF_POINTER_DIR/handoff-prompt-$session_id"
@@ -311,16 +248,9 @@ if [[ "$drive_state" == "armed" && "$drive_owner" == "$session_id" \
     fi
 fi
 
-# An autodrive is taken at the turn end after the turn that writes it, and that
-# take leaves it `pending` or removes it. So one still in state `armed` when a
-# prompt arrives has not been taken, and no later turn end will take it unless
-# that prompt was queued into the arming turn, whose Stop is still to come.
-#
-# `held` is the exception, and the reason this is a list rather than "anything
-# but pending": a held transition is *waiting* on an approval whose answer
-# arrives at this very hook, so surviving the turn boundary is what it is for.
-# That holds for any owner's held file. Another session's armed file while it
-# is live was reclassified above as `foreign` and is not this session's to take.
+# The sweep: `held` is exempt whoever owns it, and another session's live
+# `armed` file is `foreign`, not this session's to take
+# (docs/design/driving-the-transition.md, docs/design/sessions-sharing-a-root.md).
 armed_lines=""   # the armed lines, for the user to type in order
 if [[ "$drive_state" == "locked" ]]; then
     msgs+=("autodrive not judged — $drive_err; left in place")
