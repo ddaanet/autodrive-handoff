@@ -15,10 +15,17 @@ itself, and the prompt that resumes the work on the far side.
 ### Step 1: Write durable learnings to memory
 
 If durable learnings surfaced this session, write them to auto-memory now.
-Skip if nothing durable surfaced — do not force. These writes are the only
-tool calls allowed before `handoff-checkpoint`.
+Skip if nothing durable surfaced — do not force. These writes and, when the
+rules matter, Step 2's read of the files reference are the only tool calls
+allowed before `handoff-checkpoint`.
 
 ### Step 2: Decide, then checkpoint
+
+The `handoff` skill holds the full templates, the rules behind them, and
+the seam between what the files carry and the fixed continuation, in
+`../handoff/references/files.md`, relative to this skill's own directory.
+Read that file, before deciding, when the rules matter. It ships with the
+plugin, so it cannot go stale.
 
 **Make no tool call between deciding and `handoff-checkpoint`.**
 
@@ -62,11 +69,6 @@ There is no task snapshot at this boundary: the summary carries the task,
 and the checkpoint removes the task file so a stale one cannot contradict
 it. Whatever must survive verbatim goes in the todo file or in the
 `compact` focus directive.
-
-The `handoff` skill holds the full templates, the rules behind them, and
-the seam between what the files carry and the fixed continuation, in
-the `SKILL.md` beside this one — `../handoff/SKILL.md`, relative to this
-skill's own directory. Read that file when the rules matter.
 
 Then run `handoff-checkpoint` (Bash) with `"skill": "precompact"` (no
 `rename` and no `task` field — precompact never renames and never writes

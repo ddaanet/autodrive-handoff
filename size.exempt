@@ -2,5 +2,4 @@
 # a file entry refuses once its file is under the cap, so delete it then.
 docs/changelog # frozen archive: craft retired the dated changelog on 2026-10-31, so no record is added, edited or split
 docs/changelog.md # the frozen archive's index, frozen with it; retiring the index ends the entry
-skills/handoff/SKILL.md # split along a need-time seam (TODO.md)
 tests/test_checkpoint_legacy.py # deleted whole by the legacy-path removal, not before 2026-11-16 (TODO.md)

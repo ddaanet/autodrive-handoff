@@ -245,28 +245,34 @@ threshold](../changelog/2026-08-01-context-threshold-trigger.md),
 it](../changelog/2026-08-09-samples-are-scoped-to-the-compaction.md), and
 [the removal](../changelog/2026-08-10-drop-context-threshold-nudge.md).
 
-**Deciding makes no tool call.** `handoff` decides
+**Between deciding and the checkpoint, no tool call.** `handoff` decides
 from the conversation already in context — the agent already holds
-everything it needs, and a Read/Bash/Grep call there duplicates work
-`handoff-checkpoint` does internally while risking action on state gone
-stale by write time. A live session read the rule seconds beforehand and
-still `cat`-ed both task files "to check": a general verify-before-acting
-habit overrode an instruction that read as descriptive rather than binding.
-The rule is one prohibition at the head of the one step that decides and
-checkpoints, phrased as an imperative on the next action, with the reason
-stated in the matching `## Anti-patterns` entry. Memory writes are not an
-exception to it, because they are not part of that step: they are the step
-before it, the skill's first, and nothing in them waits on a decision — how
-memory is written is gitlore's rule in every mode, so the commit answer
-does not set their tense. They still precede the checkpoint call, whose
-memory directive keys on a dirty submodule. A commit the ask implies is not
-an exception either, because it comes after the checkpoint, as the commit
-act the checkpoint prints: after it so it carries the two files the
-checkpoint wrote, and before the arming instruction so the transition is
-released only once it has landed.
-[Deciding makes zero tool calls, stated
-once](../changelog/2026-08-11-decide-with-zero-tool-calls.md),
-[Memory moves inside the deciding
-step](../changelog/2026-09-17-memory-moves-inside-the-deciding-step.md),
-[The directive owns the
-procedure](../changelog/2026-09-18-the-directive-owns-the-procedure.md)
+everything it needs, and a Read/Bash/Grep call on project state there
+duplicates work `handoff-checkpoint` does internally while risking action on
+state gone stale by write time. A live session read the rule seconds
+beforehand and still `cat`-ed both task files "to check": a general
+verify-before-acting habit overrode an instruction that read as descriptive
+rather than binding. The rule is one prohibition at the head of the one step
+that decides and checkpoints, phrased as an imperative on the next action,
+with the reason stated in the matching `## Anti-patterns` entry. Wording is
+the fix; a hook blocking Read/Bash/Grep between the skill's invocation and
+the checkpoint was not built, and is the next escalation if wording proves
+insufficient, not further wording tweaks.
+
+Two kinds of call precede the checkpoint, and neither breaks the rule.
+Memory writes are the step before the deciding one, the skill's first, and
+nothing in them waits on a decision — how memory is written is gitlore's
+rule in every mode, so the commit answer does not set their tense. They
+still precede the checkpoint call, whose memory directive keys on a dirty
+submodule. The other is a Read of `skills/handoff/references/files.md`, the
+templates and the seam, which both boundary skills read as part of drafting
+(`handoff` always, `precompact` when the rules matter). It is instructions
+the plugin ships, not project state, so nothing can go stale between its
+read and the write, and staleness was the reason for the rule; the incident's
+reason stays against reading state. The read comes before deciding, so the
+window between deciding and the checkpoint still holds no call. `precompact`
+once read `../handoff/SKILL.md` for this, against its own rule as written.
+A commit the ask implies is not an exception either, because it comes after
+the checkpoint, as the commit act the checkpoint prints: after it so it
+carries the two files the checkpoint wrote, and before the arming
+instruction so the transition is released only once it has landed.

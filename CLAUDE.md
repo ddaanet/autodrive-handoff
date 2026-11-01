@@ -56,7 +56,9 @@ One line each, with the node under `docs/design/` that holds its behaviour.
 - `.claude-plugin/plugin.json` — manifest, with no minimum-version field
 - `hooks/hooks.json` — the mod and six command hooks → driving-the-transition.md
 - `hooks/handoff.ts` — the mod, which runs the plan → driving-the-transition.md
-- `skills/handoff/SKILL.md` — clear boundary; templates, seam → the-skills.md
+- `skills/handoff/SKILL.md` — clear boundary → the-skills.md
+- `skills/handoff/references/files.md` — the task and todo templates and the
+  seam, read by both boundary skills → the-skills.md
 - `skills/precompact/SKILL.md` — the compact boundary → the-skills.md
 - `skills/autoname/SKILL.md` — a session title → the-skills.md
 - `skills/pending/SKILL.md` — lists the frame's open items → the-skills.md

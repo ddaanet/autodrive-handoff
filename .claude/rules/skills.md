@@ -11,16 +11,20 @@ Behaviour lives in `docs/design/the-skills.md`; read it first.
   not longer). Detailed rationale goes to `references/` or `docs/design.md`.
 - The markdown templates of `TASK.md` and `TODO.md`, and the seam between
   what the files carry and the fixed continuation, live only in
-  `skills/handoff/SKILL.md`. `precompact` defers to it, and neither loader
-  restates them: each file carries its own `##` headings and is inlined
-  verbatim under the one `#` header the frame prepends.
+  `skills/handoff/references/files.md`. Both boundary skills read it, and
+  neither `SKILL.md` nor either loader restates them: each file carries its
+  own `##` headings and is inlined verbatim under the one `#` header the
+  frame prepends.
 - A skill states none of what the checkpoint prints (the memory directive,
   the commit act, the `handoff-approved` instruction, the closing line): it
   follows the printed text. The check is that
   `grep -n 'gitlore:commit\|handoff-approved' skills/*/SKILL.md` stays empty.
-- At a boundary skill, the memory writes are the only tool calls ahead of the
-  one `handoff-checkpoint` call. `precompact` carries no `rename` and no
-  `task`; the schema forbids both there.
+- At a boundary skill, two kinds of tool call may precede the one
+  `handoff-checkpoint` call: the memory writes, and a Read of
+  `skills/handoff/references/files.md`, which ships with the plugin and so
+  cannot go stale. The Read comes before deciding, and nothing else is read:
+  no project state, `TASK.md` and `TODO.md` included. `precompact` carries no
+  `rename` and no `task`; the schema forbids both there.
 - `autoname` decides a title with no tool call, and its payload is exactly
   `{"skill": "autoname", "rename": "<title>"}`. `pending` makes no tool call
   and writes nothing.

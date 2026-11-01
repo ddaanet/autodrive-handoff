@@ -33,7 +33,7 @@ That leaves two fields only the agent can fill:
 
 These are the irreducible residual. **Current task** lives alone in
 `TASK.md` — a snapshot of a moment, agent-authored from the template in
-`SKILL.md` and written whole by `handoff-checkpoint`, which holds it to 1000
+`files.md` and written whole by `handoff-checkpoint`, which holds it to 1000
 characters of prose. **Open decisions** lives in `TODO.md`, alongside the
 **remainder** below: both are open questions the agent keeps revisiting over
 a session, so both belong in the scratch list it edits directly all session
@@ -79,7 +79,7 @@ content into the final markdown. It worked, but required:
 - A PostToolUse validator hook to catch schema drift at write time
 - A compose step that translated typed fields into markdown prose
 
-Replaced by a markdown template in `SKILL.md`. The agent writes prose
+Replaced by a markdown template in `files.md`. The agent writes prose
 directly in its own voice. No schema, no translation — the loader just
 inlines each file's contents under one header. The checkpoint checks two
 properties of the task's prose, its length and the absence of a list, and
