@@ -310,6 +310,7 @@ Ruled out, each argued in
   **recording the root in the sentinel**, **refusing a symlinked `.claude/`**
 - **A reviewer agent for the handoff task, or for memory destinations, for now**
 - **An agent-authored continuation prompt**
+- **A shared reference file both boundary skills read on every call**
 
 ## Non-goals
 
