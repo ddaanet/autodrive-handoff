@@ -257,8 +257,9 @@ file so it cannot fire into unrelated work days later, and prints the lines it
 held for the user to run in order. A file that will not parse is swept too,
 without lines — it describes no transition anyone can complete. `held` is
 exempt whoever owns it: it waits on an approval whose answer arrives at this
-very hook, so surviving the turn boundary is what it is for, and that is why
-the sweep names its states rather than taking anything that is not `pending`. Lines are offered only for the owner's
+very hook, so surviving the turn boundary is what it is for. That is why the
+sweep keeps the states it lists (`pending`, `held`, `foreign`, `unread` and
+`locked`) and removes any other, rather than keeping `pending` alone. Lines are offered only for the owner's
 own `armed` file: another session's would be replayed into this conversation.
 
 ## A prompt queued into the arming turn

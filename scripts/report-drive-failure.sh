@@ -191,8 +191,9 @@ if [[ "$drive_state" == "armed" && -n "$session_id" && "$drive_owner" != "$sessi
     drive_state="foreign"
 fi
 
-# The mod writes the record only on a rejection it observed, and never a link:
-# a link there, dangling or not, is no evidence of one, and following it would
+# The mod writes the record only on what it observed itself, a rejected line or
+# a turn end with no session id, and never a link: a link there, dangling or
+# not, is no record the mod wrote, and following it would
 # quote another file's first line onto both channels. It is removed unread and
 # said so, and a pending transition is not cleared on its account.
 #
