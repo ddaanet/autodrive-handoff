@@ -1,0 +1,1 @@
+{"kind":"compact","message":"handoff: transition cancelled — a prompt arrived before it ran.","note":"The driven /compact did not run. Answer this prompt, then run the precompact skill again with the same transition, unless this prompt changes that."}

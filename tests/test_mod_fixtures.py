@@ -20,7 +20,7 @@ def test_every_prose_line_a_fixture_submits_is_the_checkpoint_constant() -> None
     prose = [
         (path.name, line)
         for path in sorted((MOD_TESTS / "fixtures").glob("*.json"))
-        for line in json.loads(path.read_text(encoding="utf-8"))["after"]
+        for line in json.loads(path.read_text(encoding="utf-8")).get("after", [])
         if not line.startswith("/")
     ]
     assert prose, "no fixture carries a continuation"

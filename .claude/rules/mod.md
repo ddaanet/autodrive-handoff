@@ -4,6 +4,7 @@ paths:
   - "tests/mod/**"
   - "tests/gen_mod_fixtures.py"
   - "scripts/drive-take.sh"
+  - "scripts/drive-cancel.sh"
   - "scripts/load-*.sh"
   - "scripts/_lib_drive.sh"
 ---
@@ -21,15 +22,19 @@ Behaviour lives in `docs/design/driving-the-transition.md`; read it first.
 - A hooks module may pass `$` only to top-level functions (a static check at
   load).
 - The mod reads neither the sentinel nor the prompt box: it runs
-  `drive-take.sh` and executes the plan on its stdout.
+  `drive-take.sh` and executes the plan on its stdout, and a prompt in the
+  window after `Stop` runs `drive-cancel.sh` once.
 - `claude plugin test` runs `tests/mod/handoff.test.ts` against
   `tests/mod/rig.ts`, a stub rig that answers every mods API call the mod makes
-  and logs them in order. The kit rejects an unstubbed call, `process.run`,
+  and logs them in order; `process.run` answers per script
+  (`stdout` for the take, `cancelStdout` for the cancel, logged `process.run
+  cancel`) and can hold an answer open (`hold`, `holdLine`). The kit rejects an unstubbed call, `process.run`,
   `fs.*` and the clock included, so a new call needs a stub and its place in
   each expected log. No expected log holds a prompt-box read and the rig stubs
   none, so a restored one fails as an unstubbed call.
-- `tests/mod/fixtures/*.json` are the plans `drive-take.sh` prints;
-  `tests/drive-take.bats` pins its stdout to them. `tests/mod/fixtures.ts` is
+- `tests/mod/fixtures/*.json` are the plans `drive-take.sh` prints and the
+  `cancel-*` plans `drive-cancel.sh` prints; `tests/drive-take.bats` and
+  `tests/drive-cancel.bats` pin their stdout to them. `tests/mod/fixtures.ts` is
   rendered from them by `tests/gen_mod_fixtures.py`, because a hooks-module
   test can neither read files nor import JSON: regenerate it with
   `python3 tests/gen_mod_fixtures.py`, never by hand.
@@ -38,7 +43,8 @@ Behaviour lives in `docs/design/driving-the-transition.md`; read it first.
 - A new mod row goes in `tests/mod/handoff.test.ts`; a new plan shape is a
   fixture JSON plus a regeneration.
 - The load-bearing mod rows (driving inside `Stop`, continuing after a
-  rejection, dropping the consume-once reset, skipping the fast path) are
+  rejection, dropping the consume-once reset, skipping the fast path, the
+  cancel check before each line, closing the window before the last line) are
   mutation-checked, not observed passing. A new load-bearing row is too.
 - Run `just mod-smoke` whenever the mod, a loader or the sentinel's shape
   changes; it found the `Stop` call-context refusal no stub could. It boots a

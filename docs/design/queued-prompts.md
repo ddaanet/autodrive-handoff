@@ -80,3 +80,78 @@ carries the same id a successful checkpoint would. Unverified: a subagent's
 Bash call in the same session that matches the substring with a different
 `prompt_id` would overwrite the marker, degrading a later queued prompt to the
 stale sweep.
+
+## A prompt after `Stop`
+
+Observed on Claude Code 2.1.316
+([the probe](../../plans/reports/2026-11-01-prompt-after-stop-probe.md)): a
+prompt a person sends after the arming turn's `Stop` and before the mod issues
+the transition command gets one of two outcomes by a sub-second race. Before
+the take it reaches `UserPromptSubmit` with the sentinel still `armed`, and the
+sweep removes it as stale, blaming an unloaded mod. After the take it finds
+`pending`, which the sweep leaves, and the prompt is answered in the old
+context, which the `/clear` then discards. A prompt queued into the arming turn
+is cancelled with a note; this one should end the same way.
+
+**The window.** The mod's `prompt.submit` hook runs at Enter, ahead of
+`UserPromptSubmit`, and the mod can call `$.process.run` and add to `e.context`
+there. The window is open from `classic.Stop` to the moment the drive issues the
+transition command: the turn is over and the transition has not begun. A prompt
+outside it, mid-turn or with no recorded `Stop`, is not the mod's: it passes
+untouched, as does a slash command or a meta prompt, and the mod's own
+continuation, which arrives after the window has closed.
+
+**The handler.** The first prompt in a window runs `scripts/drive-cancel.sh
+<cwd> <session-id>` and stores the answer as one promise; a later prompt in the
+same window spawns nothing. The script takes the sentinel's lock and cancels
+an `armed` file the session owns, or a `pending` one, when the kind is `clear`
+or `compact` with at least one line to run. It records the sweep in
+`.claude/autodrive.swept`, removes the file and prints `{kind, message, note}`;
+the cancel texts are the sweep's own (`_lib_drive.sh`). The handler toasts the
+message and appends the note to the prompt's context. An `armed` `rename` the
+session owns is not cancelled but taken, as `drive-take.sh` would: the script
+removes the file, records nothing and prints the take's plan, with no `note`.
+Left in place it would be swept, because the sweep reads `armed` at the prompt,
+ahead of the take. The prompt passes unchanged and the drive runs that plan
+after the prompt's turn. Anything else (a prepare-only compact, `held`, another
+session's file, an unreadable one) prints nothing and the prompt passes
+unchanged.
+
+**The drive awaits the answer.** The drive awaits that promise straight after the
+take returns, and again before each line of the plan's `before` list, and stops
+when it cancelled. The fast path (no sentinel at the session root) skips the
+take, not the answer: the script may just have removed the file. When the
+answer is a rename's plan the drive runs it in place of the take's stdout,
+which is empty if the script won the lock. The promise is set before the handler awaits anything, so a
+prompt that arrives while the take or a `/rename` is in flight is waited for.
+The take may run first and leave `pending`; the cancel then removes it, which
+is why `pending` is cancelled at all. `after` lines need no check: they run
+only if the loop got past the last `before` line.
+
+**Why the mod and not a `Stop` record.** A file the sweep reads at
+`UserPromptSubmit` cannot stop a plan the mod already holds in memory, and a
+sweep that removes `pending` mid-drive leaves the transition running with
+nothing for its loader. The handler is the one place that sees the prompt and
+owns the plan.
+
+**Why the window closes at the command.** The window shuts just before the last
+`before` line is issued. A prompt after that is held by the host until the
+command resolves and answered in the new context ahead of the continuation, so
+nothing is lost, and cancelling would remove the `pending` file the loader
+needs. A `/rename` under `clear` is an earlier line, so a prompt after it still
+stops the `/clear`. A plan with no `before` line issues nothing and is never
+cancelled.
+
+**Bounds.**
+
+- `pending` has no owner ([Sessions sharing a root](sessions-sharing-a-root.md)),
+  so `drive-cancel.sh` cannot tell whose it is. The cancel relies on the mod
+  calling it only inside its own window, in which the file is the session's.
+- Unverified: a prompt reaching `prompt.submit` between the command being
+  issued and the host starting it. 0.08 s after the command was too late to hit
+  it in the probe.
+- The handler failing (the spawn rejecting, output that is not JSON) falls back
+  to the racy outcomes above.
+- The `prompt.submit` hook was probed on 2.1.316 and the oldest version
+  installed here is 2.1.310; a Claude Code older than that is unprobed, while
+  the stated minimum is 2.1.287.

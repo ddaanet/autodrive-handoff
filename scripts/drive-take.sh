@@ -105,7 +105,6 @@ else
 fi
 
 before=( ${DRIVE_BEFORE[@]+"${DRIVE_BEFORE[@]}"} )
-after=( ${DRIVE_AFTER[@]+"${DRIVE_AFTER[@]}"} )
 
 # FR-G: nothing to run. The pending state alone is the loader's signal that the
 # frame belongs in this compaction.
@@ -116,16 +115,4 @@ if (( ${#before[@]} == 0 )); then
     exit 0
 fi
 
-# jq reads the lines NUL-delimited: a line is free text and may hold anything
-# but a NUL.
-to_json() { printf '%s\0' "$@" | jq -Rsc 'split("\u0000")[:-1]'; }
-before_json="$(to_json "${before[@]}")"
-after_json="[]"
-if (( ${#after[@]} > 0 )); then
-    after_json="$(to_json "${after[@]}")"
-fi
-
-jq -nc --arg k "$DRIVE_KIND" --arg f "$fail_file" --arg l "${before[0]}" \
-    --argjson b "$before_json" --argjson a "$after_json" \
-    '{kind: $k, before: $b, after: $a, failFile: $f,
-      message: ("handoff: will run " + $l + " once the turn ends.")}'
+handoff_drive_plan "$DRIVE_KIND" "$fail_file" "${before[@]}"

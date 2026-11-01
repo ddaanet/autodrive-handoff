@@ -175,8 +175,9 @@ does not order a prompt's sweep against the mod's take, and a sweep that read
 the user the mod never ran a transition that runs. An advisory `flock` makes
 each actor's decision and write one step, with a bounded wait that fails open,
 since a hook that waits for ever is worse than the race. The lock orders the
-actors and not the arrival of a prompt: which outcome wins is still decided by
-arrival order. [The sentinel's lock](sentinel-lock.md),
+actors and not the arrival of a prompt: a prompt after the arming turn's
+`Stop` is ordered by the mod's window
+([queued-prompts.md](queued-prompts.md#a-prompt-after-stop)). [The sentinel's lock](sentinel-lock.md),
 2026-10-16 The sentinel takes a lock
 
 **Observability is not gated on the happy path.** A clean run says nothing

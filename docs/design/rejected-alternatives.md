@@ -295,6 +295,16 @@ must decide alone. Whether `turn.complete` fires at all on Esc is also
 unverified.
 [A prompt queued into the arming turn](queued-prompts.md)
 
+**An on-disk `Stop` record for the sweep to read** — the mod writes a file at
+`Stop`, so a prompt after it is told apart from one before it and the
+`UserPromptSubmit` sweep cancels the transition. Rejected: the mod takes the
+sentinel and holds the plan in memory at `turn.complete`, so a file the sweep
+reads cannot stop lines the mod already holds, and a sweep that removes
+`pending` out from under a running transition strands the loader. The mod's
+`prompt.submit` handler is the one place that sees the prompt before it is
+answered and also owns the plan.
+[A prompt after `Stop`](queued-prompts.md#a-prompt-after-stop)
+
 **A shared reference file both boundary skills read on every call** — the
 task and todo templates in `references/`, read before drafting, so each
 `SKILL.md` stays under its size cap. It meets the cap only nominally: a file

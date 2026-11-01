@@ -85,6 +85,8 @@ One line each, with the node under `docs/design/` that holds its behaviour.
   driving-the-transition.md
 - `scripts/load-compact.sh` — `SessionStart(compact)` loader →
   driving-the-transition.md
+- `scripts/drive-cancel.sh` — the mod's `prompt.submit` cancel of a clear or
+  compact, and take of a rename → queued-prompts.md
 - `scripts/report-drive-failure.sh` — `UserPromptSubmit`: failure report,
   sweep, drift note → driving-the-transition.md, queued-prompts.md,
   sessions-sharing-a-root.md
@@ -110,8 +112,8 @@ What you are touching → what to read first, under `docs/design/`:
   `commit` fields → `the-skills.md`
 - `hooks/handoff.ts`, `drive-take.sh`, `load-handoff.sh`, `load-compact.sh`,
   `report-drive-failure.sh`'s sweep, `.claude/autodrive` and its states, FR-G
-  → `driving-the-transition.md`; a prompt arriving while the arming turn runs,
-  the prompt marker → `queued-prompts.md`; the sentinel's lock,
+  → `driving-the-transition.md`; a prompt arriving while the arming turn runs or
+  after its `Stop`, the prompt marker, `drive-cancel.sh` → `queued-prompts.md`; the sentinel's lock,
   `_drive_lock.py`, `handoff_lock_take` → `sentinel-lock.md`; a second session
   in the root, `handoff_owner_live`, `HANDOFF_OWNER_LIVE_SECS`,
   `autodrive.swept`, the sweep's `foreign` state → `sessions-sharing-a-root.md`

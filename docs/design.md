@@ -219,6 +219,9 @@ Where the argument lives:
 - [A prompt queued into the arming turn](design/queued-prompts.md) — What
   does the sweep do with a prompt typed while the turn that armed a transition
   is still running?
+- [A prompt after `Stop`](design/queued-prompts.md#a-prompt-after-stop) — What
+  happens to a prompt sent after the arming turn ended and before the
+  transition command is issued?
 - [The sentinel's lock](design/sentinel-lock.md) — What orders the sweep, the
   take, the checkpoint and the approval, which all read and rewrite one file?
 - [Sessions sharing a root](design/sessions-sharing-a-root.md) — What does a
@@ -282,6 +285,7 @@ Ruled out, each argued in
 - **Live `git status` in `load-handoff.sh`**, **reorder + amend**
 - **Trusting the raw `.cwd` field**, **recording the root via
   `WorktreeCreate`/`CwdChanged`**
+- **An on-disk `Stop` record for the sweep to read**
 - **A session-id sidecar or a recency timeout for a stale sentinel**
 - **Sparing every kind of queued prompt**, **recording each prompt's id in the
   sweep**, **the mod reading the prompt box**, **`turn.complete` without a

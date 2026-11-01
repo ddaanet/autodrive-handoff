@@ -107,9 +107,10 @@ read-write. The file is never deleted
 already ignores it. The loaders take it too: the checkpoint replaces whatever
 sentinel is there, `pending` included, so a loader that read `pending` and then
 removed it could remove a checkpoint's new file unread. The lock orders the
-actors; which outcome wins is still
-decided by arrival order. A prompt sent just after the arming turn's `Stop` can
-still have the transition run after it, or be swept (tracked in `TODO.md`).
+actors; it does not order a person's prompt against them. A prompt sent after
+the arming turn's `Stop` is ordered by the mod instead, which asks
+`drive-cancel.sh`, an actor that takes this lock like the others
+([A prompt after `Stop`](queued-prompts.md#a-prompt-after-stop)).
 Rows, none of which sleeps or polls. An ordering row holds the lock from a
 background process (`tests/lock_holder.py`, which takes it through
 `_drive_lock.locked` and says `held` on a pipe), starts the actor, blocks until

@@ -6,6 +6,10 @@ sentinel case: one line of compact JSON plus a trailing newline. The token
 `tests/drive-take.bats` substitutes it before comparing. The mod tests
 stub `process.run` with the same files, substituting the same way.
 
+`cancel-*.json` are instead the stdout of `scripts/drive-cancel.sh`: `{kind,
+message, note}`, pinned by `tests/drive-cancel.bats`. Empty stdout from it means
+nothing was cancelled.
+
 Empty stdout (no fixture) means nothing is armed for this session: no file,
 `pending`, `held`, or `armed` by another session.
 

@@ -84,9 +84,12 @@ root](sessions-sharing-a-root.md).
 
 ## Who runs it, and when
 
-The mod registers two handlers. `classic.Stop` records the turn's cwd and session
+The mod registers three handlers. `classic.Stop` records the turn's cwd and session
 id and does nothing else. `turn.complete`, which follows it by a fraction of a second,
-consumes the recorded cwd and drives inline.
+consumes the recorded cwd and drives inline. `prompt.submit` answers only a
+prompt a person sends between the two, or while a transition's earlier line is
+in flight, and can stop the drive
+([A prompt after `Stop`](queued-prompts.md#a-prompt-after-stop)).
 
 Both halves are forced by the host:
 

@@ -57,7 +57,7 @@ replaces it.
 
 ## The sweep's record
 
-Each removal the sweep makes also appends a line to `.claude/autodrive.swept`:
+Each removal the sweep makes (and each cancel by `drive-cancel.sh`) also appends a line to `.claude/autodrive.swept`:
 time, the removing session, the file's state, owner, kind and age, and the
 cwd. The sweep's report lands on the removing session's own channels, which
 the session that composed the file never sees, and background sessions
