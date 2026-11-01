@@ -326,7 +326,7 @@ Ruled out, each argued in
 - **Validating the markdown templates.** `handoff-checkpoint` validates the
   JSON envelope and two properties of the task's markdown, its length and the
   absence of a list (FR13). The headings and sections of the templates in
-  `skills/handoff/references/files.md` are trusted, not schema-checked.
+  `skills/handoff/SKILL.md` are trusted, not schema-checked.
 - **Replacing `/ddaa:handoff`.** Different target (claude.ai vs
   Claude Code), different scope (full-session summary vs residual task
   frame). Non-overlapping.

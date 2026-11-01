@@ -250,19 +250,16 @@ the fix; a hook blocking Read/Bash/Grep between the skill's invocation and
 the checkpoint was not built, and is the next escalation if wording proves
 insufficient, not further wording tweaks.
 
-Two kinds of call precede the checkpoint, and neither breaks the rule.
-Memory writes are the step before the deciding one, the skill's first, and
-nothing in them waits on a decision — how memory is written is gitlore's
-rule in every mode, so the commit answer does not set their tense. They
-still precede the checkpoint call, whose memory directive keys on a dirty
-submodule. The other is a Read of `skills/handoff/references/files.md`, the
-templates and the seam, which both boundary skills read as part of drafting
-(both always). It is instructions
-the plugin ships, not project state, so nothing can go stale between its
-read and the write, and staleness was the reason for the rule; the incident's
-reason stays against reading state. The read comes before deciding, so the
-window between deciding and the checkpoint still holds no call. `precompact`
-once read `../handoff/SKILL.md` for this, against its own rule as written.
+Memory writes are the one call that precedes the checkpoint. They are the
+step before the deciding one, the skill's first, and nothing in them waits on
+a decision — how memory is written is gitlore's rule in every mode, so the
+commit answer does not set their tense. They still precede the checkpoint
+call, whose memory directive keys on a dirty submodule. Nothing else is
+read, not even the plugin's own files: a reference file both skills read on
+every call is rejected (see
+[rejected alternatives](rejected-alternatives.md)). The todo template and
+rules are inlined in both boundary skills, so neither makes a read to draft,
+and the window between deciding and the checkpoint holds no call.
 A commit the ask implies is not an exception either, because it comes after
 the checkpoint, as the commit act the checkpoint prints: after it so it
 carries the two files the checkpoint wrote, and before the arming

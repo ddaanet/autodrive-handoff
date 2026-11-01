@@ -10,24 +10,18 @@ and what's still undecided. When the user wants the reset carried out
 rather than prepared, this skill drives it too — the rename, the `/clear`,
 and the prompt that resumes the work on the far side.
 
-`handoff-checkpoint` handles the writes and the transition file, and prints
-what is left to do after the call — this skill's job is deciding what goes in
-them, then following what it prints.
+`handoff-checkpoint` does the writes and prints what is left to do. This
+skill decides what goes in them, then follows what it prints.
 
 ## Protocol
 
 ### Step 1: Write durable learnings to memory
 
 If durable learnings surfaced this session, write them to auto-memory now.
-Skip if nothing durable surfaced — do not force. These writes and Step 2's
-read of the files reference are the only tool calls allowed before
-`handoff-checkpoint`.
+Skip if nothing durable surfaced — do not force. These writes are the only
+tool calls allowed before `handoff-checkpoint`.
 
 ### Step 2: Decide, then checkpoint
-
-Read `references/files.md`, beside this skill, before deciding: the task and
-todo templates, their rules, and the seam between the files and the
-continuation. It ships with the plugin, so it cannot go stale.
 
 **Make no tool call between deciding and `handoff-checkpoint`.**
 
@@ -65,10 +59,66 @@ Then decide the content:
   Case, no surrounding quotes, no trailing punctuation) for the work done
   this session.
 - **Task snapshot** — whether there's an active task whose state is worth
-  preserving; if so, draft the content using the task template.
+  preserving; if so, draft it from the task template below.
 - **Todo content** — whether there are open decisions still to make, or a
-  task list with open items in play; if so, draft the todo content using
-  the todo template (open decisions first, then remaining items).
+  task list with open items in play; if so, draft it from the todo template
+  below.
+
+These two files are re-injected verbatim on the far side, and they are the only
+carrier: the continuation is a fixed prompt that points at them and says
+nothing of its own, so a fact left out of them is gone.
+
+**Task template:**
+
+```markdown
+## Current task
+
+<The task in hand and where it stands, in-flight threads named in a sentence,
+and the next concrete action: what the fresh session does first, not the
+topic. Prose. Not a recap.>
+```
+
+- **At most 1000 characters of prose, and no list.** The checkpoint rejects a
+  longer body, and any line that opens a list item.
+- **Only the task in hand stays here.** Remaining steps and open decisions go
+  to the todo. Standing rules and conventions are memory: write them in Step 1.
+  Finished work is one sentence at most.
+- No file paths or code beyond what's needed to say what's in progress.
+- **No commit, push or release status** ("the work is uncommitted", "ready to
+  commit", "release is a separate request"): the line is false after the next
+  commit. If uncommitted work matters, what matters is *why* (tests red,
+  decision pending): write that as an open decision in the todo.
+
+**Todo template:**
+
+```markdown
+## Open decisions
+
+- <Unmade choice, phrased as a decision still to make, with enough context to
+  decide — identifiers, commit ranges, file paths, the exact shape of the
+  question, whatever must survive verbatim.>
+
+<Drop the section if there are no open decisions. No filler.>
+
+## Remaining
+
+- <Open item, one line, phrased as work still to do.>
+```
+
+- **Open items only, in both sections.** A finished item or a resolved decision
+  is dropped, never checked off, prefixed "done:" or struck through: anything
+  still listed reads as outstanding and gets redone.
+- **A decision the user has left unanswered across several frames is declined,
+  not missed.** Drop it, and never annotate one with the number of times it has
+  been raised. A listed decision blocks nothing either: work that can proceed
+  without the answer is listed as work.
+- **No commit or push status here either**, and no item saying "commit the
+  work" or "push the branch". A release still owed is an item.
+- Durable lessons go to memory, not to `## Open decisions`.
+- A `TODO.md` that is already there in another shape keeps its shape: add to it
+  and drop from it with `edit` rather than rewriting it into this template.
+
+Neither file takes a `#` heading or extra sections.
 
 Then run `handoff-checkpoint` (Bash), piping the whole wrap-up as JSON on
 stdin via a heredoc:
@@ -88,15 +138,15 @@ JSON
 ```
 
 `task` and `todo` are both required, each carrying content as a string or an
-object naming an action. `{"action": "clear"}` removes that file — for
-`task`, this is how a boundary with nothing to carry says so; for `todo`, it
-says every item landed. When the call has nothing to say about the list, send
-`{"action": "keep"}`, which leaves it untouched: a scratch list must survive a
-call that is silent about it, so `keep` is the default and `clear` is a
-deliberate stand-down.
+object naming an action. A content string replaces the whole file, so a `todo`
+string carries every open item still listed. `{"action": "clear"}` removes that
+file — for `task`, this is how a boundary with nothing to carry says so; for
+`todo`, it says every item landed. When the call has nothing to say about the
+list, send `{"action": "keep"}`, which leaves it untouched: `keep` is the
+default and `clear` is a deliberate stand-down.
 `{"action": "edit", …}` replaces one exact occurrence of `old_string` in
-the file with `new_string`, so an item is added or dropped without rewriting
-the list.
+the file with `new_string`, so an item is added or dropped without the whole
+list in context.
 `keep` and `edit` apply to `todo` only; `edit` needs the file to exist and
 `old_string` to appear in it exactly once. `null` is an error on both, as
 is omitting a key, or adding one inside an action object.
@@ -109,9 +159,6 @@ whatever you run may print the next part. The checkpoint owns the decision —
 do not re-derive or verify it. A non-zero exit names the offending field on
 stderr — fix the payload and retry.
 
-The templates, their rules and the seam between the files and the
-continuation are in `references/files.md`.
-
 ## Anti-patterns
 
 - Reading `TASK.md`, `TODO.md`, or any other project file "to
@@ -121,26 +168,13 @@ continuation are in `references/files.md`.
   stale by the time it writes.
 - Padding "Current task" to look thorough. Length should track how many
   threads are genuinely in flight, not effort.
-- A task list in `## Current task`. Steps go to `TODO.md`; the
-  task file says what is in progress, not the checklist to get there.
-- A done-log or working conventions in `## Current task`. What landed is in
-  `git log`, and how to work is memory.
-- Completion state in `TODO.md` — `- [x]` lines, "done:" prefixes,
-  a resolved decision left in place, a struck-through item. The file
-  holds only what's still open — decisions and remainder alike.
-- Durable lessons in `## Open decisions`. Those go to feedback memory.
-- Extra sections in either file. Both templates are fixed.
 - Asking whether to clear, or telling the user to run `/clear`, under a
-  driven transition. Both are settled by the request and the armed file.
+  driven transition. The request settled both.
 - Printing the `/clear` line, or the continuation prompt, as something for
   the user to run. When the drive does not run, the
   plugin prints the lines itself.
-- Writing `.claude/autodrive` directly. The checkpoint composes it from
-  the payload; a hand-written one is a second writer of the same channel.
 
 ## Additional resources
 
-- **`references/files.md`** — the task and todo templates, their rules, and
-  the seam between the files and the continuation; read in Step 2.
-- **`references/design.md`** — design rationale: what the residual is
-  and why the agent-authored task file plus read-time assembly split.
+- **`references/design.md`** — design rationale, for changing this skill: no
+  boundary reads it.

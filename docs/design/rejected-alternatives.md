@@ -294,3 +294,10 @@ and when the mod is not loaded nothing observes the turn at all, so the hook
 must decide alone. Whether `turn.complete` fires at all on Esc is also
 unverified.
 [A prompt queued into the arming turn](queued-prompts.md)
+
+**A shared reference file both boundary skills read on every call** — the
+task and todo templates in `references/`, read before drafting, so each
+`SKILL.md` stays under its size cap. It meets the cap only nominally: a file
+read on every invocation costs its bytes on every invocation, as the body
+would, and it adds a tool call to the normal path of both skills, ahead of the
+checkpoint. The templates are inline instead, the todo part in both skills.

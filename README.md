@@ -234,9 +234,8 @@ and writes](#what-the-plugin-runs-and-writes) lists every file.
 
 [`skills/handoff/SKILL.md`](skills/handoff/SKILL.md) and
 [`skills/precompact/SKILL.md`](skills/precompact/SKILL.md) are the protocols the
-agent follows, and
-[`skills/handoff/references/files.md`](skills/handoff/references/files.md) holds
-the templates for the two files they write.
+agent follows; the first also holds the templates for the two files they
+write.
 
 ## Development
 

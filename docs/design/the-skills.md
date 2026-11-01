@@ -18,10 +18,11 @@ and removes the task file, because the compaction's summary says it
 ([The compact boundary carries no task](decisions.md)). Both carry `todo`.
 
 The templates of the two files, their rules and the seam between what the
-files carry and the continuation are in one place,
-`skills/handoff/references/files.md`, which both skills read before they
-draft, always. That read is the one tool
-call, besides memory writes, ahead of the checkpoint
+files carry and the continuation are inline in `skills/handoff/SKILL.md`.
+`skills/precompact/SKILL.md` repeats the todo template and the todo rules it
+needs, so neither skill reads anything to draft; an edit to the todo template
+or rules changes both. Memory writes are the only tool calls ahead of the
+checkpoint
 ([Between deciding and the checkpoint, no tool call](decisions.md)).
 
 There is no restart skill: Claude Code's own `/restart` relaunches with

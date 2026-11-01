@@ -32,7 +32,7 @@
 # notes the loaders append.
 #
 # The hook does not re-state either template: each file carries its own `##`
-# section headings (references/files.md is the single source of truth) and is concatenated
+# section headings (skills/handoff/SKILL.md holds the templates) and is concatenated
 # verbatim under the one `#` header prepended here.
 # shellcheck disable=SC2034  # assigned for the caller's scope
 handoff_frame() {

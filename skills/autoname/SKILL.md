@@ -31,9 +31,7 @@ takes belongs to a boundary this skill is not — no task file, no memory,
 no transition — and each is a schema error here rather than a silent
 ignore. A non-zero exit names the offending field on stderr.
 
-That is the only tool call. The checkpoint composes the transition file
-and the plugin's mod runs `/rename` when the turn ends; if the mod did not
-load, the next prompt prints the line for the user to run instead.
+That is the only tool call. The plugin runs `/rename` when the turn ends.
 
 ## Anti-patterns
 
@@ -41,5 +39,3 @@ load, the next prompt prints the line for the user to run instead.
   autoname is rename-only; for residual task state use the handoff skill.
 - Taking a title from the user's words verbatim when the conversation
   implies a better one. Derive the title; do not transcribe the request.
-- Writing `.claude/autodrive` directly. The checkpoint is its one writer,
-  and a direct Write or Edit is denied.
