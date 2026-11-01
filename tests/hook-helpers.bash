@@ -3,8 +3,8 @@
 # teardown, and the helpers two or more of them call. A helper only one file
 # calls stays in that file. Each of those files `source`s this one, under a
 # `# shellcheck source-path=SCRIPTDIR source=hook-helpers.bash` line, so shellcheck
-# follows it. It sources shared-helpers.bash, which carries the helpers these
-# files share with the checkpoint-helpers ones.
+# follows it. It sources shared-helpers.bash, whose header names who else
+# shares those helpers.
 #
 # End-to-end test of the hook scripts against synthetic input. Each scenario
 # is a real invocation of the hook with a hand-crafted tool-event payload.
