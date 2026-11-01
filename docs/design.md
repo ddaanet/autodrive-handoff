@@ -4,9 +4,9 @@ Living document. States what this plugin is, how it works today, and why
 each standing decision was made. Present tense throughout: when a decision
 is reversed, this document is rewritten rather than annotated.
 
-The write-time records of design changes up to 2026-10-31 are a frozen
-archive in `changelog/`, indexed by [`changelog.md`](changelog.md). Later
-history, and why a design changed, is in `git log`.
+History, and why a design changed, is in `git log`. The dated records of
+design changes up to 2026-10-31, named here by date and title, are in the
+`changelog-archive` tag's `docs/changelog/`.
 
 This document is a **hub**. `docs/design/` holds one node per mechanism or
 argument; read the node before making a claim about, or changing, what it
@@ -104,16 +104,13 @@ different thing:
 - **the undone half of a task list** — a decomposition is judgment, and
   after a compaction it is re-derived from a paraphrase with real error
   probability, failing silently by redoing finished work. See
-  [Reconstructable is two categories, not
-  one](changelog/2026-07-22-a-place-for-the-todo-list.md).
+  2026-07-22 A place for the todo list.
 
 The original analysis carried a fourth category — the last N verbatim user
-prompts, as "the only unreconstructable conversational signal" ([the
-argument, in full](changelog/2026-05-19-original-activation-and-loading.md)).
+prompts, as "the only unreconstructable conversational signal" (2026-05-19 Original design: activation, loading, extraction).
 It was implemented, shipped, and withdrawn: a faithful transcript does not
 read as a report about a past session, it reads as *memory*, and the successor
-narrates a prior session's work as its own. See [Task frame drops the
-transcript and file list](changelog/2026-07-17-task-frame-drops-transcript.md).
+narrates a prior session's work as its own. See 2026-07-17 Task frame drops the transcript and file list.
 
 Those categories constitute the artifact this plugin produces. Everything
 else on the SOTA list is already handled, or reconstructible from code /

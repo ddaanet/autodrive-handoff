@@ -82,7 +82,7 @@ fi
 # user and the agent, so a fresh session never reads an absent half as an
 # oversight. The prior session's working set is served by the harness's own
 # gitStatus block, not reproduced here (see
-# docs/changelog/2026-07-17-task-frame-drops-transcript.md).
+# the changelog-archive tag's 2026-07-17 record, "Task frame drops the transcript and file list").
 task="$cwd/$HANDOFF_REL_TASK"
 todo="$cwd/$HANDOFF_REL_TODO"
 legacy_task="$cwd/$HANDOFF_LEGACY_REL_TASK"

@@ -2,6 +2,9 @@
 
 Part of [handoff — Design](../design.md).
 
+The dated records named here are in the `changelog-archive` tag's
+`docs/changelog/`.
+
 One skill per boundary, plus the rename:
 
 | boundary | skill | transition field |
@@ -68,7 +71,7 @@ With the line fixed, `TASK.md` and `TODO.md` are the only carrier at a clear
 (at a compact the summary and the focus directive carry too), and the
 skills ask one yes-or-no question of the user's request where they once asked
 for a sentence.
-[The continuation is a constant](../changelog/2026-10-15-the-continuation-is-a-constant.md)
+2026-10-15 The continuation is a constant
 
 The transition field is named after the command it runs, and its value is
 that command's argument: `/clear` takes none, so it is a bool; `/compact`

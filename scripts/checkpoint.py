@@ -17,12 +17,13 @@ left at a legacy path is renamed or removed on the filesystem, and what the next
 commit owes git for it is printed, not run. At turn end the sentinel is taken by
 scripts/drive-take.sh and run by the drive mod.
 
-Port of checkpoint.sh — see docs/changelog/2026-08-10-python-split.md. The
-composer reads its own sentinel back through handoff_drive_read, which stays the
-single bash implementation of the sentinel grammar (still used by drive-take.sh,
-load-compact.sh, load-handoff.sh and report-drive-failure.sh) — so this shells
-out to it rather than reimplementing the grammar a second time, which is exactly
-the drift the single-parser design exists to prevent.
+Port of checkpoint.sh — see the changelog-archive tag's 2026-08-10 record,
+"checkpoint.sh and the watcher move to Python". The composer reads its own
+sentinel back through handoff_drive_read, which stays the single bash
+implementation of the sentinel grammar (still used by drive-take.sh, load-
+compact.sh, load-handoff.sh and report-drive-failure.sh) — so this shells out to
+it rather than reimplementing the grammar a second time, which is exactly the
+drift the single-parser design exists to prevent.
 """
 
 from __future__ import annotations

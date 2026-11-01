@@ -3,6 +3,9 @@
 Part of [handoff — Design](../design.md). The sentinel's states and the
 actors that move it are in [Driving the transition](driving-the-transition.md).
 
+The dated records named here are in the `changelog-archive` tag's
+`docs/changelog/`.
+
 The sentinel has five actors that nothing orders: the checkpoint and
 `handoff-approved` write it, `drive-take.sh` takes it at a turn's end, the
 prompt-time sweep discards it, and the two `SessionStart` loaders consume
@@ -125,5 +128,5 @@ second row per actor puts a link at the lock for the unavailable cause. They are
 in `tests/drive-take.bats`, `tests/sentinel-lock.bats`, `tests/bin-commands.bats`
 and `tests/test_checkpoint_readback.py`, and `tests/test_drive_lock.py` covers
 the lock itself.
-[The sentinel takes a lock](../changelog/2026-10-16-the-sentinel-takes-a-lock.md),
-[The lock fails closed](../changelog/2026-10-17-the-lock-fails-closed.md)
+2026-10-16 The sentinel takes a lock,
+2026-10-17 The lock fails closed

@@ -2,6 +2,9 @@
 
 Part of [handoff — Design](../design.md).
 
+The dated records named here are in the `changelog-archive` tag's
+`docs/changelog/`.
+
 ## The seam
 
 `TASK.md` and `TODO.md`, in the project root, are the durable side. Both are
@@ -38,8 +41,8 @@ ran counts as no body rather than injecting a file on its account. `load-handoff
 `No task frame`, `No todo`, or `No task frame or todo.` — because a loader
 that stays silent on an empty frame cannot be told apart from one that never
 ran.
-[A heading is not a leading `#`](../changelog/2026-09-14-a-heading-is-not-a-leading-hash.md),
-[TASK.md and TODO.md move to the root](../changelog/2026-10-11-task-and-todo-move-to-the-root.md)
+2026-09-14 A heading is not a leading `#`,
+2026-10-11 TASK.md and TODO.md move to the root
 
 The two files lived at `.claude/handoff-task.md` and `.claude/handoff-todo.md`
 before they moved to the root, and a repository that crossed the move still has
@@ -60,7 +63,7 @@ A todo read from a legacy path is told to be edited there until the checkpoint
 moves it, since a new `TODO.md` written first would shadow the list the session
 inherited. What a legacy file is, and when the bridge goes, is argued in
 [Design decisions](decisions.md).
-[Legacy paths are read, and the checkpoint moves them](../changelog/2026-10-11-legacy-paths-are-read-and-moved.md)
+2026-10-11 Legacy paths are read, and the checkpoint moves them
 
 ## One channel, one writer
 
@@ -114,9 +117,9 @@ touched, so every failure the payload and the files can raise leaves the disk
 as it was. A failure of the filesystem itself, found while a plan is applied,
 is the one thing resolution cannot see: it can follow the first half having
 been applied, as two writes in a row always could.
-[The payload names its actions](../changelog/2026-09-07-the-payload-names-its-actions.md),
-[Nothing is written until both halves resolve](../changelog/2026-09-13-nothing-is-written-until-both-halves-resolve.md),
-[The vocabulary is closed at both levels](../changelog/2026-09-14-the-vocabulary-is-closed-at-both-levels.md)
+2026-09-07 The payload names its actions,
+2026-09-13 Nothing is written until both halves resolve,
+2026-09-14 The vocabulary is closed at both levels
 
 It gets its root from `HANDOFF_ROOT`, injected into the command's
 environment by a `PreToolUse(Bash)` hook (`inject-checkpoint-root.sh`) that
@@ -131,7 +134,7 @@ value is used, replaces an earlier session-keyed pointer file sampled once at
 cwd, before the harness moves the session into its own project dir, so a
 sample taken there could stamp the wrong repo onto a pointer read later in
 the same session. See
-[`docs/changelog/2026-08-10-checkpoint-root-via-updatedinput.md`](../changelog/2026-08-10-checkpoint-root-via-updatedinput.md).
+2026-08-10 The checkpoint takes its root from the command, not a pointer.
 
 The checkpoint applies the writes, composes `.claude/autodrive` from the
 transition fields — creating `.claude/` when the project has none, the
@@ -161,7 +164,7 @@ legacy path that is a symlink to a file is refused during resolution, naming
 the field, since its relative target would dangle once moved. A dangling
 symlink is no legacy file. The legacy file is taken off its path after the root
 file is written, never before, so a failed write loses nothing.
-[Legacy paths are read, and the checkpoint moves them](../changelog/2026-10-11-legacy-paths-are-read-and-moved.md)
+2026-10-11 Legacy paths are read, and the checkpoint moves them
 
 What sits at a root name is checked during resolution, under every action,
 `keep` included, and with or without a legacy file: a symbolic link there is
@@ -176,7 +179,7 @@ removal unlinks the name itself. So a link put at the name between resolution
 and the write is replaced, not followed. The bound is the last component: a
 root reached through a symlinked directory is written where that directory
 lies, and the legacy paths are read through a symlinked `.claude/`.
-[Root files are not followed through symlinks](../changelog/2026-10-13-root-files-are-not-followed-through-symlinks.md)
+2026-10-13 Root files are not followed through symlinks
 
 It **changes no git state** — it queries git read-only and stops there: it
 runs in the agent's sandboxed Bash, where `git add` can leave
@@ -216,7 +219,7 @@ described the task in hand; the rest was a plan, a done-log, or working
 conventions, each of which has a home. The list rule is the cap's complement:
 a short task file that carries its steps as bullets is a todo list in the
 wrong file, and no length catches it.
-[The argument](decisions.md), [the measurements](../changelog/2026-10-11-task-and-todo-move-to-the-root.md)
+[The argument](decisions.md), 2026-10-11 TASK.md and TODO.md move to the root
 
 ## What is guarded
 
@@ -250,7 +253,7 @@ them is gone: [Driving the transition](driving-the-transition.md)): both did
 bash's worst work — structured data, not text streams — and both run once per
 boundary, never on a hot path, so the interpreter-startup tax lands where it
 is cheapest to pay. The hooks that fire on every tool call stay bash. See
-[`docs/changelog/2026-08-10-python-split.md`](../changelog/2026-08-10-python-split.md).
+2026-08-10 checkpoint.sh and the watcher move to Python.
 
 The port is four modules. `checkpoint.py` runs the call in order, reads the two
 environment values the payload cannot carry (`validate_root` for `HANDOFF_ROOT`,

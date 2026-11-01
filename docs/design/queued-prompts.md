@@ -3,6 +3,9 @@
 Part of [handoff — Design](../design.md). The sweep of a stale sentinel it
 refines is in [Driving the transition](driving-the-transition.md).
 
+The dated records named here are in the `changelog-archive` tag's
+`docs/changelog/`.
+
 A prompt submitted while the arming turn still runs, during a tool call or the
 final generation, fires `UserPromptSubmit` at once, inside that turn and before
 its `Stop` (Claude Code 2.1.301). The owner's prompt is therefore not proof
@@ -55,7 +58,7 @@ exist is the first of these, since nothing has ever written a marker there; the 
 `held`, `pending`, another session's file, a link, a malformed or unreadable
 one and the failure record are as before. Both markers are read through
 `handoff_read_marker` in `_lib_files.sh`.
-[A prompt queued into the arming turn](../changelog/2026-10-16-a-prompt-queued-into-the-arming-turn.md)
+2026-10-16 A prompt queued into the arming turn
 
 **Residual bounds.** That a queued prompt carries the arming turn's id is
 observed on one version, not documented; if it stops, a queued prompt is swept

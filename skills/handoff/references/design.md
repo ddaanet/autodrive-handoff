@@ -2,7 +2,7 @@
 
 Condensed rationale. Full design doc is <https://github.com/ddaanet/autodrive-handoff/blob/main/docs/design.md>; the
 dated write-time records of design changes up to 2026-10-31 are in
-<https://github.com/ddaanet/autodrive-handoff/tree/main/docs/changelog>.
+<https://github.com/ddaanet/autodrive-handoff/tree/changelog-archive/docs/changelog>.
 
 ## The residual
 
@@ -67,7 +67,7 @@ redundant second capture in the one register that does the harm. The
 per-session file list is likewise dropped: the honest working set is
 the harness's own `gitStatus` block at load time, current after the
 prior session's commits landed. See
-<https://github.com/ddaanet/autodrive-handoff/blob/main/docs/changelog/2026-07-17-task-frame-drops-transcript.md>.
+<https://github.com/ddaanet/autodrive-handoff/blob/changelog-archive/docs/changelog/2026-07-17-task-frame-drops-transcript.md>.
 
 ## Why markdown template, not JSON schema
 

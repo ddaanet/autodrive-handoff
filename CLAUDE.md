@@ -130,11 +130,11 @@ What you are touching → what to read first, under `docs/design/`:
 
 - `docs/design.md` — the design hub; `docs/design/` — one node per
   mechanism, read before making a claim about it.
-- `docs/changelog.md` — the index; `docs/changelog/` — a frozen archive of
-  the write-time records up to 2026-10-31. Later design history is `git log`.
 - `plans/` — specs, proposals, implementation plans and their reports.
 - `inbox/` — what arrives from a session in another repository.
-- The editing rules for all four: `.claude/rules/docs.md`.
+- Design history is `git log`; the records up to 2026-10-31 are in the
+  `changelog-archive` tag's `docs/changelog/`.
+- The editing rules for the three directories: `.claude/rules/docs.md`.
 
 ## Conventions
 

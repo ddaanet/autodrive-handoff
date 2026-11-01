@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Shared helpers for checkpoint.py and _checkpoint_plan.py.
 
-Port of _checkpoint-lib.sh — see docs/changelog/2026-08-10-python-split.md. Each
-directive function returns its directive text, or "" when silent; the caller
-decides whether to print it. `err` is the one exit for a schema or write-time
-error, shared by both callers. The emptiness rule is also reachable from bash
-through the --has-body CLI.
+Port of _checkpoint-lib.sh — see the changelog-archive tag's 2026-08-10 record,
+"checkpoint.sh and the watcher move to Python". Each directive function returns
+its directive text, or "" when silent; the caller decides whether to print it.
+`err` is the one exit for a schema or write-time error, shared by both callers.
+The emptiness rule is also reachable from bash through the --has-body CLI.
 """
 
 from __future__ import annotations

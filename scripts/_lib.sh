@@ -19,7 +19,7 @@ esac
 HANDOFF_REL_TASK="TASK.md"
 # The remainder ledger: open todo items only, never completion state. A plain
 # tracked file in the project root, like the task file beside it. See
-# docs/changelog/2026-07-22-a-place-for-the-todo-list.md.
+# the changelog-archive tag's 2026-07-22 record, "A place for the todo list".
 # shellcheck disable=SC2034
 HANDOFF_REL_TODO="TODO.md"
 

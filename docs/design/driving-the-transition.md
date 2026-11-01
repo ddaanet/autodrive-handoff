@@ -2,6 +2,9 @@
 
 Part of [handoff — Design](../design.md).
 
+The dated records named here are in the `changelog-archive` tag's
+`docs/changelog/`.
+
 A **driven transition** is a short sequence of commands and prompts that the
 plugin runs for the user once the turn that prepared it ends. The checkpoint
 composes the sequence into a sentinel; a Claude Code mod
@@ -28,7 +31,7 @@ not begin with `/` stays as the bound on a file written by anything else.
 `--resume` carries the conversation over whole, so nothing here has a frame or
 a continuation to add to it. `/autodrive-handoff:autoname` stays a skill; its checkpoint
 call composes a `rename` sentinel and rides the same drive.
-[The plugin becomes a mod](../changelog/2026-10-08-the-plugin-becomes-a-mod.md)
+2026-10-08 The plugin becomes a mod
 
 ## The sentinel
 
@@ -103,7 +106,7 @@ Both halves are forced by the host:
   prose submitted mid-turn would land in the running turn's next model call,
   which is the hazard that made the earlier tmux design wait for the pane to
   go idle. The drive starts only after the turn is over.
-  [Mid-turn input: the taxonomy](../changelog/2026-07-19-mid-turn-tui-input-taxonomy.md)
+  2026-07-19 Mid-turn TUI input: the taxonomy that shapes compaction driving
 
 The cwd and the session id are the `Stop` payload's, because `turn.complete`
 carries neither.
@@ -162,7 +165,7 @@ and the person's text was still in the box afterwards, through the fresh
 session and the compaction too. The check cost transitions instead: text
 stashed and then restored before the turn ended made the mod take the
 sentinel, toast that it would run, and run nothing.
-[A prompt queued into the arming turn](../changelog/2026-10-16-a-prompt-queued-into-the-arming-turn.md)
+2026-10-16 A prompt queued into the arming turn
 
 **A line that fails ends the sequence**, which is what makes a `/rename` that
 never lands under kind `clear` cost a wrong title and nothing more. The mod
@@ -217,7 +220,7 @@ file when its half came from it. `load-compact.sh` appends the fragments to its
 `todo re-injected` or `No todo`, so a compaction with no legacy file says what
 it always said. The bridge, and the condition that retires it, are argued in
 [Design decisions](decisions.md).
-[Legacy paths are read, and the checkpoint moves them](../changelog/2026-10-11-legacy-paths-are-read-and-moved.md)
+2026-10-11 Legacy paths are read, and the checkpoint moves them
 
 ## Reporting a failure, sweeping a stale sentinel
 

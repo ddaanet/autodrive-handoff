@@ -2,6 +2,9 @@
 
 Part of [handoff — Design](../design.md).
 
+The dated records named here are in the `changelog-archive` tag's
+`docs/changelog/`.
+
 ## What the checkpoint prints
 
 Both boundary skills end the same way: follow what the checkpoint printed,
@@ -69,8 +72,7 @@ the closing line, so the file and the printed ending cannot disagree.
 
 `autoname` prints nothing: it is not a boundary, owes no memory write, and
 has no procedure after the call.
-[The directive owns the
-procedure](../changelog/2026-09-18-the-directive-owns-the-procedure.md)
+2026-09-18 The directive owns the procedure
 
 ### Where in the turn a directive lands
 
@@ -174,7 +176,7 @@ that commit, which is why a sentinel that names a command still holds while the
 approval is owed (see "Held" above). The plugin needs a gitlore that ships
 `gitlore:commit`; it keeps no fallback for the file handshake that skill
 replaced.
-[Memory commits go through the skill](../changelog/2026-10-30-memory-commits-go-through-the-skill.md)
+2026-10-30 Memory commits go through the skill
 
 `ledger_path` is the one-row registry of foreign workflow-owned
 progress ledgers (currently superpowers SDD). It detects **liveness**, not

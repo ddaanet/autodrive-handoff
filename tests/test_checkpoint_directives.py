@@ -164,11 +164,11 @@ def test_without_commit_prints_no_commit_act(
 def test_commit_act_is_the_exact_no_git_verb_sentence(tmp_path: Path) -> None:
     """Pin the exact sentence rather than blacklisting verb spellings.
 
-    A reword naming a verb another way ("stage and commit", "`git ci`") passes
-    a substring blacklist; the design record quotes this sentence verbatim
-    (docs/changelog/2026-09-18-the-directive-owns-the-procedure.md). Memory
-    clean, no legacy file, nothing to continue: the act and the closing line are
-    all there is, so the whole stdout is pinned.
+    A reword naming a verb another way ("stage and commit", "`git ci`") passes a
+    substring blacklist; the design record quotes this sentence verbatim (the
+    changelog-archive tag's 2026-09-18 record, "The directive owns the
+    procedure"). Memory clean, no legacy file, nothing to continue: the act and
+    the closing line are all there is, so the whole stdout is pinned.
     """
     repo = make_gitlore_repo(tmp_path)
     result = run_checkpoint(repo, precompact_payload("with-commit"))

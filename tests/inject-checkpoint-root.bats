@@ -5,7 +5,7 @@ source "$BATS_TEST_DIRNAME/checkpoint-helpers.bash"
 # Tests for scripts/inject-checkpoint-root.sh (PreToolUse(Bash) root injection)
 # and the prompt marker it writes, one of the bash-side neighbors of the
 # checkpoint channel that stayed bash in the Python split
-# (docs/changelog/2026-08-10-python-split.md). The helpers it shares with
+# (the changelog-archive tag's 2026-08-10 record, "checkpoint.sh and the watcher move to Python"). The helpers it shares with
 # tests/validate-plugin.bats and tests/bin-commands.bats are in
 # tests/checkpoint-helpers.bash.
 #

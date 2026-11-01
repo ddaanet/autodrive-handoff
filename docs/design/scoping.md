@@ -2,6 +2,9 @@
 
 Part of [handoff — Design](../design.md).
 
+The dated records named here are in the `changelog-archive` tag's
+`docs/changelog/`.
+
 Every cwd-scoped hook anchors on `handoff_root_read()` — the enclosing linked
 git-worktree root derived from on-disk `.git` linkage
 (`scripts/worktree_root.py`), falling back to `CLAUDE_PROJECT_DIR` — never
@@ -84,7 +87,7 @@ moment the cwd does not yet belong to the session —
 harness moves the session into its own project dir — so it could stamp a
 stale or wrong repo onto a pointer a live session then read for its whole
 remaining lifetime. Resolving per call has no such moment. See
-[`docs/changelog/2026-08-10-checkpoint-root-via-updatedinput.md`](../changelog/2026-08-10-checkpoint-root-via-updatedinput.md).
+2026-08-10 The checkpoint takes its root from the command, not a pointer.
 
 The same matching path has a second effect. Once the root resolves and the
 input carries a `session_id` and a `prompt_id`, the hook records the id of the

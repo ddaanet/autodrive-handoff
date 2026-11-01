@@ -2,6 +2,9 @@
 
 Part of [handoff — Design](../design.md).
 
+The dated records named here are in the `changelog-archive` tag's
+`docs/changelog/`.
+
 **Extraction is deterministic; judgment is the agent's.** The plugin
 captures the two fields `/compact`, Session Memory, and training cannot
 supply. It does not add a third summarisation layer.
@@ -16,8 +19,8 @@ without. The sentinel is the different case and keeps its guard: its state is
 content, a wrong one is writable, and its lines are run as commands.
 The todo file stays a ledger the agent maintains all session, never
 regenerated from a paraphrase.
-[One channel, one writer](../changelog/2026-07-27-one-channel-one-writer.md),
-[TASK.md and TODO.md move to the root](../changelog/2026-10-11-task-and-todo-move-to-the-root.md)
+2026-07-27 One channel, one writer,
+2026-10-11 TASK.md and TODO.md move to the root
 
 **Both files are tracked, and for the same reason.** `## Current task` and
 `## Remaining` are two sections of one snapshot, and tracking one while
@@ -27,9 +30,8 @@ the ordinary way, in the project root: a pending-work list is a `TODO.md`
 like any other, and a project that already has one shares it. Nothing stages
 them, so the commit that follows a checkpoint carries them because the commit
 act names them, and a release refuses while either is dirty.
-[Overflow deserves the same
-persistence](../changelog/2026-07-23-overflow-deserves-persistence.md),
-[TASK.md and TODO.md move to the root](../changelog/2026-10-11-task-and-todo-move-to-the-root.md)
+2026-07-23 Overflow deserves the same persistence,
+2026-10-11 TASK.md and TODO.md move to the root
 
 **The task is bounded, and the bound is set from the residual.** The template
 asked for a task of "usually one sentence" and measured task files had a
@@ -43,7 +45,7 @@ is the first round number above it. A cap fitted to how often raw files
 exceed it would have measured the symptom, and the figure moved by a factor
 of three with the choice of sample. **Reopen if** the residual moves: the
 method and its scripts are in the plan's `reports/overflow/`.
-[TASK.md and TODO.md move to the root](../changelog/2026-10-11-task-and-todo-move-to-the-root.md)
+2026-10-11 TASK.md and TODO.md move to the root
 
 **The old paths are read and moved, and the bridge retires by a condition.**
 A repository that crossed the move to the root keeps its frame under
@@ -65,7 +67,7 @@ with no version in code, docs or tests, and `grep -rni legacy scripts/ tests/`
 starts the one deletion pass. **Reopen if** the condition is not what ends it:
 a repository that keeps a shadowed legacy file is told so at every start, by
 design.
-[Legacy paths are read, and the checkpoint moves them](../changelog/2026-10-11-legacy-paths-are-read-and-moved.md)
+2026-10-11 Legacy paths are read, and the checkpoint moves them
 
 **The compact boundary carries no task.** A compaction produces its own
 account of the task, the summary, and a snapshot written just before it is a
@@ -75,9 +77,8 @@ re-injected at the next session start after the work has moved on. So
 — a commit range, a checklist — goes in the todo file or in the `compact`
 focus directive, which is what the task file was standing in for when the
 todo file did not exist.
-[One task file, two
-transitions](../changelog/2026-07-20-one-task-file-two-transitions.md),
-[TASK.md and TODO.md move to the root](../changelog/2026-10-11-task-and-todo-move-to-the-root.md)
+2026-07-20 One task file, two transitions,
+2026-10-11 TASK.md and TODO.md move to the root
 
 **Commit/push status never appears in either file.** The routine wrap-up is
 `/handoff` then `/commit`, so any bookkeeping written at handoff time is
@@ -86,14 +87,12 @@ stale. This is a content problem, fixed at the template level — the template
 has no slot for it — not a remembered prohibition. The legitimate case
 ("changed X but not committed because tests are red") is an open decision,
 stated as the *why*.
-[Commit status excluded from the task
-frame](../changelog/2026-06-24-commit-status-excluded.md)
+2026-06-24 Commit status excluded from the task frame
 
 **The frame carries no transcript.** Verbatim prior exchanges arrive in
 conversational grammar and are read as memory, not as a report; the hazard
 scales with volume, and trimming changes length, not register.
-[Task frame drops the transcript and file
-list](../changelog/2026-07-17-task-frame-drops-transcript.md)
+2026-07-17 Task frame drops the transcript and file list
 
 **The agent supplies one fact; the code owns the branch.** The argument is in [The checkpoint directive](the-checkpoint-directive.md#decisions).
 
@@ -118,8 +117,7 @@ Detection that would need a transcript scrape — activation, commit intent, the
 todo list — is either asked of the agent or not asked at all, because keying
 on tool names in JSONL is a maintenance trap the harness has already sprung
 once.
-[The mechanical principle is narrowed; a reviewer waits for a
-measurement](../changelog/2026-10-15-the-mechanical-principle-is-narrowed.md)
+2026-10-15 The mechanical principle is narrowed; a reviewer waits for a measurement
 
 **The armed transition is one file whose body names the transition.** One
 session, at most one transition in flight — so the invariant needs somewhere
@@ -130,7 +128,7 @@ sweep. Two arm steps would then race whenever both files existed, and nothing
 anywhere represented the fact that they could not both be armed. Moving the
 kind into the body makes the invariant structural, and collapses three drivers
 into one.
-[Driven transitions](../changelog/2026-07-29-driven-transitions.md)
+2026-07-29 Driven transitions
 
 **The transition carries its own state.** There is exactly one transition in
 flight at a time, and two filenames were one object at two points in its
@@ -144,8 +142,7 @@ four new gates. The state being content rather than a name also makes a
 wrong one writable, which is why the file's writers are a closed set: the
 checkpoint composes it, `handoff_drive_arm` rewrites only its state line, and
 a direct agent Write or Edit is denied outright.
-[One transition, one file, explicit
-state](../changelog/2026-08-03-one-transition-one-file.md)
+2026-08-03 One transition, one file, explicit state
 
 **The continuation is a constant; the agent authors no prompt.** What follows
 a driven transition is a yes-or-no field, and `true` makes the composer write
@@ -156,8 +153,7 @@ session needs is in `TASK.md` or `TODO.md`, or it is gone, and `true` is
 refused when neither would have a body. At a compact the summary and the
 agent-written focus directive carry too. The skills no longer argue what a
 prompt may carry, because the schema leaves nothing to argue.
-[The continuation is a
-constant](../changelog/2026-10-15-the-continuation-is-a-constant.md)
+2026-10-15 The continuation is a constant
 
 **A sentinel names its owner, and only the owner judges it stale.** The
 owner rides on line 1 of `armed` and `held`; the argument is in [Sessions
@@ -171,7 +167,7 @@ carry it across a `/compact`. The cancel tells the agent to answer and run the
 skill again, so the files catch up first. The turn's `prompt_id` is recorded
 at the checkpoint call rather than at every prompt, which would fork on each
 one. [A prompt queued into the arming turn](queued-prompts.md),
-[the change](../changelog/2026-10-16-a-prompt-queued-into-the-arming-turn.md)
+2026-10-16 A prompt queued into the arming turn
 
 **The sentinel's actors hold a lock across each read-decide-write.** The host
 does not order a prompt's sweep against the mod's take, and a sweep that read
@@ -181,7 +177,7 @@ each actor's decision and write one step, with a bounded wait that fails open,
 since a hook that waits for ever is worse than the race. The lock orders the
 actors and not the arrival of a prompt: which outcome wins is still decided by
 arrival order. [The sentinel's lock](sentinel-lock.md),
-[the change](../changelog/2026-10-16-the-sentinel-takes-a-lock.md)
+2026-10-16 The sentinel takes a lock
 
 **Observability is not gated on the happy path.** A clean run says nothing
 about whether a dirty one would be noticed, and the failing run is exactly
@@ -191,8 +187,7 @@ writes a reason to a file, and the next prompt reports it. Nothing is inferred
 from state that is legitimately present (a file in state `pending` during the
 whole window between the take and the transition): a false-positive-free
 signal is worth the tail of failures that never reach it.
-[A detached watcher's failure has to become a
-file](../changelog/2026-07-20-watcher-failure-becomes-a-file.md)
+2026-07-20 A detached watcher's failure has to become a file
 
 **The drive runs inline at `turn.complete`, never from `Stop`.** The host
 refuses `$.command.run` from a call context the turn is waiting on, and a
@@ -202,7 +197,7 @@ cwd, which keeps the guarantee that an interrupt arms nothing, and the drive
 awaits each command in the first handler the host allows. The sentinel is read
 by `drive-take.sh` and by nothing in the mod: one parser, and the atomic state
 change is a file operation the mods API does not offer.
-[The plugin becomes a mod](../changelog/2026-10-08-the-plugin-becomes-a-mod.md),
+2026-10-08 The plugin becomes a mod,
 [the mechanism](driving-the-transition.md)
 
 **A foreign tool's state file is detected by liveness, not presence.**
@@ -210,8 +205,7 @@ Layouts move and the old path becomes a declared stray; abandoned files are
 never cleaned up. Presence alone false-positives, and the harm is a directive
 naming another plan's file as this session's ledger. Detection is read-only
 and fails open.
-[An orphaned ledger hijacks the
-handoff](../changelog/2026-07-26-orphaned-ledger.md)
+2026-07-26 An orphaned ledger hijacks the handoff
 
 **A foreign ledger scopes the todo file; it does not replace it.** An SDD
 ledger holds the tasks of one plan and is deleted with it. `TODO.md`
@@ -220,8 +214,7 @@ often to another repository. Only their overlap — the plan's own tasks,
 copied across — can drift, so only the overlap is excluded. Standing the
 whole file down discards every item no ledger will ever carry, in the one
 direction a `/clear` cannot recover.
-[The ledger and the todo file are different
-scopes](../changelog/2026-08-08-ledger-and-todo-are-different-scopes.md)
+2026-08-08 The ledger and the todo file are different scopes
 
 **The design names no todo tool.** The harness's task-list family is behind
 a server-side killswitch and has already changed generations once; an
@@ -229,7 +222,7 @@ affordance that can vanish between two sessions on the same binary cannot be
 a dependency. The file is the ledger, whatever tracker is live is a cache,
 and the cache may legitimately hold more (identity, ordering, per-item
 history) because that surplus is boundary-local.
-[A place for the todo list](../changelog/2026-07-22-a-place-for-the-todo-list.md)
+2026-07-22 A place for the todo list
 
 **With nothing to approve, the wrap-up completes in a single turn.** The argument is in [The checkpoint directive](the-checkpoint-directive.md#decisions).
 
@@ -239,11 +232,9 @@ session's prompt crossed a fixed threshold, injecting a directive naming
 prompt that was already large for legitimate reasons, and once right after a
 driven compaction against a context the boundary had just shrunk. Sometimes
 followed, sometimes ignored — the net was more trouble than the nudge earned.
-[Nudge the boundary at a context-size
-threshold](../changelog/2026-08-01-context-threshold-trigger.md),
-[A compaction invalidates every sample above
-it](../changelog/2026-08-09-samples-are-scoped-to-the-compaction.md), and
-[the removal](../changelog/2026-08-10-drop-context-threshold-nudge.md).
+2026-08-01 Nudge the boundary at a context-size threshold,
+2026-08-09 A compaction invalidates every sample above it, and
+2026-08-10 Drop the context-size nudge.
 
 **Between deciding and the checkpoint, no tool call.** `handoff` decides
 from the conversation already in context — the agent already holds
