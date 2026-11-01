@@ -5,9 +5,9 @@ in checkpoint.py, _checkpoint_payload.py, _checkpoint_plan.py and
 _checkpoint_lib.py. They are the port of the checkpoint.sh-specific rows of the
 bash tests — see the changelog-archive tag's 2026-08-10 record, "checkpoint.sh
 and the watcher move to Python". The bash side (inject-checkpoint-root.sh,
-bin/handoff-approved and the bin/handoff-checkpoint shim) stays tested in
-tests/inject-checkpoint-root.bats and tests/bin- commands.bats; the Python files
-cover only checkpoint.py's own behavior.
+bin/handoff-approved and the bin/handoff-checkpoint shim) stays tested in two
+bats files, tests/inject-checkpoint-root.bats and tests/bin-commands.bats; the
+Python files cover only checkpoint.py's own behavior.
 
 What is here is what two or more of those files use: the repository builders,
 the payload builders, the `run_checkpoint` runner. A helper only one file uses
