@@ -25,7 +25,7 @@ read of the files reference are the only tool calls allowed before
 
 ### Step 2: Decide, then checkpoint
 
-Read `references/files.md`, beside this skill, before drafting: the task and
+Read `references/files.md`, beside this skill, before deciding: the task and
 todo templates, their rules, and the seam between the files and the
 continuation. It ships with the plugin, so it cannot go stale.
 

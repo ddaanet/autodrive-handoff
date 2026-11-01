@@ -12,9 +12,8 @@ Behaviour lives in `docs/design/the-skills.md`; read it first.
 - The markdown templates of `TASK.md` and `TODO.md`, and the seam between
   what the files carry and the fixed continuation, live only in
   `skills/handoff/references/files.md`. Both boundary skills read it, and
-  neither `SKILL.md` nor either loader restates them: each file carries its
-  own `##` headings and is inlined verbatim under the one `#` header the
-  frame prepends.
+  neither loader restates them: each file carries its own `##` headings and
+  is inlined verbatim under the one `#` header the frame prepends.
 - A skill states none of what the checkpoint prints (the memory directive,
   the commit act, the `handoff-approved` instruction, the closing line): it
   follows the printed text. The check is that
