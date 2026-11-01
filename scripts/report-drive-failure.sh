@@ -247,9 +247,9 @@ if [[ "$drive_state" == "armed" && "$drive_owner" == "$session_id" \
     fi
 fi
 
-# The sweep names the states it removes rather than taking anything that is not
-# `pending`: `held` is exempt whoever owns it, and another session's live `armed`
-# file is `foreign`, not this session's to take (docs/design/driving-the-transition.md,
+# The sweep lists the states it keeps and removes every other one, rather than
+# keeping only `pending`: `held` is exempt whoever owns it, and another session's
+# live `armed` file is `foreign`, not this session's to take (docs/design/driving-the-transition.md,
 # docs/design/sessions-sharing-a-root.md).
 armed_lines=""   # the armed lines, for the user to type in order
 if [[ "$drive_state" == "locked" ]]; then

@@ -224,8 +224,9 @@ it always said. The bridge, and the condition that retires it, are argued in
 A rejected line has no turn left to speak in, so the mod's report is the
 `autodrive.failed` file and `report-drive-failure.sh`, which reads it at the
 next `UserPromptSubmit` — the first moment anything can act on the news — and
-reports on both channels. The mod writes the record only on a rejection it
-observed itself. A failure part-way through a sequence strands the
+reports on both channels. The mod writes the record only on what it observed
+itself: a rejected line, or a turn end that carried no session id, which is
+recorded like one. A failure part-way through a sequence strands the
 sentinel in `pending`, because the confirming `SessionStart` never fires; the
 same hook clears it with the report. Nothing is inferred from a file merely
 being `pending`, which is the legitimate state for the whole window between
