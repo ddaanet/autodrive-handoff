@@ -1,13 +1,14 @@
 #!/usr/bin/env bats
 # shellcheck source-path=SCRIPTDIR source=checkpoint-helpers.bash
 source "$BATS_TEST_DIRNAME/checkpoint-helpers.bash"
+# shellcheck source-path=SCRIPTDIR source=shared-helpers.bash
+source "$BATS_TEST_DIRNAME/shared-helpers.bash"
 
 # Tests for scripts/inject-checkpoint-root.sh (PreToolUse(Bash) root injection)
 # and the prompt marker it writes, one of the bash-side neighbors of the
-# checkpoint channel that stayed bash in the Python split
-# (the changelog-archive tag's 2026-08-10 record, "checkpoint.sh and the watcher move to Python"). The helpers it shares with
-# tests/validate-plugin.bats and tests/bin-commands.bats are in
-# tests/checkpoint-helpers.bash.
+# checkpoint channel that stayed bash in the Python split.
+# The helpers it shares with tests/validate-plugin.bats and
+# tests/bin-commands.bats are in tests/checkpoint-helpers.bash.
 #
 # Run with: bats tests/inject-checkpoint-root.bats   (from plugin root)
 
@@ -144,11 +145,6 @@ run_inject_root_ids() {
            + (if \$pid == \"-\" then {} else {prompt_id:\$pid} end)" \
         | bash "$5"
     ' _ "$repo" "$command" "$3" "$4" "$INJECT_ROOT"
-}
-
-# <prompt_id> [<path>] — the marker holds the id and its NUL, exactly.
-marker_holds() {
-    cmp -s "${2-$HANDOFF_POINTER_DIR/$prompt_marker}" <(printf '%s\0' "$1")
 }
 
 @test "inject-checkpoint-root: a handoff-checkpoint call leaves the prompt_id, NUL-terminated, in a private directory" {

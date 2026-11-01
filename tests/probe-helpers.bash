@@ -3,8 +3,7 @@
 # one row left there that needs a gitlore-managed repo with dirty memory.
 # checkpoint.py's own memory-directive tests (schema, composition, ledger
 # liveness) moved to tests/test_checkpoint_*.py, which share their own Python
-# equivalents of these builders through tests/conftest.py — see
-# the changelog-archive tag's 2026-08-10 record, "checkpoint.sh and the watcher move to Python".
+# equivalents of these builders through tests/conftest.py.
 
 # git without its repository-local variables (`git rev-parse --local-env-vars`,
 # a superset of GIT_DIR, GIT_INDEX_FILE and GIT_WORK_TREE). Gitlore's

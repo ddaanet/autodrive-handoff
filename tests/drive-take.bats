@@ -15,19 +15,11 @@ setup() {
     mkdir -p "$tmp/.claude"
     export CLAUDE_PROJECT_DIR="$tmp"
     load lock-helpers
+    load shared-helpers
 
     # The composer's one definition, so no row retypes the continuation line.
     CONTINUATION="$(python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); from checkpoint import CONTINUATION; print(CONTINUATION)' "$repo_root/scripts")"
     [ -n "$CONTINUATION" ]
-}
-
-# Linked-worktree layout, as in hook-helpers.bash: .git is a file pointing under
-# the project's .git/worktrees. Echoes the worktree path.
-make_worktree() {
-    local name="$1" wt="$BATS_TEST_TMPDIR/$1"
-    mkdir -p "$wt/.claude" "$tmp/.git/worktrees/$name"
-    printf 'gitdir: %s\n' "$tmp/.git/worktrees/$name" > "$wt/.git"
-    printf '%s\n' "$wt"
 }
 
 # seed_state <dir> <state-line> <lines...>

@@ -3,7 +3,8 @@
 # teardown, and the helpers two or more of them call. A helper only one file
 # calls stays in that file. Each of those files `source`s this one, under a
 # `# shellcheck source-path=SCRIPTDIR source=hook-helpers.bash` line, so shellcheck
-# follows it.
+# follows it. It sources shared-helpers.bash, which carries the helpers these
+# files share with the checkpoint-helpers ones.
 #
 # End-to-end test of the hook scripts against synthetic input. Each scenario
 # is a real invocation of the hook with a hand-crafted tool-event payload.
@@ -12,6 +13,9 @@
 # Usage: bats tests/<file>.bats   (run from plugin root)
 
 # shellcheck disable=SC2034   # read by the rows of the files that source this one
+# shellcheck source-path=SCRIPTDIR source=shared-helpers.bash
+source "$BATS_TEST_DIRNAME/shared-helpers.bash"
+
 setup() {
     repo_root="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
     cd "$repo_root" || return 1
@@ -46,17 +50,6 @@ TASK
 # a leftover mode would only make that harder to debug.
 teardown() {
     chmod -R u+rwX "$BATS_TEST_TMPDIR" 2>/dev/null || true
-}
-
-# Build a fake linked git worktree of $tmp under $BATS_TEST_TMPDIR/$name and
-# echo its path. Its .git is a *file* pointing under $tmp/.git/worktrees/$name,
-# mirroring real git worktree layout. $tmp is CLAUDE_PROJECT_DIR (set in setup).
-make_worktree() {
-    local name="${1:-wt}"
-    local wt="$BATS_TEST_TMPDIR/$name"
-    mkdir -p "$wt/.claude" "$tmp/.git/worktrees/$name"
-    printf 'gitdir: %s\n' "$tmp/.git/worktrees/$name" > "$wt/.git"
-    printf '%s\n' "$wt"
 }
 
 # <text> <expected> — text is one header line followed by exactly the expected
@@ -184,11 +177,6 @@ make_pointer_dir() {
 seed_prompt_marker() {
     make_pointer_dir
     printf '%s\0' "$1" > "$HANDOFF_POINTER_DIR/$prompt_marker"
-}
-
-# <prompt_id> [<path>] — the marker holds the id and its NUL, exactly.
-marker_holds() {
-    cmp -s "${2-$HANDOFF_POINTER_DIR/$prompt_marker}" <(printf '%s\0' "$1")
 }
 
 # <kind> — an armed file owned by this session, and in LINES the block the

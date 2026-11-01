@@ -6,11 +6,10 @@ source "$BATS_TEST_DIRNAME/checkpoint-helpers.bash"
 
 # Tests for bin/handoff-approved (the one command that leaves a `held`
 # sentinel) and bin/handoff-checkpoint (the shim), two of the bash-side
-# neighbors of the checkpoint channel that stayed bash in the Python split
-# (the changelog-archive tag's 2026-08-10 record, "checkpoint.sh and the watcher move to Python"). The harness row, which checks
-# make_repo and make_gitlore_repo, is here because the shim row is where
-# make_gitlore_repo is used. The helpers shared with
-# tests/validate-plugin.bats and tests/inject-checkpoint-root.bats are in
+# neighbors of the checkpoint channel that stayed bash in the Python split.
+# The harness row, which checks make_repo and make_gitlore_repo, is here
+# because the shim row is where make_gitlore_repo is used. The helpers shared
+# with tests/validate-plugin.bats and tests/inject-checkpoint-root.bats are in
 # tests/checkpoint-helpers.bash.
 #
 # Run with: bats tests/bin-commands.bats   (from plugin root)
