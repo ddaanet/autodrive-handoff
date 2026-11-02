@@ -72,9 +72,9 @@ Proposed:
 ```markdown
 - **No commit, push or release status** ("the work is uncommitted", "nothing
   pushed", "ready to commit", "release is a separate request"): the line is
-  false after the next commit, and `gitStatus` at load time shows the tree. If
-  it matters, what matters is *why* (tests red, decision pending): write that
-  as an open decision in the todo.
+  false after the next commit. If uncommitted work matters, what matters is
+  *why* (tests red, decision pending): write that as an open decision in the
+  todo.
 ```
 
 ## What is not changed
