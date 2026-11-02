@@ -22,6 +22,8 @@
 // failed; with a `note` it cancelled the transition, without it is the plan of
 // a rename it took (docs/design/queued-prompts.md). A later turn's Stop can
 // open the next window before this drive ends, so a drive touches only its own.
+// A Stop another plugin's hook blocked leaves the window open while the turn
+// goes on, and the next Stop replaces it (a bound, in the same node).
 type Window = { cwd: string; session: string; asked: Promise<any | null> | null }
 let stopped: Window | null = null
 let driving: Window | null = null

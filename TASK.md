@@ -1,3 +1,0 @@
-## Current task
-
-Patch release of `dev` held after the release reviews: my human partner rejected `skills/handoff/references/files.md`, because a reference read on every call circumvents the `SKILL.md` size cap and adds a call to the normal path of both boundary skills. They approved undoing it, and applying `craft:directive-writing` and `plugin-craft:skill-authoring` to the skills, in this fresh session. Next action: load those two skills, then do the rework as the first release item in `TODO.md` says. A plain merge of the reference back comes to about 11.2 KB against the 10000-byte cap, so deduplication has to remove about 1.2 KB; if it falls short, stop and report rather than shave prose.

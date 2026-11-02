@@ -96,8 +96,9 @@ is cancelled with a note; this one should end the same way.
 **The window.** The mod's `prompt.submit` hook runs at Enter, ahead of
 `UserPromptSubmit`, and the mod can call `$.process.run` and add to `e.context`
 there. The window is open from `classic.Stop` to the moment the drive issues the
-transition command: the turn is over and the transition has not begun. A prompt
-outside it, mid-turn or with no recorded `Stop`, is not the mod's: it passes
+transition command: the turn is over and the transition has not begun, unless
+another plugin's `Stop` hook blocked and the turn goes on (Bounds). A prompt
+with no recorded `Stop` is not the mod's: it passes
 untouched, as does a slash command or a meta prompt. The mod's own
 continuation usually arrives after the window has closed. When a later `Stop`
 is still unconsumed as it arrives, the continuation opens that later window
@@ -154,6 +155,13 @@ cancelled.
 
 **Bounds.**
 
+- A `Stop` another plugin's hook blocks fires with no `turn.complete` after it,
+  so the window stays open through the continued turn, and a prompt there is
+  handled as in the window. A `clear` or `compact` is cancelled, as a queued
+  prompt's is. An `armed` `rename` is taken, and the turn's next `Stop` opens a
+  new window that does not hold the plan, so the title is lost with no message
+  (observed once on 2.1.316). This is left as it is: it takes a blocking `Stop`
+  hook, a rename-only sentinel and a prompt in that turn, and it costs one title.
 - `pending` has no owner ([Sessions sharing a root](sessions-sharing-a-root.md)),
   so `drive-cancel.sh` cannot tell whose it is. The cancel relies on the mod
   calling it only inside its own window, in which the file is the session's.
