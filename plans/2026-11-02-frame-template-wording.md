@@ -54,8 +54,7 @@ The fresh session reads both files, so nothing is lost across the boundary.
 
 About one frame in ten states pending commit or push status under the named
 prohibition. Most of the cases read as work whose state matters because a person
-must act on it, so this names the push form and where the tree shows, and adds
-no new home for them. A push awaiting someone's call is left uncovered, because
+must act on it, so this names the push form and adds no new home for them. A push awaiting someone's call is left uncovered, because
 the todo rule forbids that item.
 
 Now:
