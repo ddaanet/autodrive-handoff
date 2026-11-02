@@ -1,6 +1,6 @@
 ## Open decisions
 
-- Handoff frame gate, per `plans/reports/2026-11-02-handoff-frame-adherence-remeasure.md` §5: 88 `TASK.md` versions since 0.16.1 show done-logs at 26 to 42%, plans at 11 to 58%, depending on the reader, with FR13 itself holding at zero faults. Choice: no gate and a template change for the "next concrete action" slot and commit status (the default), no change at all, or a gate. If a gate, the shape is a prompt-type `PreToolUse` hook on the checkpoint call with `continueOnBlock`, judging `task` alone on a Sonnet-class model, scored offline before it may refuse; unverified there: timeout behaviour, whether the `if` filter parses a heredoc, any input size limit.
+- Whether to apply `plans/2026-11-02-frame-template-wording.md` as written: default yes. My human partner chose no refusing gate and a template change, on `plans/reports/2026-11-02-handoff-frame-adherence-remeasure.md` §5. Should a gate be wanted later, its shape and unverified points are in `plans/reports/2026-10-12-handoff-frame-adherence.md` §7 and `docs/design/rejected-alternatives.md`.
 
 ## Remaining
 

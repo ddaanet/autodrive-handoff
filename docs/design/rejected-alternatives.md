@@ -243,23 +243,22 @@ history of bugs (anthropics/claude-code#764, anthropics/claude-code#10522).
 
 **A reviewer agent for the handoff task, or for memory destinations, for now**
 — rejected on measurements, so each reading reopens on a number. For the
-handoff frame, the rates measured over 612 task versions are the rates before
-FR13, not its residual. The best estimate of what FR13 leaves is 26 to 28% per
-class among frames that already fit, and it assumes agents relocate a refused
-frame's content rather than compress it. The reviewer's own error is large: a
-Haiku reader disagreed with the hand reading on 20 to 28% of versions per
-class and with itself on 12% of sentences between runs, so a blocking check
-that wrong refuses about one compliant frame in four, and no Sonnet reading
-exists. After FR13 a miss is at most 1000 characters of redundant text per
+handoff frame, the re-measurement
+(`plans/reports/2026-11-02-handoff-frame-adherence-remeasure.md`, 88 task
+versions under 0.16.1 or later) finds FR13 at zero faults and a residual of
+done-logs in 26 to 42% of versions and plans in 11 to 58%, depending on the
+reader; the content did not move to `TODO.md`. The reviewer's own error is the
+size of the rate: a Haiku sentence reader and a Sonnet whole-frame reader agree
+on 47 to 80% of versions per class, Sonnet and a hand reading on 85 to 95% of
+20. After FR13 a miss is at most 1000 characters of redundant text per
 session start, plus a convention that reaches no approval gate; the history
-shows no session acting on a bad frame. It reopens at 100 task versions written
-under 0.16.1 or later across at least five repositories, re-measured with the
-report's scripts. If that residual warrants a gate, the shape the data support
+shows no session acting on a bad frame. The report recommends no refusing
+gate and names no further threshold. Should a gate be wanted, the shape the data support
 is narrow: a prompt-type `PreToolUse` hook on the `handoff-checkpoint` call
 with `continueOnBlock` (the default deny ends the turn, against the
 single-turn wrap-up), judging `task` alone, on a Sonnet-class model, scored
-offline against the labelled versions first so its false-refusal rate is a
-number before it can refuse anything. Not verified: timeout behaviour, whether
+offline first (313 of the 441 labelled versions resolve today) so its
+false-refusal rate is a number before it can refuse anything. Not verified: timeout behaviour, whether
 the `if` filter parses a heredoc command, any limit on the input size.
 
 For memory destinations, a blind reviewer's yield was concentrated in one
