@@ -150,8 +150,9 @@ tests also consume:
   constraint that failed, so the complaint does not repeat each turn.
 
 The mod skips the spawn on the every-turn path: when the recorded cwd is the
-session's project root and `.claude/autodrive` does not exist, it returns
-without running the script. A worktree or subdirectory cwd falls through,
+session's project root and `.claude/autodrive` does not exist, it skips the
+take, though not the answer of a [prompt in the window](queued-prompts.md#a-prompt-after-stop),
+which may be a rename to run. A worktree or subdirectory cwd falls through,
 because the script owns root resolution.
 
 ## Running the plan
@@ -281,7 +282,7 @@ The sweep and the take can interleave: the host does not order a new prompt's
 `UserPromptSubmit` against the mod's `turn.complete`, which runs the take, so
 a sweep that read `armed` could delete the `pending` file the take had just
 armed. Every actor of the sentinel, the checkpoint, `handoff-approved`,
-`drive-take.sh`, the sweep and the two loaders, holds an advisory lock
+`drive-take.sh`, `drive-cancel.sh`, the sweep and the two loaders, holds an advisory lock
 (`.claude/autodrive.lock`) across its read-decide-write, with a bounded wait
 that fails closed: an actor that cannot take it leaves the sentinel as it is
 and says so. The mechanism, its bounds and what each actor does are in [The
@@ -294,8 +295,8 @@ Three layers, because the mod's own seams are each reachable only one way:
 - `tests/drive-take.bats` runs the real script over real sentinel files and
   asserts stdout equals the fixtures in `tests/mod/fixtures/`, plus each state
   gate and the worktree-scoped paths.
-- `tests/mod/handoff.test.ts`, run by `claude plugin test`, stubs every mods
-  API call the mod makes and asserts the exact call sequence: the deferral to
+- `tests/mod/handoff.test.ts` and `window.test.ts`, run by `claude plugin test`,
+  stub every mods API call the mod makes and assert the exact call sequence: the deferral to
   `turn.complete`, stop-on-first-failure with the `failFile` write, the
   absence of any prompt-box read, the no-op on empty stdout and on an aborted
   turn. It consumes

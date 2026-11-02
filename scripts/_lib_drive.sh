@@ -102,8 +102,8 @@ _handoff_drive_prose() {
 # the checkpoint composes this file from carries them as separate fields.
 #
 # The state is reported, never interpreted: which state a caller wants is the
-# caller's business, and the parser serves drive-take.sh, both loaders and the
-# UserPromptSubmit sweep with one answer.
+# caller's business, and the parser serves drive-take.sh, drive-cancel.sh, both
+# loaders and the UserPromptSubmit sweep with one answer.
 #
 # The lines are literal: the mod runs a `/x args` line as that command and the
 # rest as a prompt, and must not know which command any
@@ -261,11 +261,11 @@ handoff_drive_has_source() {
 # whichever session it opened.
 #
 # Atomic: a sibling temp file renamed over the original. Concurrent readers
-# exist — both loaders, drive-take.sh and the sweep parse this file — so a
-# partially written file must never be observable under the real name. The temp
-# lands in the same directory because rename(2) is only atomic within one
-# filesystem, under the `autodrive.` prefix the `.claude/autodrive*` ignore
-# covers, so a temp orphaned by a kill is never committed.
+# exist — both loaders, drive-take.sh, drive-cancel.sh and the sweep parse this
+# file — so a partially written file must never be observable under the real
+# name. The temp lands in the same directory because rename(2) is only atomic
+# within one filesystem, under the `autodrive.` prefix the `.claude/autodrive*`
+# ignore covers, so a temp orphaned by a kill is never committed.
 #
 # The temp is mktemp's, created exclusively under an unpredictable name: a
 # fixed or PID-derived one is a name a repository can commit a link at, and

@@ -6,8 +6,9 @@ actors that move it are in [Driving the transition](driving-the-transition.md).
 The dated records named here are in the `changelog-archive` tag's
 `docs/changelog/`.
 
-The sentinel has five actors that nothing orders: the checkpoint and
-`handoff-approved` write it, `drive-take.sh` takes it at a turn's end, the
+The sentinel has six actors that nothing orders: the checkpoint and
+`handoff-approved` write it, `drive-take.sh` takes it at a turn's end,
+`drive-cancel.sh` cancels or takes it for a prompt after `Stop`, the
 prompt-time sweep discards it, and the two `SessionStart` loaders consume
 `pending`. The host does not serialise a new prompt's
 `UserPromptSubmit` hook against the mod's `turn.complete` handler, which runs
@@ -78,6 +79,8 @@ exactly as it was in every case:
   names the lock (`tests/mod/fixtures/lock-busy.json`, `failFile` empty as for
   an unread sentinel); the mod toasts it and runs nothing, and the file stays
   `armed` for the next prompt's sweep.
+- `drive-cancel.sh` prints nothing: the prompt passes, the file stays, and the
+  sweep that follows deals with it.
 - The sweep judges nothing (its state `locked`, as `unread` is for a reader that
   could not run): the file is neither read nor removed, no line is
   offered, and both channels say it was not judged because of the lock

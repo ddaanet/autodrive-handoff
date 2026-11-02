@@ -157,7 +157,7 @@ What you are touching → what to read first, under `docs/design/`:
 ## Gates
 
 The shell hooks are tested with bats, the Python with pytest, the mod with
-`claude plugin test` (`tests/mod/handoff.test.ts` against `tests/mod/rig.ts`).
+`claude plugin test` (`tests/mod/*.test.ts` against `tests/mod/rig.ts`).
 pytest runs off a uv-managed venv that direnv activates (`.envrc` exports
 `VIRTUAL_ENV` and prepends its `bin` to `PATH`), so the recipes call bare
 `pytest`, never `uv run`; `uv sync` materializes it (`uv.lock` is committed,

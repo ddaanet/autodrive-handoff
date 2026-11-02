@@ -24,7 +24,7 @@ Behaviour lives in `docs/design/driving-the-transition.md`; read it first.
 - The mod reads neither the sentinel nor the prompt box: it runs
   `drive-take.sh` and executes the plan on its stdout, and a prompt in the
   window after `Stop` runs `drive-cancel.sh` once.
-- `claude plugin test` runs `tests/mod/handoff.test.ts` against
+- `claude plugin test` runs `tests/mod/*.test.ts` against
   `tests/mod/rig.ts`, a stub rig that answers every mods API call the mod makes
   and logs them in order; `process.run` answers per script
   (`stdout` for the take, `cancelStdout` for the cancel, logged `process.run
@@ -40,12 +40,14 @@ Behaviour lives in `docs/design/driving-the-transition.md`; read it first.
   `python3 tests/gen_mod_fixtures.py`, never by hand.
   `tests/test_mod_fixtures.py` fails when they disagree, and ties every prose
   line a fixture submits to `CONTINUATION`.
-- A new mod row goes in `tests/mod/handoff.test.ts`; a new plan shape is a
+- A new mod row goes in `tests/mod/handoff.test.ts`, or `window.test.ts` when it
+  is about a prompt after `Stop`; a new plan shape is a
   fixture JSON plus a regeneration.
 - The load-bearing mod rows (driving inside `Stop`, continuing after a
   rejection, dropping the consume-once reset, skipping the fast path, the
-  cancel check before each line, closing the window before the last line) are
-  mutation-checked, not observed passing. A new load-bearing row is too.
+  cancel check before each line, closing the window before the last line, a
+  drive clearing only its own window at its end and at the last line, the
+  window's answer living on the window) are mutation-checked, not observed passing. A new load-bearing row is too.
 - Run `just mod-smoke` whenever the mod, a loader or the sentinel's shape
   changes; it found the `Stop` call-context refusal no stub could. It boots a
   real `claude -p --model haiku` with this repo as `--plugin-dir` and a fixed

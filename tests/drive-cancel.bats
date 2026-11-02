@@ -110,8 +110,32 @@ assert_cancelled() {
     assert_untouched
 }
 
-@test "drive-cancel (FR-G, a prepare-only compact, armed: nothing printed, file untouched)" {
-    seed_and_keep "armed sess-hook-test" compact
+# The take would move it to pending and print the prepare-only message; the
+# window's prompt does the same move and prints nothing, so the sweep that
+# follows leaves the FR-G marker for the hand-typed /compact.
+@test "drive-cancel (FR-G, an owned armed prepare-only compact: moved to pending, nothing printed)" {
+    seed "armed sess-hook-test" compact
+    cancel
+    [ "$status" -eq 0 ]
+    [ "$output" = "" ]
+    [ "$(cat "$tmp/.claude/autodrive")" = "pending"$'\n'"compact" ]
+    [ ! -e "$tmp/.claude/autodrive.swept" ]
+}
+
+@test "drive-cancel (FR-G, a prepare-only compact moved to pending survives the sweep that follows)" {
+    seed "armed sess-hook-test" compact
+    cancel
+    export HANDOFF_POINTER_DIR="$BATS_TEST_TMPDIR/pointer"
+    run bash -c 'jq -nc --arg cwd "$1" "{cwd:\$cwd, session_id:\"sess-hook-test\", prompt:\"anything\", prompt_id:\"fresh-prompt\"}" \
+        | bash scripts/report-drive-failure.sh' _ "$tmp"
+    [ "$status" -eq 0 ]
+    [ "$output" = "" ]
+    [ "$(cat "$tmp/.claude/autodrive")" = "pending"$'\n'"compact" ]
+    [ ! -e "$tmp/.claude/autodrive.swept" ]
+}
+
+@test "drive-cancel (FR-G, another session's armed prepare-only compact: nothing printed, file untouched)" {
+    seed_and_keep "armed sess-other" compact
     cancel
     assert_untouched
 }

@@ -1,4 +1,4 @@
-// Stub rig for handoff.test.ts: answers every mods API call the mod makes and
+// Stub rig for the mod tests (handoff.test.ts, window.test.ts): answers every mods API call the mod makes and
 // records them, in call order, into one log. Register before the test's first
 // call on `$` (the kit rejects `on` after that).
 import { FIXTURES } from './fixtures'
@@ -10,8 +10,9 @@ export type Opts = {
   root?: string
   // answers $.fs.exists(<cwd>/.claude/autodrive)
   sentinelExists?: boolean
-  // process.run stdout (a fixture name, '' for nothing armed, or raw JSON)
-  stdout?: string
+  // drive-take.sh's stdout ('' for nothing armed, or raw JSON); a list answers
+  // the successive takes in order, the last one repeating
+  stdout?: string | string[]
   // lines ('/name args' for command.run, the text for prompt.submit) whose call rejects
   rejectLines?: Record<string, string>
   // drive-cancel.sh's stdout ('' for nothing to cancel, or raw JSON)
@@ -20,8 +21,11 @@ export type Opts = {
   cancelRejects?: boolean
   // hold the named script's answer open until release.<script>() is called
   hold?: { take?: boolean; cancel?: boolean }
-  // a command.run line ('/name args') whose call stays in flight until release.line()
-  holdLine?: string
+  // command.run lines ('/name args') whose call stays in flight until
+  // release.line(<line>), or release.line() for all of them
+  holdLine?: string | string[]
+  // the text of a prompt.submit whose stub stays in flight until release.submit()
+  holdSubmit?: string
   // answers $.fs.stat on any path: a symbolic link when true, missing (ENOENT) otherwise
   statIsLink?: boolean
 }
@@ -39,8 +43,14 @@ export type Rig = {
   // what the prompt.submit stub beneath the mod received
   submitted: { text: string; context: string[] }[]
   // lets a held spawn answer
-  release: { take: () => void; cancel: () => void; line: () => void }
+  release: { take: () => void; cancel: () => void; line: (line?: string) => void; submit: () => void }
   statPaths: string[]
+}
+
+// The turn ends: Stop records, then turn.complete drives (cwd null: no Stop).
+export async function endTurn($: any, cwd: string | null = ROOT) {
+  if (cwd !== null) await $.classic.Stop({ cwd, session_id: 's1' })
+  return $.turn.complete({ turnId: 't1', answer: 'ok', durationMs: 1, isAborted: false, usage: null })
 }
 
 export function fixture(name: keyof typeof FIXTURES, root: string): string {
@@ -51,11 +61,31 @@ export function rig(on: any, opts: Opts = {}): Rig {
   const root = opts.root ?? ROOT
   const r: Rig = {
     log: [], toasts: [], existsPaths: [], writes: [], processArgv: [], cancelArgv: [], submitted: [],
-    release: { take: () => {}, cancel: () => {}, line: () => {} }, statPaths: [],
+    release: { take: () => {}, cancel: () => {}, line: () => {}, submit: () => {} }, statPaths: [],
   }
   const held: Record<string, Promise<void>> = {}
-  let heldLine: Promise<void> | null = null
-  if (opts.holdLine !== undefined) heldLine = new Promise<void>((res) => { r.release.line = res })
+  let takes = 0
+  // One gate per listed line, in order: the nth call of a line takes the nth gate
+  // listed for it, and calls beyond the list pass through.
+  const gates: { line: string; open: () => void; wait: Promise<void>; taken: boolean }[] = []
+  for (const line of [opts.holdLine ?? []].flat()) {
+    const g = { line, open: () => {}, wait: Promise.resolve(), taken: false }
+    g.wait = new Promise<void>((res) => { g.open = res })
+    gates.push(g)
+  }
+  // release.line(<line>) opens the earliest unreleased gate of that line;
+  // release.line() opens all of them.
+  const opened = new Set<object>()
+  r.release.line = (line?: string) => {
+    for (const g of gates) {
+      if (opened.has(g) || (line !== undefined && g.line !== line)) continue
+      opened.add(g)
+      g.open()
+      if (line !== undefined) return
+    }
+  }
+  let heldSubmit: Promise<void> | null = null
+  if (opts.holdSubmit !== undefined) heldSubmit = new Promise<void>((res) => { r.release.submit = res })
   for (const k of ['take', 'cancel'] as const) {
     if (opts.hold?.[k]) held[k] = new Promise<void>((res) => { r.release[k] = res })
   }
@@ -92,7 +122,9 @@ export function rig(on: any, opts: Opts = {}): Rig {
     r.processArgv.push(e.argv)
     r.log.push('process.run')
     if (held.take) await held.take
-    return { value: { exitCode: 0, stdout: opts.stdout ?? '', stderr: '' } }
+    const out = Array.isArray(opts.stdout) ? opts.stdout[Math.min(takes, opts.stdout.length - 1)] : (opts.stdout ?? '')
+    takes++
+    return { value: { exitCode: 0, stdout: out, stderr: '' } }
   })
   on('ui.toast', ($: any, e: any) => {
     r.toasts.push(e.text)
@@ -101,17 +133,22 @@ export function rig(on: any, opts: Opts = {}): Rig {
   on('command.run', async ($: any, e: any) => {
     const line = `/${e.command}${e.args ? ' ' + e.args : ''}`
     r.log.push(`command.run ${e.command} [${e.args ?? ''}]`)
-    if (heldLine && line === opts.holdLine) await heldLine
+    const gate = gates.find((g) => g.line === line && !g.taken)
+    if (gate) {
+      gate.taken = true
+      await gate.wait
+    }
     const why = opts.rejectLines?.[line]
     // {deny}/{drop} do not make an event-backed call reject in the kit; a throwing
     // stub is skipped, nothing beneath answers, and the mod's call rejects.
     if (why !== undefined) throw new Error(why)
     return { text: '' }
   })
-  on('prompt.submit', ($: any, e: any) => {
+  on('prompt.submit', async ($: any, e: any) => {
     // the mod's {text, asUser} reaches the event as e.origin = {kind, name, asUser}
     r.log.push(`prompt.submit ${e.text} asUser=${e.origin?.asUser}`)
     r.submitted.push({ text: e.text, context: e.context ?? [] })
+    if (heldSubmit && e.text === opts.holdSubmit) await heldSubmit
     const why = opts.rejectLines?.[e.text]
     if (why !== undefined) throw new Error(why)
     return { text: e.text }

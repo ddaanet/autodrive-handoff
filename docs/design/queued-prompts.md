@@ -98,8 +98,15 @@ is cancelled with a note; this one should end the same way.
 there. The window is open from `classic.Stop` to the moment the drive issues the
 transition command: the turn is over and the transition has not begun. A prompt
 outside it, mid-turn or with no recorded `Stop`, is not the mod's: it passes
-untouched, as does a slash command or a meta prompt, and the mod's own
-continuation, which arrives after the window has closed.
+untouched, as does a slash command or a meta prompt. The mod's own
+continuation usually arrives after the window has closed. When a later `Stop`
+is still unconsumed as it arrives, the continuation opens that later window
+and is treated as a prompt in it, with no check on `e.origin`: skipping it
+would leave the later turn's armed file to the `UserPromptSubmit` sweep, which
+discards it with a false "mod did not load" note. A `rename` there is taken
+and run by that later window's drive; a `clear` or `compact` is cancelled with
+the note, and the agent re-runs the skill. Each window keeps its own state, so
+the outer drive ending clears nothing of the later one.
 
 **The handler.** The first prompt in a window runs `scripts/drive-cancel.sh
 <cwd> <session-id>` and stores the answer as one promise; a later prompt in the
@@ -113,9 +120,12 @@ session owns is not cancelled but taken, as `drive-take.sh` would: the script
 removes the file, records nothing and prints the take's plan, with no `note`.
 Left in place it would be swept, because the sweep reads `armed` at the prompt,
 ahead of the take. The prompt passes unchanged and the drive runs that plan
-after the prompt's turn. Anything else (a prepare-only compact, `held`, another
-session's file, an unreadable one) prints nothing and the prompt passes
-unchanged.
+after the prompt's turn. An `armed` prepare-only `compact` the session owns
+(FR-G) is moved to `pending` under the lock, as the take does, and nothing is
+printed: the sweep that follows then spares the marker and a hand-typed
+`/compact` still re-injects the todo. Anything else (a `pending` prepare-only
+compact, `held`, another session's file, an unreadable one) prints nothing, the
+file stays and the prompt passes unchanged.
 
 **The drive awaits the answer.** The drive awaits that promise straight after the
 take returns, and again before each line of the plan's `before` list, and stops

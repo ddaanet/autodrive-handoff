@@ -14,48 +14,45 @@
 // a clear or compact, and takes a rename; the drive checks the answer before each line it issues
 // (docs/design/queued-prompts.md).
 
-let stoppedIn: string | null = null
-let stoppedSession = ''
-// Open from Stop until the transition command is issued: the turn is over and
-// the transition has not begun, so a prompt typed now would be answered in a
-// context the transition then discards.
-let driving: { cwd: string; session: string } | null = null
-// The window's one drive-cancel answer, parsed, or null when the script printed
-// nothing or failed. With a `note` it cancelled the transition; without, it is
-// the plan of a rename it took (docs/design/queued-prompts.md).
-let asked: Promise<any | null> | null = null
+// One window per Stop: it opens at classic.Stop (`stopped`), turn.complete moves
+// it to `driving` and hands it to drive(), and it closes when the transition
+// command is issued or the drive ends. A prompt typed while it is open would be
+// answered in a context the transition then discards. `asked` is the window's
+// one drive-cancel answer, parsed, or null when the script printed nothing or
+// failed; with a `note` it cancelled the transition, without it is the plan of
+// a rename it took (docs/design/queued-prompts.md). A later turn's Stop can
+// open the next window before this drive ends, so a drive touches only its own.
+type Window = { cwd: string; session: string; asked: Promise<any | null> | null }
+let stopped: Window | null = null
+let driving: Window | null = null
 
 export function register(on: any) {
   on('classic.Stop', async ($: any, e: any, next: any) => {
-    stoppedIn = e.cwd
-    stoppedSession = e.session_id ?? ''
+    stopped = { cwd: e.cwd, session: e.session_id ?? '', asked: null }
     return next(e)
   })
 
   on('turn.complete', async ($: any, e: any, next: any) => {
-    const cwd = stoppedIn
-    const session = stoppedSession
-    stoppedIn = null
-    stoppedSession = ''
-    if (cwd !== null) {
-      driving = { cwd, session }
+    const w = stopped
+    stopped = null
+    if (w !== null) {
+      driving = w
       try {
-        await drive($, cwd, session)
+        await drive($, w)
       } finally {
-        driving = null
-        asked = null
+        if (driving === w) driving = null
       }
     }
     return next(e)
   })
 
   on('prompt.submit', async ($: any, e: any, next: any) => {
-    const at = stoppedIn !== null ? { cwd: stoppedIn, session: stoppedSession } : driving
-    if (at === null || e.command || e.isMeta) return next(e)
+    const w = stopped ?? driving
+    if (w === null || e.command || e.isMeta) return next(e)
     // Set before anything is awaited, so the drive loop waits for this answer.
-    const first = asked === null
-    if (first) asked = askCancel($, at.cwd, at.session)
-    const answer = await asked
+    const first = w.asked === null
+    if (first) w.asked = askCancel($, w.cwd, w.session)
+    const answer = await w.asked
     if (!first || !answer?.note) return next(e)
     $.ui.toast(answer.message)
     return next({ ...e, context: [...(e.context ?? []), answer.note] })
@@ -75,11 +72,12 @@ async function askCancel($: any, cwd: string, session: string): Promise<any | nu
 }
 
 // True when the window's prompt cancelled the transition.
-async function cancelled(): Promise<boolean> {
-  return asked !== null && !!(await asked)?.note
+async function cancelled(w: Window): Promise<boolean> {
+  return w.asked !== null && !!(await w.asked)?.note
 }
 
-async function drive($: any, cwd: string, session: string) {
+async function drive($: any, w: Window) {
+  const { cwd, session } = w
   const sentinel = `${cwd}/.claude/autodrive`
   // A worktree or subdir cwd falls through: the script owns root resolution.
   const fast = cwd === (await $.session.root()) && !(await $.fs.exists(sentinel))
@@ -89,7 +87,7 @@ async function drive($: any, cwd: string, session: string) {
   // The fast path does not skip this: drive-cancel.sh may just have removed the
   // file, or won the lock and left the take nothing. Its answer is a rename's
   // plan unless it cancelled.
-  const answer = asked !== null ? await asked : null
+  const answer = w.asked !== null ? await w.asked : null
   if (answer?.note) return
   let plan = answer
   if (plan === null) {
@@ -109,11 +107,11 @@ async function drive($: any, cwd: string, session: string) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
     if (i < plan.before.length) {
-      if (await cancelled()) return
+      if (await cancelled(w)) return
       // The window closes as the transition command is issued: a prompt after
       // it is held by the host and answered in the new context, and the
       // sentinel must stay pending for the loader.
-      if (i === plan.before.length - 1) driving = null
+      if (i === plan.before.length - 1 && driving === w) driving = null
     }
     try {
       await runLine($, line)

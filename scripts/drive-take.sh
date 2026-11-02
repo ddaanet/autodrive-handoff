@@ -8,10 +8,11 @@
 # (nothing touched). Otherwise one line of JSON:
 # {kind, before[], after[], failFile, message}.
 #
-# The mod never touches the sentinel: this script is the one place that leaves
-# `armed`, through the same parser every other reader uses, so there is no second
-# copy to drift. Leaving `armed` happens BEFORE the plan is printed, so a later
-# turn cannot take the same transition twice.
+# The mod never touches the sentinel: this script takes it, through the same
+# parser every other reader uses, so there is no second copy to drift (a prompt
+# in the window reaches drive-cancel.sh, which leaves `armed` under the same
+# lock). Leaving `armed` happens BEFORE the plan is printed, so a later turn
+# cannot take the same transition twice.
 set -euo pipefail
 
 # shellcheck source-path=SCRIPTDIR source=_lib.sh

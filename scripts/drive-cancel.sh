@@ -19,9 +19,15 @@
 # `pending` has no owner (docs/design/sessions-sharing-a-root.md), so nothing
 # here can tell whose it is; the mod calls this only inside its own window, in
 # which the `pending` file is the one its own take just made (a `pending` file
-# is never a rename). A prepare-only compact (nothing to run, FR-G), a `held`
-# file, another session's `armed` file and anything unreadable print nothing
-# and are left to the take and the sweep.
+# is never a rename).
+#
+# - An `armed` prepare-only `compact` this session owns (nothing to run, FR-G)
+#   is moved to `pending`, as the take does, and nothing is printed: the sweep
+#   that follows spares it, and the hand-typed /compact still finds the marker.
+#
+# A `pending` prepare-only compact, a `held` file, another session's `armed`
+# file and anything unreadable print nothing and are left as they are, to the
+# take and the sweep.
 set -euo pipefail
 
 # shellcheck source-path=SCRIPTDIR source=_lib.sh
@@ -54,7 +60,15 @@ case "$DRIVE_STATE" in
     *) exit 0 ;;
 esac
 before=( ${DRIVE_BEFORE[@]+"${DRIVE_BEFORE[@]}"} )
-(( ${#before[@]} > 0 )) || exit 0
+if (( ${#before[@]} == 0 )); then
+    # FR-G, nothing to run: moved to pending as the take does and left, so the
+    # sweep that follows spares the marker and the hand-typed /compact finds it.
+    # Only an armed one needs the move; a pending one is already there.
+    if [[ "$DRIVE_STATE" == "armed" && "$DRIVE_KIND" == "compact" ]]; then
+        handoff_drive_arm "$drive" pending || true
+    fi
+    exit 0
+fi
 
 case "$DRIVE_KIND" in
     rename)
