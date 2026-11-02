@@ -1,6 +1,6 @@
 ## Open decisions
 
-- Whether to apply `plans/2026-11-02-frame-template-wording.md` as written: default yes. My human partner chose no refusing gate and a template change, on `plans/reports/2026-11-02-handoff-frame-adherence-remeasure.md` §5. Should a gate be wanted later, its shape and unverified points are in `plans/reports/2026-10-12-handoff-frame-adherence.md` §7 and `docs/design/rejected-alternatives.md`.
+- Whether to apply `plans/2026-11-02-frame-template-wording.md` as written: default yes. My human partner chose no refusing gate and a template change, on `plans/reports/2026-11-02-handoff-frame-adherence-remeasure.md` §5. Should a gate be wanted later, its shape and unverified points are in `plans/reports/2026-10-12-handoff-frame-adherence.md` §7 and `docs/design/the-skills.md`.
 
 ## Remaining
 

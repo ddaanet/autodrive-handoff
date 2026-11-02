@@ -241,40 +241,7 @@ code.claude.com/docs/en/skills.md), not for `.claude/` as a whole, which has a
 history of bugs (anthropics/claude-code#764, anthropics/claude-code#10522).
 2026-10-14 Cross-session limits, documented; the held exemption widened
 
-**A reviewer agent for the handoff task, or for memory destinations, for now**
-— rejected on measurements, so each reading reopens on a number. For the
-handoff frame, the re-measurement
-(`plans/reports/2026-11-02-handoff-frame-adherence-remeasure.md`, 88 task
-versions under 0.16.1 or later) finds FR13 at zero faults and a residual of
-done-logs in 26 to 42% of versions and plans in 11 to 58%, depending on the
-reader; the content did not move to `TODO.md`. The reviewer's own error is the
-size of the rate: a Haiku sentence reader and a Sonnet whole-frame reader agree
-on 47 to 80% of versions per class, Sonnet and a hand reading on 85 to 95% of
-20. After FR13 a miss is at most 1000 characters of redundant text per
-session start, plus a convention that reaches no approval gate; the history
-shows no session acting on a bad frame. The report recommends no refusing
-gate and names no further threshold. Should a gate be wanted, the shape the data support
-is narrow: a prompt-type `PreToolUse` hook on the `handoff-checkpoint` call
-with `continueOnBlock` (the default deny ends the turn, against the
-single-turn wrap-up), judging `task` alone, on a Sonnet-class model, scored
-offline first (313 of the 441 labelled versions resolve today) so its
-false-refusal rate is a number before it can refuse anything. Not verified: timeout behaviour, whether
-the `if` filter parses a heredoc command, any limit on the input size.
-
-For memory destinations, a blind reviewer's yield was concentrated in one
-transient wave and one kind of move. Of the 26 redirected rounds in the 87
-rounds it would have run in (from 2026-08-28), 24 fall in one fortnight of
-September, after two sibling skill plugins arrived. Across all redirected
-facts, fact to skill matched 17 of 26 and fact to the tool, hook or template
-that owns the behaviour 0 of 10. It reproduced almost none of the rejections
-("nowhere" for 1 of 24 rejected facts, none of the 14 rejected rounds) and
-raised a spurious objection on about 1 approved round in 9.
-The levers belong to gitlore and were sent there as a brief: an inventory of
-the owners a fact can go to, and a per-fact existence answer in the approval
-summary. The reading changes with a second wave of redirections after the next
-growth of the skill library, measured the same way, or a rerun of the blind
-test with repository access that lifts recall on tool-bound facts above zero.
-2026-10-15 The mechanical principle is narrowed; a reviewer waits for a measurement
+**A reviewer agent for the handoff task, or for memory destinations, for now** — rejected on measurements ([the skills](the-skills.md#rejected-alternatives)).
 
 **An agent-authored continuation prompt** — one line of prose the agent wrote,
 submitted after a driven transition as a handle to the files. Skill prose and a

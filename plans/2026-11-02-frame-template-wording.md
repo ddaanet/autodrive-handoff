@@ -38,8 +38,8 @@ follows it. Prose. Not a recap.>
 
 ```markdown
 - **Only the task in hand stays here.** Every step after the first action, in
-  order, and open decisions go to the todo: "then" in this file is a step in
-  the wrong place. Standing rules and conventions are memory: write them in
+  order, and open decisions go to the todo, a chain of later steps in one
+  sentence included. Standing rules and conventions are memory: write them in
   Step 1. Finished work is one sentence at most.
 ```
 
@@ -50,12 +50,13 @@ Cost: the order of remaining steps moves to a file whose items the template
 treats as a list and not a sequence, so "in order" has to be said, as above.
 The fresh session reads both files, so nothing is lost across the boundary.
 
-## 2. Status that awaits someone's call
+## 2. Commit and push status
 
 About one frame in ten states pending commit or push status under the named
 prohibition. Most of the cases read as work whose state matters because a person
-must act on it, which the rule's example ("tests red, decision pending") does
-not obviously cover.
+must act on it, so this names the push form and where the tree shows, and adds
+no new home for them. A push awaiting someone's call is left uncovered, because
+the todo rule forbids that item.
 
 Now:
 
@@ -72,8 +73,8 @@ Proposed:
 - **No commit, push or release status** ("the work is uncommitted", "nothing
   pushed", "ready to commit", "release is a separate request"): the line is
   false after the next commit, and `gitStatus` at load time shows the tree. If
-  it matters, what matters is *why* (tests red, a push that is someone's call):
-  write that as an open decision in the todo.
+  it matters, what matters is *why* (tests red, decision pending): write that
+  as an open decision in the todo.
 ```
 
 ## What is not changed
