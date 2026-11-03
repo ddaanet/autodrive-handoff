@@ -48,9 +48,9 @@ export type Rig = {
 }
 
 // The turn ends: Stop records, then turn.complete drives (cwd null: no Stop).
-export async function endTurn($: any, cwd: string | null = ROOT) {
+export async function endTurn($: any, cwd: string | null = ROOT, turnId = 't1') {
   if (cwd !== null) await $.classic.Stop({ cwd, session_id: 's1' })
-  return $.turn.complete({ turnId: 't1', answer: 'ok', durationMs: 1, isAborted: false, usage: null })
+  return $.turn.complete({ turnId, answer: 'ok', durationMs: 1, isAborted: false, usage: null })
 }
 
 export function fixture(name: keyof typeof FIXTURES, root: string): string {

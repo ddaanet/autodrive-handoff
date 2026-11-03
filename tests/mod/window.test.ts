@@ -15,8 +15,7 @@ const CWD = ROOT
 
 const PROMPT = { text: 'say banana' }
 const CANCEL_CLEAR = (c: string) => fixture('cancel-clear', c)
-const CANCEL_NOTE = 'The driven /clear did not run. Answer this prompt, then run the handoff skill again with the same transition, unless this prompt changes that.'
-const CANCEL_MSG = 'handoff: transition cancelled — a prompt arrived before it ran.'
+const { note: CANCEL_NOTE, message: CANCEL_MSG } = JSON.parse(CANCEL_CLEAR(CWD))
 const SAY = 'prompt.submit say banana asUser=undefined'
 
 // Lets the mod's pending awaits run until `done`, yielding to the event loop
@@ -30,7 +29,7 @@ test('a prompt after Stop, before turn.complete, with a cancel: the take runs no
   const r = rig(on, { sentinelExists: true, stdout: fixture('armed-clear', CWD), cancelStdout: CANCEL_CLEAR(CWD) })
   await $.classic.Stop({ cwd: CWD, session_id: 's1' })
   await $.prompt.submit(PROMPT)
-  await $.turn.complete({ turnId: 't1', answer: 'ok', durationMs: 1, isAborted: false, usage: null })
+  await endTurn($, null)
   expect(r.log).toEqual(['process.run cancel', SAY, 'process.run'])
   expect(r.cancelArgv.length).toBe(1)
   const [bash, script, cwd, session, ...rest] = r.cancelArgv[0]
@@ -129,7 +128,7 @@ test('drive-cancel prints nothing: the plan runs in full and the prompt passes u
   const r = rig(on, { sentinelExists: true, stdout: fixture('armed-clear', CWD), cancelStdout: '' })
   await $.classic.Stop({ cwd: CWD, session_id: 's1' })
   await $.prompt.submit(PROMPT)
-  await $.turn.complete({ turnId: 't1', answer: 'ok', durationMs: 1, isAborted: false, usage: null })
+  await endTurn($, null)
   expect(r.log).toEqual([
     'process.run cancel',
     SAY,
@@ -146,7 +145,7 @@ test('the drive-cancel spawn rejects: the plan runs in full and the prompt passe
   const r = rig(on, { sentinelExists: true, stdout: fixture('armed-clear', CWD), cancelRejects: true })
   await $.classic.Stop({ cwd: CWD, session_id: 's1' })
   await $.prompt.submit(PROMPT)
-  await $.turn.complete({ turnId: 't1', answer: 'ok', durationMs: 1, isAborted: false, usage: null })
+  await endTurn($, null)
   expect(r.log).toEqual([
     'process.run cancel',
     SAY,
@@ -162,7 +161,7 @@ test('drive-cancel prints bad JSON: the same as nothing', async ($, on) => {
   const r = rig(on, { sentinelExists: true, stdout: fixture('armed-compact', CWD), cancelStdout: 'not json' })
   await $.classic.Stop({ cwd: CWD, session_id: 's1' })
   await $.prompt.submit(PROMPT)
-  await $.turn.complete({ turnId: 't1', answer: 'ok', durationMs: 1, isAborted: false, usage: null })
+  await endTurn($, null)
   expect(r.log).toContain('command.run compact [keep the parser work]')
   expect(r.submitted[0].context).toEqual([])
 })
@@ -188,7 +187,7 @@ test('a prompt in the window of a rename: nothing to cancel, the rename still ru
   const r = rig(on, { sentinelExists: true, stdout: fixture('armed-rename', CWD), cancelStdout: '' })
   await $.classic.Stop({ cwd: CWD, session_id: 's1' })
   await $.prompt.submit(PROMPT)
-  await $.turn.complete({ turnId: 't1', answer: 'ok', durationMs: 1, isAborted: false, usage: null })
+  await endTurn($, null)
   expect(r.log).toContain('command.run rename [Driven Transitions]')
 })
 
@@ -200,7 +199,7 @@ test('a rename answer, prompt before turn.complete, no sentinel (fast path): the
   const r = rig(on, { sentinelExists: false, stdout: '', cancelStdout: fixture('armed-rename', CWD) })
   await $.classic.Stop({ cwd: CWD, session_id: 's1' })
   await $.prompt.submit(PROMPT)
-  await $.turn.complete({ turnId: 't1', answer: 'ok', durationMs: 1, isAborted: false, usage: null })
+  await endTurn($, null)
   expect(r.log).toEqual(['process.run cancel', SAY, 'command.run rename [Driven Transitions]'])
   expect(r.submitted).toEqual([{ text: 'say banana', context: [] }])
   expect(r.toasts).toEqual(['handoff: will run /rename Driven Transitions once the turn ends.'])
@@ -210,7 +209,7 @@ test('a rename answer with the take printing empty: the rename runs from the ans
   const r = rig(on, { sentinelExists: true, stdout: '', cancelStdout: fixture('armed-rename', CWD) })
   await $.classic.Stop({ cwd: CWD, session_id: 's1' })
   await $.prompt.submit(PROMPT)
-  await $.turn.complete({ turnId: 't1', answer: 'ok', durationMs: 1, isAborted: false, usage: null })
+  await endTurn($, null)
   expect(r.log).toEqual(['process.run cancel', SAY, 'process.run', 'command.run rename [Driven Transitions]'])
   expect(r.submitted[0].context).toEqual([])
   expect(r.toasts).toEqual(['handoff: will run /rename Driven Transitions once the turn ends.'])
@@ -240,7 +239,7 @@ test("a later Stop before the continuation: the continuation's rename answer sti
     'process.run cancel',
     `prompt.submit ${CONTINUATION} asUser=true`,
   ])
-  await $.turn.complete({ turnId: 't2', answer: 'ok', durationMs: 1, isAborted: false, usage: null })
+  await endTurn($, null, 't2')
   expect(r.log.slice(5)).toEqual(['process.run', 'command.run rename [Driven Transitions]'])
   expect(r.submitted[0].context).toEqual([])
 })
@@ -259,7 +258,7 @@ test("the outer drive's end leaves the next drive's window open: a prompt after 
   const done1 = endTurn($)
   await until(() => r.log.includes(`prompt.submit ${CONTINUATION} asUser=true`))
   await $.classic.Stop({ cwd: CWD, session_id: 's1' })
-  const done2 = $.turn.complete({ turnId: 't2', answer: 'ok', durationMs: 1, isAborted: false, usage: null })
+  const done2 = endTurn($, null, 't2')
   await until(() => r.log.includes('command.run rename [A Title]'))
   r.release.submit()
   await done1
@@ -290,7 +289,7 @@ test("the outer drive's /clear being issued leaves the next drive's window open:
   const done1 = endTurn($)
   await until(() => r.log.includes('command.run rename [A Title]'))
   await $.classic.Stop({ cwd: CWD, session_id: 's1' })
-  const done2 = $.turn.complete({ turnId: 't2', answer: 'ok', durationMs: 1, isAborted: false, usage: null })
+  const done2 = endTurn($, null, 't2')
   await until(() => r.log.filter((l: string) => l === 'command.run rename [A Title]').length === 2)
   r.release.line('/rename A Title')
   await until(() => r.log.includes('command.run clear []'))

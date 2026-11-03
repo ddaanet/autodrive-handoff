@@ -18,7 +18,7 @@ setup() {
     load shared-helpers
 
     # The composer's one definition, so no row retypes the continuation line.
-    CONTINUATION="$(python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); from checkpoint import CONTINUATION; print(CONTINUATION)' "$repo_root/scripts")"
+    CONTINUATION="$(continuation_line)"
     [ -n "$CONTINUATION" ]
 }
 

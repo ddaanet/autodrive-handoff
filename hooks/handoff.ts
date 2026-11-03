@@ -75,7 +75,7 @@ async function askCancel($: any, cwd: string, session: string): Promise<any | nu
 
 // True when the window's prompt cancelled the transition.
 async function cancelled(w: Window): Promise<boolean> {
-  return w.asked !== null && !!(await w.asked)?.note
+  return !!(await w.asked)?.note
 }
 
 async function drive($: any, w: Window) {
@@ -89,7 +89,7 @@ async function drive($: any, w: Window) {
   // The fast path does not skip this: drive-cancel.sh may just have removed the
   // file, or won the lock and left the take nothing. Its answer is a rename's
   // plan unless it cancelled.
-  const answer = w.asked !== null ? await w.asked : null
+  const answer = await w.asked
   if (answer?.note) return
   let plan = answer
   if (plan === null) {

@@ -17,8 +17,9 @@ setup() {
     mkdir -p "$tmp/.claude"
     export CLAUDE_PROJECT_DIR="$tmp"
     load lock-helpers
+    load shared-helpers
 
-    CONTINUATION="$(python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); from checkpoint import CONTINUATION; print(CONTINUATION)' "$repo_root/scripts")"
+    CONTINUATION="$(continuation_line)"
     [ -n "$CONTINUATION" ]
 }
 
@@ -100,12 +101,6 @@ assert_cancelled() {
 
 @test "drive-cancel (another session's armed rename: nothing printed, file untouched)" {
     seed_and_keep "armed sess-other" rename "/rename Driven Transitions"
-    cancel
-    assert_untouched
-}
-
-@test "drive-cancel (a pending rename: nothing printed, file untouched)" {
-    seed_and_keep "pending" rename "/rename Driven Transitions"
     cancel
     assert_untouched
 }

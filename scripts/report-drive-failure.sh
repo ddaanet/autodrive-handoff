@@ -229,9 +229,7 @@ elif [[ "$queued" == 1 ]]; then
     record_sweep
     rm -f "$drive"
     msgs+=("$HANDOFF_CANCEL_MSG")
-    case "$drive_kind" in
-        clear | compact) notes+=("$(handoff_cancel_note "$drive_kind")") ;;
-    esac
+    notes+=("$(handoff_cancel_note "$drive_kind")")
 elif [[ -n "$drive_state" && "$drive_state" != "pending" && "$drive_state" != "held" \
       && "$drive_state" != "foreign" && "$drive_state" != "unread" \
       && "$drive_state" != "locked" ]]; then
