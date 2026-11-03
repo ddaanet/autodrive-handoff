@@ -60,9 +60,9 @@ Then decide the content:
   this session.
 - **Task snapshot** — whether there's an active task whose state is worth
   preserving; if so, draft it from the task template below.
-- **Todo content** — whether there are open decisions still to make, or a
-  task list with open items in play; if so, draft it from the todo template
-  below.
+- **Todo content** — whether there are open decisions still to make, steps
+  after the first action, or a task list with open items in play; if so, draft
+  it from the todo template below.
 
 These two files are re-injected verbatim on the far side, and they are the only
 carrier: the continuation is a fixed prompt that points at them and says

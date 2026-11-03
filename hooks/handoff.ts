@@ -73,11 +73,6 @@ async function askCancel($: any, cwd: string, session: string): Promise<any | nu
   }
 }
 
-// True when the window's prompt cancelled the transition.
-async function cancelled(w: Window): Promise<boolean> {
-  return !!(await w.asked)?.note
-}
-
 async function drive($: any, w: Window) {
   const { cwd, session } = w
   const sentinel = `${cwd}/.claude/autodrive`
@@ -109,7 +104,9 @@ async function drive($: any, w: Window) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
     if (i < plan.before.length) {
-      if (await cancelled(w)) return
+      // The read comes before any yield: with no answer yet, the window closes
+      // and the command is issued with no await after the read.
+      if (w.asked !== null && (await w.asked)?.note) return
       // The window closes as the transition command is issued: a prompt after
       // it is held by the host and answered in the new context, and the
       // sentinel must stay pending for the loader.
