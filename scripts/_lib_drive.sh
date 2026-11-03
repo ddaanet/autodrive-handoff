@@ -102,8 +102,8 @@ _handoff_drive_prose() {
 # the checkpoint composes this file from carries them as separate fields.
 #
 # The state is reported, never interpreted: which state a caller wants is the
-# caller's business, and the parser serves drive-take.sh, both loaders and the
-# UserPromptSubmit sweep with one answer.
+# caller's business, and the parser serves drive-take.sh, drive-cancel.sh, both
+# loaders and the UserPromptSubmit sweep with one answer.
 #
 # The lines are literal: the mod runs a `/x args` line as that command and the
 # rest as a prompt, and must not know which command any
@@ -261,11 +261,11 @@ handoff_drive_has_source() {
 # whichever session it opened.
 #
 # Atomic: a sibling temp file renamed over the original. Concurrent readers
-# exist — both loaders, drive-take.sh and the sweep parse this file — so a
-# partially written file must never be observable under the real name. The temp
-# lands in the same directory because rename(2) is only atomic within one
-# filesystem, under the `autodrive.` prefix the `.claude/autodrive*` ignore
-# covers, so a temp orphaned by a kill is never committed.
+# exist — both loaders, drive-take.sh, drive-cancel.sh and the sweep parse this
+# file — so a partially written file must never be observable under the real
+# name. The temp lands in the same directory because rename(2) is only atomic
+# within one filesystem, under the `autodrive.` prefix the `.claude/autodrive*`
+# ignore covers, so a temp orphaned by a kill is never committed.
 #
 # The temp is mktemp's, created exclusively under an unpredictable name: a
 # fixed or PID-derived one is a name a repository can commit a link at, and
@@ -283,4 +283,85 @@ handoff_drive_arm() {
         rm -f "$tmp"
         return 1
     fi
+}
+
+# What a cancelled clear or compact tells the user and the agent: the one source
+# for the UserPromptSubmit sweep (a queued prompt) and drive-cancel.sh (a prompt
+# after Stop). The message is the fragment the callers wrap as
+# `handoff: <msg>.`; the note is the agent's directive for the kind.
+# shellcheck disable=SC2034  # read by the sourcing scripts
+HANDOFF_CANCEL_MSG='transition cancelled — a prompt arrived before it ran'
+
+handoff_cancel_note() {
+    case "$1" in
+        clear) printf '%s' "The driven /clear did not run. Answer this prompt, then run the handoff skill again with the same transition, unless this prompt changes that." ;;
+        compact) printf '%s' "The driven /compact did not run. Answer this prompt, then run the precompact skill again with the same transition, unless this prompt changes that." ;;
+    esac
+}
+
+# handoff_record_sweep <record> <sentinel> <sweeper> <state> <owner> <kind> <cwd>
+# Append one line to the sweep record before the sentinel goes: the removing
+# session, the state and owner it saw, the kind, the sentinel's age in seconds
+# and the hook's cwd. Tab-separated; the cwd is %q-quoted so one holding a
+# newline stays on its line. Keeps the last 50 lines. A failure to write is not
+# the sweep's failure, so every step is guarded: callers run under `set -e`.
+#
+# .claude/ is a directory the agent writes freely, so the record may be a
+# symlink: reading through one would copy what it names into the record. A
+# record that is a symlink, or anything but a regular file, is left alone and
+# nothing is recorded; the test and the read are one O_NOFOLLOW open
+# (handoff_read_regular), so a link put there after a look at the name is
+# never read. The new record is built in a temporary file mktemp creates beside
+# it (never a fixed name, which could be a planted link to write through) under
+# the `autodrive.` prefix the `.claude/autodrive*` ignore covers, and renamed
+# over the record by rename(2) (handoff_replace), which replaces a link put at
+# the name meanwhile where `mv` would move the file into a directory it names.
+handoff_record_sweep() {
+    local swept="$1" drive="$2" sweeper="$3" state="$4" owner="$5" kind="$6" cwd="$7"
+    local mtime now age tmp_record record_status=""
+    tmp_record="$(mktemp "$swept.XXXXXX" 2>/dev/null)" || return 0
+    {
+        IFS= read -r record_status || true
+        case "$record_status" in
+            ok | absent) ;;
+            *) rm -f "$tmp_record"; return 0 ;;
+        esac
+        now="$(date +%s)"
+        mtime="$(stat -c %Y "$drive" 2>/dev/null || stat -f %m "$drive" 2>/dev/null || true)"
+        age="?"
+        if [[ "$mtime" =~ ^[0-9]+$ ]]; then
+            age=$(( now - mtime ))
+        fi
+        {
+            printf '%s\tsweeper=%s\tstate=%s\towner=%s\tkind=%s\tage=%ss\tcwd=%q\n' \
+                "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$sweeper" "$state" \
+                "$owner" "$kind" "$age" "$cwd"
+            # The old record is the rest of this stream.
+            if [[ "$record_status" == ok ]]; then
+                cat
+            fi
+        } 2>/dev/null | head -n 50 > "$tmp_record" 2>/dev/null || true
+    } < <(handoff_read_regular "$swept")
+    handoff_replace "$tmp_record" "$swept" 2>/dev/null || rm -f "$tmp_record" || true
+}
+
+# handoff_drive_plan <kind> <failFile> <before...>: print the plan of a taken
+# transition (drive-take.sh's, and drive-cancel.sh's for a rename) as one line
+# of JSON {kind, before, after, failFile, message}, `after` read from
+# DRIVE_AFTER. The lines are NUL-delimited into jq: a line is free text and may
+# hold anything but a NUL.
+handoff_drive_plan() {
+    local kind="$1" fail_file="$2"; shift 2
+    local -a lines=( "$@" )
+    local -a rest=( ${DRIVE_AFTER[@]+"${DRIVE_AFTER[@]}"} )
+    local before_json after_json="[]"
+    to_json() { printf '%s\0' "$@" | jq -Rsc 'split("\u0000")[:-1]'; }
+    before_json="$(to_json "${lines[@]}")"
+    if (( ${#rest[@]} > 0 )); then
+        after_json="$(to_json "${rest[@]}")"
+    fi
+    jq -nc --arg k "$kind" --arg f "$fail_file" --arg l "${lines[0]}" \
+        --argjson b "$before_json" --argjson a "$after_json" \
+        '{kind: $k, before: $b, after: $a, failFile: $f,
+          message: ("handoff: will run " + $l + " once the turn ends.")}'
 }

@@ -93,48 +93,11 @@ failed="$cwd/$HANDOFF_REL_DRIVE_FAILED"
 drive="$cwd/$HANDOFF_REL_DRIVE"
 swept="$cwd/$HANDOFF_REL_DRIVE_SWEPT"
 
-# Append one line to the sweep record before the sentinel goes: the removing
-# session, the state and owner it saw, the kind, the sentinel's age in seconds
-# and the hook's cwd. Tab-separated; the cwd is %q-quoted so one holding a
-# newline stays on its line. Keeps the last 50 lines. A failure to write is not
-# the sweep's failure, so every step is guarded: this runs under `set -e`.
-#
-# .claude/ is a directory the agent writes freely, so the record may be a
-# symlink: reading through one would copy what it names into the record. A
-# record that is a symlink, or anything but a regular file, is left alone and
-# nothing is recorded; the test and the read are one O_NOFOLLOW open
-# (handoff_read_regular), so a link put there after a look at the name is
-# never read. The new record is built in a temporary file mktemp creates beside
-# it (never a fixed name, which could be a planted link to write through) under
-# the `autodrive.` prefix the `.claude/autodrive*` ignore covers, and renamed
-# over the record by rename(2) (handoff_replace), which replaces a link put at
-# the name meanwhile where `mv` would move the file into a directory it names.
+# The sweep record is written by handoff_record_sweep (_lib_drive.sh), which
+# drive-cancel.sh calls as well; this wrapper passes what this hook saw.
 record_sweep() {
-    local mtime now age tmp_record record_status=""
-    tmp_record="$(mktemp "$swept.XXXXXX" 2>/dev/null)" || return 0
-    {
-        IFS= read -r record_status || true
-        case "$record_status" in
-            ok | absent) ;;
-            *) rm -f "$tmp_record"; return 0 ;;
-        esac
-        now="$(date +%s)"
-        mtime="$(stat -c %Y "$drive" 2>/dev/null || stat -f %m "$drive" 2>/dev/null || true)"
-        age="?"
-        if [[ "$mtime" =~ ^[0-9]+$ ]]; then
-            age=$(( now - mtime ))
-        fi
-        {
-            printf '%s\tsweeper=%s\tstate=%s\towner=%s\tkind=%s\tage=%ss\tcwd=%q\n' \
-                "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${session_id:-?}" "$drive_state" \
-                "${drive_owner:--}" "${drive_kind:--}" "$age" "$hook_cwd"
-            # The old record is the rest of this stream.
-            if [[ "$record_status" == ok ]]; then
-                cat
-            fi
-        } 2>/dev/null | head -n 50 > "$tmp_record" 2>/dev/null || true
-    } < <(handoff_read_regular "$swept")
-    handoff_replace "$tmp_record" "$swept" 2>/dev/null || rm -f "$tmp_record" || true
+    handoff_record_sweep "$swept" "$drive" "${session_id:-?}" "$drive_state" \
+        "${drive_owner:--}" "${drive_kind:--}" "$hook_cwd"
 }
 
 # Parse once: the failure branch and the sweep want different states of the same
@@ -265,13 +228,8 @@ if [[ "$queued" == 1 && "$drive_kind" == "rename" ]]; then
 elif [[ "$queued" == 1 ]]; then
     record_sweep
     rm -f "$drive"
-    msgs+=("transition cancelled — a prompt arrived before it ran")
-    case "$drive_kind" in
-        clear)
-            notes+=("The driven /clear did not run. Answer this prompt, then run the handoff skill again with the same transition, unless this prompt changes that.") ;;
-        compact)
-            notes+=("The driven /compact did not run. Answer this prompt, then run the precompact skill again with the same transition, unless this prompt changes that.") ;;
-    esac
+    msgs+=("$HANDOFF_CANCEL_MSG")
+    notes+=("$(handoff_cancel_note "$drive_kind")")
 elif [[ -n "$drive_state" && "$drive_state" != "pending" && "$drive_state" != "held" \
       && "$drive_state" != "foreign" && "$drive_state" != "unread" \
       && "$drive_state" != "locked" ]]; then

@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Snapshot the in-progress task and still-open decisions before a `/clear` or new session, so the next one resumes where this left off — and, when asked, carry the reset out: name the session, `/clear`, and submit a continuation prompt into the fresh one. A local task frame, not a conversation summary. Use when the user asks to "save handoff", "save context", "prepare handoff", "prepare clear", "write handoff", "before /clear", "before I clear", "clear handoff", "discard handoff", "clean handoff", "finalize", "wrap up", "I'm done", "/handoff", "handoff", "conversation too long", "end", "goodbye", "continue after clear", "continue in a new session", "clear and continue", "pick this up in a new chat", or otherwise signals an imminent `/clear` or end of task. To compact rather than clear, use the precompact skill.
+description: Snapshot the in-progress task and still-open decisions before a `/clear` or new session, so the next one resumes where this left off — and, when asked, carry the reset out: name the session, `/clear`, and submit a continuation prompt into the fresh one. A local task frame, not a conversation summary. Use when the user asks to "save handoff", "save context", "prepare handoff", "prepare clear", "write handoff", "before /clear", "before I clear", "finalize", "wrap up", "I'm done", "/handoff", "handoff", "conversation too long", "end", "goodbye", "continue after clear", "continue in a new session", "clear and continue", "pick this up in a new chat", or otherwise signals an imminent `/clear` or end of task. To compact rather than clear, use the precompact skill.
 ---
 
 # handoff — Task Snapshot at the Clear Boundary
@@ -60,9 +60,9 @@ Then decide the content:
   this session.
 - **Task snapshot** — whether there's an active task whose state is worth
   preserving; if so, draft it from the task template below.
-- **Todo content** — whether there are open decisions still to make, or a
-  task list with open items in play; if so, draft it from the todo template
-  below.
+- **Todo content** — whether there are open decisions still to make, steps
+  after the first action, or a task list with open items in play; if so, draft
+  it from the todo template below.
 
 These two files are re-injected verbatim on the far side, and they are the only
 carrier: the continuation is a fixed prompt that points at them and says
@@ -74,20 +74,22 @@ nothing of its own, so a fact left out of them is gone.
 ## Current task
 
 <The task in hand and where it stands, in-flight threads named in a sentence,
-and the next concrete action: what the fresh session does first, not the
-topic. Prose. Not a recap.>
+and the ONE action the fresh session does first, not the topic and not what
+follows it. Prose. Not a recap.>
 ```
 
 - **At most 1000 characters of prose, and no list.** The checkpoint rejects a
   longer body, and any line that opens a list item.
-- **Only the task in hand stays here.** Remaining steps and open decisions go
-  to the todo. Standing rules and conventions are memory: write them in Step 1.
-  Finished work is one sentence at most.
+- **Only the task in hand stays here.** Every step after the first action, in
+  order, and open decisions go to the todo, a chain of later steps in one
+  sentence included. Standing rules and conventions are memory: write them in
+  Step 1. Finished work is one sentence at most.
 - No file paths or code beyond what's needed to say what's in progress.
-- **No commit, push or release status** ("the work is uncommitted", "ready to
-  commit", "release is a separate request"): the line is false after the next
-  commit. If uncommitted work matters, what matters is *why* (tests red,
-  decision pending): write that as an open decision in the todo.
+- **No commit, push or release status** ("the work is uncommitted", "nothing
+  pushed", "ready to commit", "release is a separate request"): the line is
+  false after the next commit. If uncommitted work matters, what matters is
+  *why* (tests red, decision pending): write that as an open decision in the
+  todo.
 
 **Todo template:**
 
