@@ -100,8 +100,9 @@ compaction.
   `TASK.md`, `TODO.md` and `.claude/autodrive`, and the later wrap-up wins.
   Give parallel sessions a git worktree each.
 - Do not share one `.claude/` between roots.
-- Another handoff plugin (`ddaa-handoff`, `ddaa-passation`) answers many of
-  the same phrases. Enable one handoff provider per project.
+- Another handoff plugin, `ddaa-handoff`, answers many of the same phrases,
+  and `ddaa-passation` is its French counterpart. Enable one handoff provider
+  per project.
 
 ## Requirements
 

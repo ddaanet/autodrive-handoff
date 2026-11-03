@@ -104,8 +104,8 @@ async function drive($: any, w: Window) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
     if (i < plan.before.length) {
-      // The read comes before any yield: with no answer yet, the window closes
-      // and the command is issued with no await after the read.
+      // Read before any yield: with no prompt yet, nothing is awaited between
+      // this read and issuing the command.
       if (w.asked !== null && (await w.asked)?.note) return
       // The window closes as the transition command is issued: a prompt after
       // it is held by the host and answered in the new context, and the
