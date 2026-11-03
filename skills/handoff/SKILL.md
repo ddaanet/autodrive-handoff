@@ -74,20 +74,22 @@ nothing of its own, so a fact left out of them is gone.
 ## Current task
 
 <The task in hand and where it stands, in-flight threads named in a sentence,
-and the next concrete action: what the fresh session does first, not the
-topic. Prose. Not a recap.>
+and the ONE action the fresh session does first, not the topic and not what
+follows it. Prose. Not a recap.>
 ```
 
 - **At most 1000 characters of prose, and no list.** The checkpoint rejects a
   longer body, and any line that opens a list item.
-- **Only the task in hand stays here.** Remaining steps and open decisions go
-  to the todo. Standing rules and conventions are memory: write them in Step 1.
-  Finished work is one sentence at most.
+- **Only the task in hand stays here.** Every step after the first action, in
+  order, and open decisions go to the todo, a chain of later steps in one
+  sentence included. Standing rules and conventions are memory: write them in
+  Step 1. Finished work is one sentence at most.
 - No file paths or code beyond what's needed to say what's in progress.
-- **No commit, push or release status** ("the work is uncommitted", "ready to
-  commit", "release is a separate request"): the line is false after the next
-  commit. If uncommitted work matters, what matters is *why* (tests red,
-  decision pending): write that as an open decision in the todo.
+- **No commit, push or release status** ("the work is uncommitted", "nothing
+  pushed", "ready to commit", "release is a separate request"): the line is
+  false after the next commit. If uncommitted work matters, what matters is
+  *why* (tests red, decision pending): write that as an open decision in the
+  todo.
 
 **Todo template:**
 
