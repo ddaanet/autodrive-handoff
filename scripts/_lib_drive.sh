@@ -8,7 +8,8 @@
 
 # The fixed prompt the mod submits into what a transition opens when line 2
 # carries `continue`. The mod holds its own literal copy
-# (hooks/handoff.ts); tests/bin-commands.bats pins the two together.
+# (hooks/handoff.ts); test_the_mods_continuation_literal_is_the_libraries_constant
+# (tests/test_mod_fixtures.py) pins the two together.
 # shellcheck disable=SC2034  # read by the sourcing scripts
 HANDOFF_CONTINUATION='Continue where the previous context stopped.'
 

@@ -9,7 +9,7 @@ The dated records named here are in the `changelog-archive` tag's
 
 Both boundary skills end the same way: follow what the checkpoint printed,
 in order. Everything the procedure turns on after that call — whether memory
-is owed, the commit mode, whether the sentinel names any command, whether the
+is owed, the commit mode, whether the sentinel is the `prepare` marker, whether the
 transition is driven — is already an input to the checkpoint, so it prints
 the procedure for the one cell of that cross product the call is in, and the
 skill bodies state none of it. The parts, each present only under its own
@@ -87,7 +87,7 @@ the load-bearing half of any prohibition.
 
 ## Held: a transition an approval has not released
 
-The checkpoint writes the sentinel `held` when it **names any command at all**
+The checkpoint writes the sentinel `held` when its kind is **not `prepare`**
 and a memory directive was emitted, or when the transition is **driven** and
 the mode is `with-commit`, and prints the instruction to release it as its
 own part, after the commit act. `bin/handoff-approved` is the one command
@@ -172,7 +172,7 @@ does not change the memory part: the same text serves `with-commit` and
 stages the moved memory gitlink in the parent index, and under `with-commit`
 the commit act names it, so the parent commit the request calls for records the
 pointer along with `TASK.md` and `TODO.md`. The approval takes a turn before
-that commit, which is why a sentinel that names a command still holds while the
+that commit, which is why a sentinel whose kind is not `prepare` still holds while the
 approval is owed (see "Held" above). The plugin needs a gitlore that ships
 `gitlore:commit`; it keeps no fallback for the file handshake that skill
 replaced.

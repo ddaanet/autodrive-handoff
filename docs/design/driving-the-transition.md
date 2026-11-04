@@ -85,7 +85,8 @@ tests also consume:
 - **FR-G.** A `prepare` kind runs nothing. The file is left `pending`, the plan
   has kind `prepare`, and the message says so; the mod toasts it and runs
   nothing. That `pending` state is what `SessionStart(compact)` gates the todo's
-  re-injection on, so a hand-typed `/compact` re-injects nothing.
+  re-injection on: a hand-typed `/compact` with the marker pending re-injects
+  the todo and consumes the marker, and with no marker it re-injects nothing.
 - **Malformed** files are removed and reported with `kind` null and the
   constraint that failed, so the complaint does not repeat each turn.
 

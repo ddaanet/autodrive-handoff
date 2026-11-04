@@ -51,8 +51,9 @@ line is only the argument of a rename.
 
 The bound is the mod's, not the file's guard. `write-guard.sh` denies an agent
 `Write` or `Edit` to the file and covers no other way of writing it, so a Bash
-write can compose any well-formed file; what makes that harmless is that a
-well-formed file cannot name a command. The fixed prompt exists twice: as the
+write can compose any well-formed file; a well-formed file names no command
+and holds no prompt, so what writes it reaches only `/rename`, `/clear` and
+`/compact` with a free-text argument, plus the fixed prompt. The fixed prompt exists twice: as the
 mod's literal, and as `HANDOFF_CONTINUATION` in `scripts/_lib_drive.sh`, which
 only renders the lines the sweep offers a person to type. A test pins the two
 together. The decision and its reasons are in [Design
