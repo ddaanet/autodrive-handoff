@@ -215,7 +215,7 @@ def test_a_symlinked_sentinel_is_replaced_and_its_target_is_untouched(
     assert result.returncode == 0, result.stderr
     sentinel = repo / SENTINEL_REL
     assert not sentinel.is_symlink()
-    assert sentinel.read_text() == "armed sess-checkpoint\nrename\n/rename T\n"
+    assert sentinel.read_text() == "armed sess-checkpoint\nrename\nT\n"
 
 
 def test_a_dangling_symlinked_sentinel_creates_nothing_through_it(

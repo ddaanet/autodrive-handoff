@@ -19,7 +19,7 @@ source "$BATS_TEST_DIRNAME/hook-helpers.bash"
 @test "load-compact (pending present, todo present: consumes it, todo re-injected)" {
     rm -f "$tmp/TASK.md"
     printf '## Remaining\n\n- finish the parser\n' > "$tmp/TODO.md"
-    seed_pending "$tmp" "compact" "/compact" "continue with task 3"
+    seed_pending "$tmp" "compact continue"
     run_load_compact "$tmp"
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
@@ -35,7 +35,7 @@ source "$BATS_TEST_DIRNAME/hook-helpers.bash"
 # The message goes to the user alone; the agent is told nothing.
 @test "load-compact (pending present, no todo, no task: consumed, No todo, nothing injected)" {
     rm -f "$tmp/TASK.md" "$tmp/TODO.md"
-    seed_pending "$tmp" "compact" "/compact" "continue with task 3"
+    seed_pending "$tmp" "compact continue"
     run_load_compact "$tmp"
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
@@ -48,7 +48,7 @@ source "$BATS_TEST_DIRNAME/hook-helpers.bash"
 @test "load-compact (pending present, headings-only todo, no task: consumed, No todo, nothing injected)" {
     rm -f "$tmp/TASK.md"
     printf '## Remaining\n' > "$tmp/TODO.md"
-    seed_pending "$tmp" "compact" "/compact" "continue with task 3"
+    seed_pending "$tmp" "compact continue"
     run_load_compact "$tmp"
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
@@ -68,7 +68,7 @@ source "$BATS_TEST_DIRNAME/hook-helpers.bash"
 @test "load-compact (legacy todo alone, no task): re-injected from the old path, noted on both channels" {
     rm -f "$tmp/TASK.md"
     printf '## Remaining\n\n- legacy item\n' > "$tmp/.claude/handoff-todo.md"
-    seed_pending "$tmp" "compact" "/compact" "continue with task 3"
+    seed_pending "$tmp" "compact continue"
     run_load_compact "$tmp"
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
@@ -82,7 +82,7 @@ source "$BATS_TEST_DIRNAME/hook-helpers.bash"
     rm -f "$tmp/TASK.md"
     printf '## Remaining\n\n- linked item\n' > "$other/todo.md"
     ln -s "$other/todo.md" "$tmp/.claude/handoff-todo.md"
-    seed_pending "$tmp" "compact" "/compact" "continue with task 3"
+    seed_pending "$tmp" "compact continue"
     run_load_compact "$tmp"
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
@@ -94,7 +94,7 @@ source "$BATS_TEST_DIRNAME/hook-helpers.bash"
 @test "load-compact (legacy task alone): injected from the old path, the message says No todo and names it" {
     rm -f "$tmp/TASK.md"
     printf '## Current task\n\nlegacy task body\n' > "$tmp/.claude/handoff-task.md"
-    seed_pending "$tmp" "compact" "/compact" "continue with task 3"
+    seed_pending "$tmp" "compact continue"
     run_load_compact "$tmp"
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
@@ -107,7 +107,7 @@ source "$BATS_TEST_DIRNAME/hook-helpers.bash"
     rm -f "$tmp/TASK.md"
     printf '## Current task\n\nlegacy task body\n' > "$tmp/.claude/handoff-task.md"
     printf '## Remaining\n\n- legacy item\n' > "$tmp/.claude/handoff-todo.md"
-    seed_pending "$tmp" "compact" "/compact" "continue with task 3"
+    seed_pending "$tmp" "compact continue"
     run_load_compact "$tmp"
     [ "$status" -eq 0 ]
     split_output "$output"
@@ -119,7 +119,7 @@ source "$BATS_TEST_DIRNAME/hook-helpers.bash"
     rm -f "$tmp/TASK.md"
     printf '## Remaining\n\n- root item\n' > "$tmp/TODO.md"
     printf '## Remaining\n\n- legacy item\n' > "$tmp/.claude/handoff-todo.md"
-    seed_pending "$tmp" "compact" "/compact" "continue with task 3"
+    seed_pending "$tmp" "compact continue"
     run_load_compact "$tmp"
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
@@ -134,7 +134,7 @@ source "$BATS_TEST_DIRNAME/hook-helpers.bash"
     rm -f "$tmp/TASK.md"
     printf '## Remaining\n' > "$tmp/TODO.md"
     printf '## Remaining\n\n- legacy item\n' > "$tmp/.claude/handoff-todo.md"
-    seed_pending "$tmp" "compact" "/compact" "continue with task 3"
+    seed_pending "$tmp" "compact continue"
     run_load_compact "$tmp"
     [ "$status" -eq 0 ]
     split_output "$output"
@@ -149,7 +149,7 @@ source "$BATS_TEST_DIRNAME/hook-helpers.bash"
     printf '## Current task\n\nroot task body\n' > "$tmp/TASK.md"
     printf '## Current task\n\nlegacy task body\n' > "$tmp/.claude/handoff-task.md"
     printf '## Remaining\n\n- legacy item\n' > "$tmp/.claude/handoff-todo.md"
-    seed_pending "$tmp" "compact" "/compact" "continue with task 3"
+    seed_pending "$tmp" "compact continue"
     run_load_compact "$tmp"
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
@@ -164,7 +164,7 @@ source "$BATS_TEST_DIRNAME/hook-helpers.bash"
     rm -f "$tmp/TASK.md"
     : > "$tmp/.claude/handoff-task.md"
     printf '## Remaining\n' > "$tmp/.claude/handoff-todo.md"
-    seed_pending "$tmp" "compact" "/compact" "continue with task 3"
+    seed_pending "$tmp" "compact continue"
     run_load_compact "$tmp"
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
@@ -174,18 +174,18 @@ source "$BATS_TEST_DIRNAME/hook-helpers.bash"
 }
 
 @test "load-compact (pending of kind clear: left for SessionStart(clear))" {
-    seed_pending "$tmp" "clear" "/rename A Title" "/clear" "pick up per the task file"
+    seed_pending "$tmp" "clear continue" "A Title"
     run_load_compact "$tmp"
     [ "$status" -eq 0 ]
     [ "$(head -n1 "$tmp/.claude/autodrive")" = "pending" ]
-    [ "$(sed -n 2p "$tmp/.claude/autodrive")" = "clear" ]
+    [ "$(sed -n 2p "$tmp/.claude/autodrive")" = "clear continue" ]
 }
 
 # The checkpoint removes TASK.md at this boundary, so the only way one is there
 # when the compaction completes is a hand-written file. It is still the task
 # frame, and it is injected.
 @test "load-compact (a hand-written TASK.md alone: injected, and the message says No todo)" {
-    seed_pending "$tmp" "compact" "/compact" "resume per the task file"
+    seed_pending "$tmp" "compact continue"
     printf '%s\n' "## Now" "- rewire the parser" > "$tmp/TASK.md"
     run_load_compact "$tmp"
     [ "$status" -eq 0 ]
@@ -198,7 +198,7 @@ source "$BATS_TEST_DIRNAME/hook-helpers.bash"
 }
 
 @test "load-compact (a hand-written TASK.md beside a todo: both injected, task first)" {
-    seed_pending "$tmp" "compact" "/compact" "resume per the task file"
+    seed_pending "$tmp" "compact continue"
     printf '%s\n' "## Now" "- rewire the parser" > "$tmp/TASK.md"
     printf '## Remaining\n\n- finish the parser\n' > "$tmp/TODO.md"
     run_load_compact "$tmp"
@@ -212,7 +212,7 @@ source "$BATS_TEST_DIRNAME/hook-helpers.bash"
 # follows it. Same effect here as the prepare-only marker, from a different
 # sentinel: consume, inject what there is.
 @test "load-compact (pending with no continuation: consumed, frame only)" {
-    seed_pending "$tmp" "compact" "/compact keep the parser work"
+    seed_pending "$tmp" "compact" "keep the parser work"
     run_load_compact "$tmp"
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
@@ -220,10 +220,10 @@ source "$BATS_TEST_DIRNAME/hook-helpers.bash"
     echo "$output" | jq -e '.systemMessage == "handoff: compacted — No todo."' >/dev/null
 }
 
-# FR-G's other half: the prepare-only marker arrives here as a pending file with
-# no after-line. Inject what there is.
-@test "load-compact (empty after-sequence: frame injected)" {
-    seed_pending "$tmp" "compact"
+# FR-G's other half: the prepare marker (`compact: false`) arrives here as a
+# pending `prepare`, which runs nothing. Inject what there is.
+@test "load-compact (a pending prepare marker: consumed, frame injected)" {
+    seed_pending "$tmp" "prepare"
     run_load_compact "$tmp"
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
@@ -233,14 +233,14 @@ source "$BATS_TEST_DIRNAME/hook-helpers.bash"
 
 @test "load-compact (worktree cwd: consumes the worktree pending file)" {
     wt="$(make_worktree wtLC)"
-    seed_pending "$wt" "compact" "/compact" "continue with task 3"
+    seed_pending "$wt" "compact continue"
     run_load_compact "$wt"
     [ "$status" -eq 0 ]
     [ ! -e "$wt/.claude/autodrive" ]
 }
 
 @test "load-compact (armed file: not consumed, no frame)" {
-    seed_drive "$tmp" "compact" "/compact" "continue with task 3"
+    seed_drive "$tmp" "compact continue"
     run_load_compact "$tmp"
     [ "$status" -eq 0 ]
     [ "$output" = "" ]

@@ -153,8 +153,7 @@ would have collided as numbers. `FR6`, `FR7` and `FR-H` are retired.
   manifest and a `PostToolUse(Bash)` hook. Neither file is gitignored, so
   nothing needs a hook to stage it.
 - **FR8** — The checkpoint composes `.claude/autodrive` from the transition
-  fields — every line the drive runs, including the `/rename` that sets the
-  session title.
+  fields: a kind, a `continue` flag and one argument, a title or a focus.
 - **FR9** — Everything the agent does after the checkpoint call is printed
   by the checkpoint, in a fixed order, each part present only under its own
   condition: what the call did to a legacy file, the memory directive, the
@@ -210,6 +209,8 @@ Where the argument lives:
   is allowed to write it, and what one checkpoint call does?
 - [The skills](design/the-skills.md) — Which skills exist, and why is the
   transition a payload field rather than a skill of its own?
+- [The sentinel](design/the-sentinel.md) — What does `.claude/autodrive`
+  hold, and what can whatever writes it make the mod run?
 - [Driving the transition](design/driving-the-transition.md) — How does the
   plugin's mod run a transition at the end of the turn, and how is a failure
   or a mod that never loaded reported?
@@ -258,6 +259,7 @@ The standing calls, each argued in
 - **The armed transition is one file whose body names the transition.**
 - **The transition carries its own state.**
 - **The continuation is a constant; the agent authors no prompt.**
+- **The sentinel carries data; the mod holds the commands and the prompt.**
 - **A sentinel names its owner, and only the owner judges it stale.**
 - **A prompt queued into the arming turn cancels a `clear` or `compact`, and
   spares a `rename`.**

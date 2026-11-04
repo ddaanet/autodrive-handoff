@@ -16,7 +16,7 @@ the next one, and until then it is a note the next session reads, which is
 what the todo file is too. So neither file is guarded, gitignored or staged by
 a hook, and a guard, two stagers and a manifest are machinery the design does
 without. The sentinel is the different case and keeps its guard: its state is
-content, a wrong one is writable, and its lines are run as commands.
+content, a wrong one is writable, and it selects what the mod runs when the turn ends.
 The todo file stays a ledger the agent maintains all session, never
 regenerated from a paraphrase.
 2026-07-27 One channel, one writer,
@@ -154,6 +154,20 @@ refused when neither would have a body. At a compact the summary and the
 agent-written focus directive carry too. The skills no longer argue what a
 prompt may carry, because the schema leaves nothing to argue.
 2026-10-15 The continuation is a constant
+
+**The sentinel carries data, and the mod holds the commands and the prompt.**
+The file holds a kind, a `continue` flag and one free-text argument;
+`hooks/handoff.ts` maps the kind to `/rename`, `/clear` and `/compact` and holds
+the one prompt as a literal. The file once held the slash commands and a prompt
+line, and the mod ran whatever the plan listed, so what the mod could run was
+whatever the reader's validation let through: any continuation text not
+beginning with `/` reached `prompt.submit` as the user, and a reader of the mod
+alone could see no limit. Now what the mod can run is checkable from the mod
+alone, and no text on disk reaches `prompt.submit`. Whatever writes the file,
+the guard on `Write` and `Edit` notwithstanding, reaches only those three
+commands with a free-text argument, plus the fixed prompt. The mod still reads
+neither the sentinel nor the prompt box, so the rejected second parser stands.
+[The sentinel](the-sentinel.md)
 
 **A sentinel names its owner, and only the owner judges it stale.** The
 owner rides on line 1 of `armed` and `held`; the argument is in [Sessions

@@ -107,7 +107,7 @@ source "$BATS_TEST_DIRNAME/hook-helpers.bash"
 
 @test "report-drive-failure (failure and stale file: one report covering both)" {
     printf '%s\n' "rejected before it ran" > "$tmp/.claude/autodrive.failed"
-    seed_drive "$tmp" "compact" "/compact" "continue"
+    seed_drive "$tmp" "compact continue"
     run_report_failure "$tmp"
     [ "$status" -eq 0 ]
     [ "$(echo "$output" | jq -sr 'length')" = "1" ]

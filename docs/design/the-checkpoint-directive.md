@@ -114,7 +114,7 @@ the turn too — the agent stops to report it — so the transition would clear
 or compact over uncommitted work. Held, it runs only once `handoff-approved`
 is called, which the printed order puts after the commit. The disjunct is
 scoped to a driven transition rather than to any command: an untyped
-handoff's only line is `/rename`, which costs nothing when it fires over a
+handoff's only command is `/rename`, which costs nothing when it fires over a
 failed commit, and with clean memory there is no question for it to race
 (see [One hold predicate, rejected](#one-hold-predicate-rejected)).
 
@@ -144,7 +144,7 @@ either memory is owed or the turn carries a commit. A typed transition
 always types something and an untyped precompact types nothing, so this
 differs from the rule in exactly one cell: an untyped handoff under
 `with-commit` with clean memory. There it would hold a sentinel whose only
-line is `/rename`, protecting no state — the first disjunct's reason, a
+command is `/rename`, protecting no state — the first disjunct's reason, a
 `/rename` typed into a pane showing
 the approval question, does not transfer, since clean memory asks nothing —
 and it would add a `handoff-approved` call to the most common invocation. A

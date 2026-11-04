@@ -127,7 +127,7 @@ def test_a_lock_held_past_the_wait_fails_closed_and_writes_nothing(
     """
     repo = make_repo(tmp_path)
     (repo / "TODO.md").write_text("## Remaining\n\n- old item\n")
-    (repo / ".claude" / "autodrive").write_text("armed sess-other\nrename\n/rename X\n")
+    (repo / ".claude" / "autodrive").write_text("armed sess-other\nrename\nX\n")
     before = _tree(repo)
     monkeypatch.setenv("HANDOFF_LOCK_WAIT_SECS", "0.05")
     with held_elsewhere(repo / ".claude" / "autodrive.lock"):
@@ -236,7 +236,7 @@ def test_an_unexpected_read_back_failure_removes_the_sentinel(
         raise RuntimeError("boom")
 
     monkeypatch.setattr(checkpoint, "_read_back_drive", boom)
-    transition = validation.Transition(kind="rename", cmds=[], typed=False)
+    transition = validation.Transition(kind="rename", arg="X", typed=False)
     with pytest.raises(RuntimeError):
         checkpoint.compose_sentinel(
             repo, transition, continuation=False, owner="sess-x", held=False

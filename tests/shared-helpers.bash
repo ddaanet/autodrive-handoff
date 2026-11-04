@@ -23,8 +23,9 @@ marker_holds() {
     cmp -s "${2-$HANDOFF_POINTER_DIR/$prompt_marker}" <(printf '%s\0' "$1")
 }
 
-# The composer's one definition of the continuation line, so no row retypes it.
-# Needs $repo_root, set in the caller's setup.
+# The continuation line's one definition, HANDOFF_CONTINUATION in
+# scripts/_lib_drive.sh, so no row retypes it. Needs $repo_root, set in the
+# caller's setup.
 continuation_line() {
-    python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); from checkpoint import CONTINUATION; print(CONTINUATION)' "$repo_root/scripts"
+    bash -c 'source "$1/scripts/_lib.sh" && printf "%s\n" "$HANDOFF_CONTINUATION"' _ "$repo_root"
 }

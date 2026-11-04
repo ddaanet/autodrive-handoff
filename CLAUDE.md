@@ -9,8 +9,10 @@ plain tracked files that nothing stages, and composes the sentinel,
 `.claude/autodrive`; it does no git work (NFR1). As the turn ends, the mod
 (`hooks/handoff.ts`) records the cwd and session id in `classic.Stop`; in
 `turn.complete`, `scripts/drive-take.sh` takes the sentinel this session owns
-and prints the plan, and the mod runs each line through `$.command.run` (a
-`/`-line) or `$.prompt.submit`. The transition's own
+and prints the plan, data only (`{kind, arg, continue, failFile, message}`),
+and the mod maps the kind to its own literal `$.command.run` calls and, when
+`continue` is true, submits its one literal prompt with `$.prompt.submit`. The
+transition's own
 `SessionStart(clear|compact)` loader consumes the `pending` sentinel and
 injects the frame; `SessionStart(startup)` injects it into a fresh session.
 The loaders start no continuation: the mod submits it. `README.md` has the
@@ -25,15 +27,18 @@ characters of prose, no list item); `precompact` removes `TASK.md`, while
 (bool) at both are required, with no default. `continue: true` is legal only
 when the transition is carried out (`typed` in the code), and under `handoff`
 is refused when neither file would have a body; the continuation is the fixed
-line `CONTINUATION` in `checkpoint.py`, which points at the files and carries
-nothing. `compact: false` writes a two-line marker that runs nothing (FR-G),
-on which `SessionStart(compact)` gates the todo's re-injection.
+prompt `CONTINUATION` in the mod, which points at the files and carries
+nothing, and the sentinel carries only the `continue` flag. `compact: false`
+writes a `prepare` marker that runs nothing (FR-G), on which
+`SessionStart(compact)` gates the todo's re-injection.
 
-The sentinel's line 1 is its state and line 2 its kind: `held <session>`
+The sentinel's line 1 is its state, line 2 its kind (`rename`, `clear`,
+`compact`, or `prepare`; `clear` and `compact` take a trailing ` continue`)
+and line 3 its one argument, a title or a focus: `held <session>`
 waits on `bin/handoff-approved`, `armed <session>` on its owner's turn end,
-and an ownerless `pending` on the loader. It is held iff (it names a command
+and an ownerless `pending` on the loader. It is held iff (its kind is not `prepare`
 ∧ a memory directive was emitted) ∨ (driven ∧ `with-commit`). A plan of
-`kind: null` carries a message and runs nothing. The checkpoint is the
+`kind: null` or `prepare` carries a message and runs nothing. The checkpoint is the
 sentinel's one composer (FR3): past it, `handoff_drive_arm` rewrites the
 state line, and `write-guard.sh` denies an agent `Write`/`Edit` to the file.
 
@@ -55,7 +60,8 @@ One line each, with the node under `docs/design/` that holds its behaviour.
 
 - `.claude-plugin/plugin.json` — manifest, with no minimum-version field
 - `hooks/hooks.json` — the mod and six command hooks → driving-the-transition.md
-- `hooks/handoff.ts` — the mod, which runs the plan → driving-the-transition.md
+- `hooks/handoff.ts` — the mod, which holds the commands and the prompt and
+  runs the plan → driving-the-transition.md, the-sentinel.md
 - `skills/handoff/SKILL.md` — clear boundary → the-skills.md
 - `skills/precompact/SKILL.md` — the compact boundary → the-skills.md
 - `skills/autoname/SKILL.md` — a session title → the-skills.md
@@ -77,7 +83,7 @@ One line each, with the node under `docs/design/` that holds its behaviour.
   owner liveness; sources the next three → scoping.md,
   sessions-sharing-a-root.md
 - `scripts/_lib_frame.sh` — `handoff_frame` and its notes → the-write-path.md
-- `scripts/_lib_drive.sh` — the sentinel's grammar → driving-the-transition.md
+- `scripts/_lib_drive.sh` — the sentinel's grammar → the-sentinel.md
 - `scripts/_lib_files.sh` — no-follow reads, replacing writes → scoping.md
 - `scripts/drive-take.sh` — takes this session's `armed` sentinel, prints the
   plan → driving-the-transition.md
@@ -111,8 +117,9 @@ What you are touching → what to read first, under `docs/design/`:
 - any `skills/*/SKILL.md`, a `skill` value, the `clear`/`compact`/`continue`/
   `commit` fields → `the-skills.md`
 - `hooks/handoff.ts`, `drive-take.sh`, `load-handoff.sh`, `load-compact.sh`,
-  `report-drive-failure.sh`'s sweep, `.claude/autodrive` and its states, FR-G
-  → `driving-the-transition.md`; a prompt arriving while the arming turn runs or
+  `report-drive-failure.sh`'s sweep, FR-G → `driving-the-transition.md`;
+  `.claude/autodrive`, its kinds, states and grammar, `handoff_drive_read`,
+  `DRIVE_KIND`/`DRIVE_ARG`/`DRIVE_CONTINUE` → `the-sentinel.md`; a prompt arriving while the arming turn runs or
   after its `Stop`, the prompt marker, `drive-cancel.sh` → `queued-prompts.md`; the sentinel's lock,
   `_drive_lock.py`, `handoff_lock_take` → `sentinel-lock.md`; a second session
   in the root, `handoff_owner_live`, `HANDOFF_OWNER_LIVE_SECS`,

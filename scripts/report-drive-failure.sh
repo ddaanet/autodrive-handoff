@@ -110,7 +110,7 @@ record_sweep() {
 drive_state=""
 drive_owner=""
 drive_kind=""
-drive_lines=()   # the lines an armed file held, before then after
+drive_lines=()   # the lines an armed file would run, rendered for display
 drive_err=""
 # Held from the read to the exit, so the sweep's decision and every removal it
 # makes, record_sweep and the failure branch's removal of a stranded `pending`
@@ -133,7 +133,8 @@ elif [[ -L "$drive" || -f "$drive" ]]; then
         drive_state="$DRIVE_STATE"
         drive_owner="$DRIVE_OWNER"
         drive_kind="$DRIVE_KIND"
-        drive_lines=( ${DRIVE_BEFORE[@]+"${DRIVE_BEFORE[@]}"} ${DRIVE_AFTER[@]+"${DRIVE_AFTER[@]}"} )
+        handoff_drive_lines
+        drive_lines=( ${DRIVE_LINES[@]+"${DRIVE_LINES[@]}"} )
     elif (( read_rc == 2 )); then
         # The reader could not run: no evidence about the file, which may be
         # a live transition. Reported and never swept.

@@ -32,7 +32,8 @@ this session owns, so an ordinary prompt forks nothing new. A prompt is
 
 - **`rename`** is left in place, and nothing is reported or recorded. The drive
   takes it at the end of the turn the prompt is in.
-- **`clear` and `compact`** are swept and recorded (state `armed`), with the
+- **`clear` and `compact`**, and a `prepare` marker, which is a compaction the
+  user expects, are swept and recorded (state `armed`), with the
   user told `transition cancelled — a prompt arrived before it ran` and the
   agent given a note to answer the prompt and then run the skill again with the
   same transition, unless the prompt changes it. No lines are offered: typing
@@ -113,7 +114,7 @@ the outer drive ending clears nothing of the later one.
 <cwd> <session-id>` and stores the answer as one promise; a later prompt in the
 same window spawns nothing. The script takes the sentinel's lock and cancels
 an `armed` file the session owns, or a `pending` one, when the kind is `clear`
-or `compact` with at least one line to run. It records the sweep in
+or `compact`. It records the sweep in
 `.claude/autodrive.swept`, removes the file and prints `{kind, message, note}`;
 the cancel texts are the sweep's own (`_lib_drive.sh`). The handler toasts the
 message and appends the note to the prompt's context. An `armed` `rename` the
@@ -121,23 +122,22 @@ session owns is not cancelled but taken, as `drive-take.sh` would: the script
 removes the file, records nothing and prints the take's plan, with no `note`.
 Left in place it would be swept, because the sweep reads `armed` at the prompt,
 ahead of the take. The prompt passes unchanged and the drive runs that plan
-after the prompt's turn. An `armed` prepare-only `compact` the session owns
+after the prompt's turn. An `armed` `prepare` the session owns
 (FR-G) is moved to `pending` under the lock, as the take does, and nothing is
 printed: the sweep that follows then spares the marker and a hand-typed
-`/compact` still re-injects the todo. Anything else (a `pending` prepare-only
-compact, `held`, another session's file, an unreadable one) prints nothing, the
+`/compact` still re-injects the todo. Anything else (a `pending` `prepare`, `held`, another session's file, an unreadable one) prints nothing, the
 file stays and the prompt passes unchanged.
 
 **The drive awaits the answer.** The drive awaits that promise straight after the
-take returns, and again before each line of the plan's `before` list, and stops
+take returns, and again before each command the plan's kind runs, and stops
 when it cancelled. The fast path (no sentinel at the session root) skips the
 take, not the answer: the script may just have removed the file. When the
 answer is a rename's plan the drive runs it in place of the take's stdout,
 which is empty if the script won the lock. The promise is set before the handler awaits anything, so a
 prompt that arrives while the take or a `/rename` is in flight is waited for.
 The take may run first and leave `pending`; the cancel then removes it, which
-is why `pending` is cancelled at all. `after` lines need no check: they run
-only if the loop got past the last `before` line.
+is why `pending` is cancelled at all. The continuation needs no check: it is
+submitted only if the loop got past the last command.
 
 **Why the mod and not a `Stop` record.** A file the sweep reads at
 `UserPromptSubmit` cannot stop a plan the mod already holds in memory, and a
@@ -146,11 +146,11 @@ nothing for its loader. The handler is the one place that sees the prompt and
 owns the plan.
 
 **Why the window closes at the command.** The window shuts just before the last
-`before` line is issued. A prompt after that is held by the host until the
+command is issued. A prompt after that is held by the host until the
 command resolves and answered in the new context ahead of the continuation, so
 nothing is lost, and cancelling would remove the `pending` file the loader
-needs. A `/rename` under `clear` is an earlier line, so a prompt after it still
-stops the `/clear`. A plan with no `before` line issues nothing and is never
+needs. A `/rename` under `clear` is an earlier command, so a prompt after it still
+stops the `/clear`. A plan that runs no command issues nothing and is never
 cancelled.
 
 **Bounds.**

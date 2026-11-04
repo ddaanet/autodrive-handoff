@@ -33,7 +33,7 @@ source "$BATS_TEST_DIRNAME/hook-helpers.bash"
 @test "report-drive-failure (the failure record is a symlink: removed unread, said so, pending kept)" {
     printf '%s\n' "LINKED-FAILURE-LINE" > "$other/linked-failed"
     ln -s "$other/linked-failed" "$tmp/.claude/autodrive.failed"
-    seed_pending "$tmp" "compact" "/compact" "continue"
+    seed_pending "$tmp" "compact continue"
     run_report_failure "$tmp"
     [ "$status" -eq 0 ]
     [ ! -L "$tmp/.claude/autodrive.failed" ]
@@ -81,7 +81,7 @@ source "$BATS_TEST_DIRNAME/hook-helpers.bash"
 # it again from that state.
 @test "report-drive-failure (clears a stranded pending file)" {
     printf '%s\n' "rejected before it ran" > "$tmp/.claude/autodrive.failed"
-    seed_pending "$tmp" "compact" "/compact" "continue"
+    seed_pending "$tmp" "compact continue"
     run_report_failure "$tmp"
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
@@ -103,7 +103,7 @@ source "$BATS_TEST_DIRNAME/hook-helpers.bash"
 # normal turn end, days later and possibly in another session, driving a stale
 # transition into unrelated work.
 @test "report-drive-failure (stale autodrive: discards it and reports)" {
-    seed_drive "$tmp" "compact" "/compact keep the parser work" "continue with task 3"
+    seed_drive "$tmp" "compact continue" "keep the parser work"
     run_report_failure "$tmp"
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
@@ -115,7 +115,7 @@ source "$BATS_TEST_DIRNAME/hook-helpers.bash"
 }
 
 @test "report-drive-failure (stale autodrive: reports once, not every prompt)" {
-    seed_drive "$tmp" "compact" "/compact" "continue with task 3"
+    seed_drive "$tmp" "compact continue"
     run_report_failure "$tmp"
     [ "$status" -eq 0 ]
     [ -n "$output" ]
@@ -128,7 +128,7 @@ source "$BATS_TEST_DIRNAME/hook-helpers.bash"
 # report goes to that session's own channels, so without the record a sentinel
 # that vanishes leaves nothing to say who took it, from what state, or how old.
 @test "report-drive-failure (a sweep records who removed what: armed)" {
-    seed_drive "$tmp" "compact" "/compact" "continue with task 3"
+    seed_drive "$tmp" "compact continue"
     run_report_failure "$tmp"
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
@@ -138,7 +138,7 @@ source "$BATS_TEST_DIRNAME/hook-helpers.bash"
 }
 
 @test "report-drive-failure (a sweep records who removed what: armed by another session)" {
-    printf '%s\n' "armed other-session" "clear" "/rename t" "/clear" "go" > "$tmp/.claude/autodrive"
+    printf '%s\n' "armed other-session" "clear continue" "t" > "$tmp/.claude/autodrive"
     run_report_failure "$tmp"
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
@@ -148,7 +148,7 @@ source "$BATS_TEST_DIRNAME/hook-helpers.bash"
 
 @test "report-drive-failure (a sweep records a stranded pending file)" {
     printf '%s\n' "rejected before it ran" > "$tmp/.claude/autodrive.failed"
-    seed_pending "$tmp" "compact" "/compact" "continue"
+    seed_pending "$tmp" "compact continue"
     run_report_failure "$tmp"
     [ "$status" -eq 0 ]
     [[ "$(cat "$tmp/.claude/autodrive.swept")" == *$'\tstate=pending\t'* ]]
@@ -165,7 +165,7 @@ source "$BATS_TEST_DIRNAME/hook-helpers.bash"
 @test "report-drive-failure (the record keeps the newest 50 lines, newest first, and the sweep still reports)" {
     # Enough bytes that cat is still writing when head closes its end of the pipe.
     for i in $(seq 1 4000); do printf 'old-%s %0100d\n' "$i" 0; done > "$tmp/.claude/autodrive.swept"
-    seed_drive "$tmp" "compact" "/compact" "continue"
+    seed_drive "$tmp" "compact continue"
     run_report_failure "$tmp"
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
@@ -180,7 +180,7 @@ source "$BATS_TEST_DIRNAME/hook-helpers.bash"
 # blocked and still reports.
 @test "report-drive-failure (an unwritable record does not stop the sweep)" {
     mkdir "$tmp/.claude/autodrive.swept"
-    seed_drive "$tmp" "compact" "/compact" "continue"
+    seed_drive "$tmp" "compact continue"
     run_report_failure "$tmp"
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
@@ -193,7 +193,7 @@ source "$BATS_TEST_DIRNAME/hook-helpers.bash"
     mkdir -p "$BATS_TEST_TMPDIR/stubmk"
     printf '#!/usr/bin/env bash\nexit 1\n' > "$BATS_TEST_TMPDIR/stubmk/mktemp"
     chmod +x "$BATS_TEST_TMPDIR/stubmk/mktemp"
-    seed_drive "$tmp" "compact" "/compact" "continue"
+    seed_drive "$tmp" "compact continue"
     PATH="$BATS_TEST_TMPDIR/stubmk:$PATH" run_report_failure "$tmp"
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
@@ -207,7 +207,7 @@ source "$BATS_TEST_DIRNAME/hook-helpers.bash"
 @test "report-drive-failure (the record is a symlink: not read or replaced, the sweep still reports)" {
     printf 'decoy bytes\n' > "$other/decoy"
     ln -s "$other/decoy" "$tmp/.claude/autodrive.swept"
-    seed_drive "$tmp" "compact" "/compact" "continue"
+    seed_drive "$tmp" "compact continue"
     run_report_failure "$tmp"
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
@@ -243,7 +243,7 @@ STUB
 @test "report-drive-failure (the record becomes a symlink after the check: its target is not copied in)" {
     printf 'old line\n' > "$tmp/.claude/autodrive.swept"
     printf 'DECOY-RECORD-BYTES\n' > "$other/decoy"
-    seed_drive "$tmp" "compact" "/compact" "continue"
+    seed_drive "$tmp" "compact continue"
     swap_on_first date "$tmp/.claude/autodrive.swept" "$other/decoy"
     run_report_failure "$tmp"
     [ "$status" -eq 0 ]
@@ -256,7 +256,7 @@ STUB
 # into the directory the link names.
 @test "report-drive-failure (the record becomes a symlink to a directory: nothing lands in it)" {
     mkdir -p "$other/dir"
-    seed_drive "$tmp" "compact" "/compact" "continue"
+    seed_drive "$tmp" "compact continue"
     swap_on_first date "$tmp/.claude/autodrive.swept" "$other/dir"
     run_report_failure "$tmp"
     [ "$status" -eq 0 ]
@@ -267,7 +267,7 @@ STUB
 @test "report-drive-failure (a symlink at the old temporary name: not written through, the record still lands)" {
     printf 'decoy bytes\n' > "$other/decoy"
     ln -s "$other/decoy" "$tmp/.claude/autodrive.swept.tmp"
-    seed_drive "$tmp" "compact" "/compact" "continue"
+    seed_drive "$tmp" "compact continue"
     run_report_failure "$tmp"
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
@@ -279,7 +279,7 @@ STUB
 
 # The temporary file is the writer's own and is gone once the record is in place.
 @test "report-drive-failure (the record leaves no temporary file behind)" {
-    seed_drive "$tmp" "compact" "/compact" "continue"
+    seed_drive "$tmp" "compact continue"
     run_report_failure "$tmp"
     [ "$status" -eq 0 ]
     [ "$(cd "$tmp/.claude" && printf '%s\n' autodrive.swept*)" = "autodrive.swept" ]
@@ -289,11 +289,12 @@ STUB
 # drive mod that did not load (--safe-mode, Claude Code older than 2.1.287, or an
 # organization-managed one that does not list the plugin in managed settings),
 # in which case nothing will ever run it: the report names that cause and prints
-# the lines the file held, before then after, one per line, for the user to type.
+# the lines the file's kind runs, rendered from its data, one per line, for the
+# user to type.
 @test "report-drive-failure (stale armed autodrive: names the mod and prints the lines to type)" {
     # shellcheck disable=SC2016  # the literal $HOME is the odd content under test
-    seed_drive "$tmp" "clear" '/rename Fix "the  $HOME" bug & more' "/clear" \
-        "pick up 'task  3' per the *file*; then \\ done"
+    seed_drive "$tmp" "clear continue" 'Fix "the  $HOME" bug & more'
+    continuation="$(continuation_line)"
     run_report_failure "$tmp"
     [ "$status" -eq 0 ]
     echo "$output" | jq -e '.hookSpecificOutput.additionalContext | test("drive mod")' >/dev/null
@@ -303,16 +304,16 @@ STUB
     # shellcheck disable=SC2016
     expected='/rename Fix "the  $HOME" bug & more
 /clear
-pick up '"'"'task  3'"'"' per the *file*; then \ done'
+'"$continuation"
     # Both channels carry the three lines whole, contiguous and in order.
     echo "$output" | jq -e --arg e "$expected" '.systemMessage | contains($e)' >/dev/null
     echo "$output" | jq -e --arg e "$expected" '.hookSpecificOutput.additionalContext | contains($e)' >/dev/null
 }
 
-# Prepare-only (FR-G): the kind line alone. The cause is still reported, but
+# The prepare marker (FR-G). The cause is still reported, but
 # there is nothing to type, so no empty block is offered.
 @test "report-drive-failure (stale armed autodrive with no lines: names the mod, prints nothing to type)" {
-    seed_drive "$tmp" "compact"
+    seed_drive "$tmp" "prepare"
     run_report_failure "$tmp"
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]

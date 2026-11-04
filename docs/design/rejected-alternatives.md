@@ -168,7 +168,7 @@ into every threshold compaction in every session in the repo,
 unrequested and mid-session. The asymmetry is principled: compaction is the
 one boundary the harness enters on its own, so it is the one that needs a
 signal of intent. Also rejected: **prepare-only with a driven continuation**
-— a sentinel whose before-lines are empty but whose after-line is not. Cheap
+— a sentinel that runs no command but still submits a continuation. Cheap
 and appealing, but a skill that types one of the two lines has no sentence
 that describes it.
 2026-07-29 Driven transitions

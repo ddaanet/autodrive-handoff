@@ -31,8 +31,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from checkpoint import CONTINUATION
 from conftest import run_git
+from continuation import continuation
 
 pytestmark = pytest.mark.live
 
@@ -42,11 +42,12 @@ MODEL = os.environ.get("HANDOFF_MOD_SMOKE_MODEL", "haiku")
 RUN_TIMEOUT = 240.0
 TITLE = "mod-smoke-title"
 FOCUS = "keep the word PINEAPPLE"
+CONTINUATION = continuation()
 
 
 def test_rename_row(smoke_repo: Path) -> None:
     session = str(uuid.uuid4())
-    prompt = arm_prompt(session, f"rename\n/rename {TITLE}\n")
+    prompt = arm_prompt(session, f"rename\n{TITLE}\n")
 
     run_claude(smoke_repo, prompt, session)
 
@@ -55,7 +56,7 @@ def test_rename_row(smoke_repo: Path) -> None:
 
 def test_clear_row_continues_in_the_fresh_session(smoke_repo: Path) -> None:
     session = str(uuid.uuid4())
-    prompt = arm_prompt(session, f"clear\n/rename {TITLE}\n/clear\n{CONTINUATION}\n")
+    prompt = arm_prompt(session, f"clear continue\n{TITLE}\n")
 
     run_claude(smoke_repo, prompt, session)
 
@@ -72,7 +73,7 @@ def test_clear_row_continues_in_the_fresh_session(smoke_repo: Path) -> None:
 
 def test_compact_row_carries_the_focus_and_continues(smoke_repo: Path) -> None:
     session = str(uuid.uuid4())
-    prompt = arm_prompt(session, f"compact\n/compact {FOCUS}\n{CONTINUATION}\n")
+    prompt = arm_prompt(session, f"compact continue\n{FOCUS}\n")
 
     run_claude(smoke_repo, prompt, session)
 

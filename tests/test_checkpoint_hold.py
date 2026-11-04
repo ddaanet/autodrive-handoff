@@ -300,8 +300,8 @@ def test_sentinel_typing_nothing_arms_even_with_memory_gate_pending(
     }
     result = run_checkpoint(repo, payload)
     assert result.returncode == 0
-    first_line = (repo / ".claude" / "autodrive").read_text().splitlines()[0]
-    assert first_line == "armed sess-checkpoint"
+    lines = (repo / ".claude" / "autodrive").read_text().splitlines()
+    assert lines == ["armed sess-checkpoint", "prepare"]
     assert "handoff-approved" not in result.stdout
 
 

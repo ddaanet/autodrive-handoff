@@ -1,1 +1,1 @@
-{"kind":null,"before":[],"after":[],"failFile":"","message":"handoff: the sentinel's lock was busy; .claude/autodrive left untouched, nothing taken."}
+{"kind":null,"arg":"","continue":false,"failFile":"","message":"handoff: the sentinel's lock was busy; .claude/autodrive left untouched, nothing taken."}

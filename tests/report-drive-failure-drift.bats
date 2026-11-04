@@ -264,7 +264,7 @@ find_witness_stub() {
 
 @test "report-drive-failure (worktree cwd: sweeps the worktree file)" {
     wt="$(make_worktree wtG)"
-    seed_drive "$wt" "compact" "/compact" "continue"
+    seed_drive "$wt" "compact continue"
     run_report_failure "$wt"
     [ "$status" -eq 0 ]
     [ ! -e "$wt/.claude/autodrive" ]

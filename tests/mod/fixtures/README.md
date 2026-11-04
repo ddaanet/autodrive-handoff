@@ -14,21 +14,24 @@ Empty stdout (no fixture) means nothing is armed for this session: no file,
 `pending`, `held`, or `armed` by another session.
 
 Choices the contract fixes for `drive-take.sh`:
-- Key order is `kind, before, after, failFile, message`; `failFile` is always
-  `<root>/.claude/autodrive.failed`, even when the plan carries no lines.
-- `message` is `handoff: will run <before[0]> once the turn ends.`
-- FR-G (`compact` kind line alone): file left `pending`, `before`/`after` `[]`,
-  message `handoff: prepared for compact; nothing to run, frame will be
-  re-injected.` (old wording, `$k` fixed to the kind).
-- Malformed: file removed, `kind` is `null`, lists empty, message is the old
-  `autodrive malformed — <DRIVE_ERR>; discarded, transition not armed.`
-  Exit 0. The malformed check precedes the state gate.
+- The plan is data: key order is `kind, arg, continue, failFile, message`,
+  `continue` a JSON boolean; no command name or prompt text. `failFile` is
+  always `<root>/.claude/autodrive.failed`, even when the plan runs nothing.
+- `message` is `handoff: will run <first rendered line> once the turn ends.`
+  (`/rename <arg>`, `/compact[ <arg>]`), the line a person would type.
+- FR-G (`prepare`, `prepare.json`): file left `pending`, kind `prepare`,
+  `arg` `""`, `continue` `false`, message `handoff: prepared for compact;
+  nothing to run, frame will be re-injected.`
+- Malformed: file removed, `kind` is `null`, `arg` `""`, `continue` `false`,
+  message is the old `autodrive malformed — <DRIVE_ERR>; discarded, transition
+  not armed.` Exit 0. The malformed check precedes the state gate.
 - No session id given and the file `armed`: file left as it is, `kind` is
-  `null`, lists empty, `failFile` as always, and the message says the turn
+  `null`, `arg` `""`, `continue` `false`, `failFile` as always, and the message says the turn
   ended with no session id (`no-session.json`). The mod writes `failFile` on
   it, as for a rejected line, so the next prompt reports it.
 - The lock cannot be taken (`lock-busy.json`: the wait passed with another
-  actor holding it): file left exactly as it is, `kind` is `null`, lists empty,
+  actor holding it): file left exactly as it is, `kind` is `null`, `arg` `""`,
+  `continue` `false`,
   `failFile` empty (the sentinel is still `armed`, so the next prompt's sweep
   deals with it), and the message names the lock. A lock that could not be set
   up at all prints the same shape with "could not be set up" for "was busy".

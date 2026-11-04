@@ -6,7 +6,8 @@
 # `armed` by another session); an `armed` file with no session id given is a
 # `kind: null` plan saying so, and so is a sentinel whose lock could not be taken
 # (nothing touched). Otherwise one line of JSON:
-# {kind, before[], after[], failFile, message}.
+# {kind, arg, continue, failFile, message}: data only, the mod holds the
+# commands and the prompt (docs/design/driving-the-transition.md).
 #
 # The mod never touches the sentinel: this script takes it, through the same
 # parser every other reader uses, so there is no second copy to drift (a prompt
@@ -24,7 +25,7 @@ root="$HANDOFF_ROOT"
 # for a malformed file, so the mod toasts it instead of the turn ending silent.
 if [[ "$HANDOFF_ROOT_BRANCH" == "unresolved" ]]; then
     jq -nc --arg m "$HANDOFF_UNRESOLVED_MSG" \
-        '{kind: null, before: [], after: [], failFile: "",
+        '{kind: null, arg: "", "continue": false, failFile: "",
           message: ("handoff: " + $m + "; no transition taken.")}'
     exit 0
 fi
@@ -53,7 +54,7 @@ lock_rc=0
 handoff_lock_take "$root/$HANDOFF_REL_DRIVE_LOCK" || lock_rc=$?
 if (( lock_rc != 0 )); then
     jq -nc --arg m "$HANDOFF_LOCK_MSG" \
-        '{kind: null, before: [], after: [], failFile: "",
+        '{kind: null, arg: "", "continue": false, failFile: "",
           message: ("handoff: " + $m + "; " + ".claude/autodrive left untouched, nothing taken.")}'
     exit 0
 fi
@@ -66,7 +67,7 @@ if (( read_rc == 2 )); then
     # left where it is and the plan carries the message alone, as for an
     # unresolved root. A later turn end, with a working reader, takes it.
     jq -nc --arg e "$DRIVE_ERR" \
-        '{kind: null, before: [], after: [], failFile: "",
+        '{kind: null, arg: "", "continue": false, failFile: "",
           message: ("handoff: autodrive not read — " + $e + "; left in place, nothing taken.")}'
     exit 0
 fi
@@ -75,7 +76,7 @@ if (( read_rc != 0 )); then
     # does not repeat at every turn.
     rm -f "$drive"
     jq -nc --arg e "$DRIVE_ERR" --arg f "$fail_file" \
-        '{kind: null, before: [], after: [], failFile: $f,
+        '{kind: null, arg: "", "continue": false, failFile: $f,
           message: ("handoff: autodrive malformed — " + $e + "; discarded, transition not armed.")}'
     exit 0
 fi
@@ -92,7 +93,7 @@ fi
 [[ "$DRIVE_STATE" == "armed" ]] || exit 0
 if [[ -z "$session_id" ]]; then
     jq -nc --arg f "$fail_file" \
-        '{kind: null, before: [], after: [], failFile: $f,
+        '{kind: null, arg: "", "continue": false, failFile: $f,
           message: "handoff: the turn ended with no session id, so the armed transition was not taken; the next prompt reports it."}'
     exit 0
 fi
@@ -105,15 +106,13 @@ else
     rm -f "$drive"
 fi
 
-before=( ${DRIVE_BEFORE[@]+"${DRIVE_BEFORE[@]}"} )
-
 # FR-G: nothing to run. The pending state alone is the loader's signal that the
 # frame belongs in this compaction.
-if (( ${#before[@]} == 0 )); then
-    jq -nc --arg k "$DRIVE_KIND" --arg f "$fail_file" \
-        '{kind: $k, before: [], after: [], failFile: $f,
-          message: ("handoff: prepared for " + $k + "; nothing to run, frame will be re-injected.")}'
+if [[ "$DRIVE_KIND" == "prepare" ]]; then
+    jq -nc --arg f "$fail_file" \
+        '{kind: "prepare", arg: "", "continue": false, failFile: $f,
+          message: "handoff: prepared for compact; nothing to run, frame will be re-injected."}'
     exit 0
 fi
 
-handoff_drive_plan "$DRIVE_KIND" "$fail_file" "${before[@]}"
+handoff_drive_plan "$DRIVE_KIND" "$fail_file"

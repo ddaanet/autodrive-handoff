@@ -8,11 +8,23 @@
 // The session id goes with the cwd: drive-take.sh takes only an armed file this
 // session owns, since every session sharing the root ends turns there.
 //
+// The plan is data: {kind, arg, continue, failFile, message}. Everything this
+// mod can run is in this file: commandsFor() maps the kind to /rename, /clear
+// and /compact, the plan's arg is only their free-text argument, and CONTINUATION
+// is the one prompt, submitted when the plan's continue flag is true. No
+// command name and no prompt text is read from the plan or from disk, so a
+// plan can reach nothing else (docs/design/driving-the-transition.md).
+//
 // A prompt a person sends after the Stop and before the transition command is
 // issued would be answered in a context the transition then discards. The
 // prompt.submit handler asks scripts/drive-cancel.sh, once per window, to cancel
-// a clear or compact, and takes a rename; the drive checks the answer before each line it issues
+// a clear or compact, and takes a rename; the drive checks the answer before each command it issues
 // (docs/design/queued-prompts.md).
+
+// The one prompt this mod submits, after a driven transition whose plan says
+// continue. tests/test_mod_fixtures.py pins it to HANDOFF_CONTINUATION in
+// scripts/_lib_drive.sh, which the sweep's offer renders.
+const CONTINUATION = 'Continue where the previous context stopped.'
 
 // One window per Stop: it opens at classic.Stop (`stopped`), turn.complete moves
 // it to `driving` and hands it to drive(), and it closes when the transition
@@ -100,26 +112,51 @@ async function drive($: any, w: Window) {
     return
   }
 
-  const lines = [...plan.before, ...plan.after]
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-    if (i < plan.before.length) {
-      // Read before any yield: with no prompt yet, nothing is awaited between
-      // this read and issuing the command.
-      if (w.asked !== null && (await w.asked)?.note) return
-      // The window closes as the transition command is issued: a prompt after
-      // it is held by the host and answered in the new context, and the
-      // sentinel must stay pending for the loader.
-      if (i === plan.before.length - 1 && driving === w) driving = null
-    }
+  const steps = commandsFor(plan.kind, typeof plan.arg === 'string' ? plan.arg : '')
+  for (let i = 0; i < steps.length; i++) {
+    const { command, args } = steps[i]
+    // Read before any yield: with no prompt yet, nothing is awaited between
+    // this read and issuing the command.
+    if (w.asked !== null && (await w.asked)?.note) return
+    // The window closes as the last command is issued: a prompt after it is
+    // held by the host and answered in the new context, and the sentinel must
+    // stay pending for the loader.
+    if (i === steps.length - 1 && driving === w) driving = null
     try {
-      await runLine($, line)
+      await $.command.run({ command, args })
     } catch (err: any) {
-      const reason = `handoff: ${line} failed: ${err?.message ?? String(err)}`
-      if (await recordFailure($, plan.failFile, reason)) $.ui.toast(reason)
+      await reportFailure($, plan.failFile, `/${command}${args === '' ? '' : ` ${args}`}`, err)
       return
     }
   }
+  if (plan.continue === true && steps.length > 0) {
+    try {
+      await $.prompt.submit({ text: CONTINUATION, asUser: true })
+    } catch (err: any) {
+      await reportFailure($, plan.failFile, CONTINUATION, err)
+    }
+  }
+}
+
+// What the mod runs for a plan's kind: literal command names, the plan's arg as
+// the free-text argument where the kind takes one. Every other kind, null and
+// the prepare marker included, runs nothing.
+function commandsFor(kind: unknown, arg: string): { command: string; args: string }[] {
+  switch (kind) {
+    case 'rename':
+      return [{ command: 'rename', args: arg }]
+    case 'clear':
+      return [{ command: 'rename', args: arg }, { command: 'clear', args: '' }]
+    case 'compact':
+      return [{ command: 'compact', args: arg }]
+    default:
+      return []
+  }
+}
+
+async function reportFailure($: any, failFile: string, what: string, err: any) {
+  const reason = `handoff: ${what} failed: ${err?.message ?? String(err)}`
+  if (await recordFailure($, failFile, reason)) $.ui.toast(reason)
 }
 
 // Writes the failure record for the next prompt's report. $.fs.write follows a
@@ -136,12 +173,4 @@ async function recordFailure($: any, failFile: string, text: string): Promise<bo
   }
   await $.fs.write(failFile, `${text}\n`)
   return true
-}
-
-async function runLine($: any, line: string) {
-  if (!line.startsWith('/')) return $.prompt.submit({ text: line, asUser: true })
-  const space = line.indexOf(' ')
-  const command = space < 0 ? line.slice(1) : line.slice(1, space)
-  const args = space < 0 ? '' : line.slice(space + 1)
-  return $.command.run({ command, args })
 }

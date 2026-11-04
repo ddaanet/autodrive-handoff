@@ -5,82 +5,19 @@ Part of [handoff — Design](../design.md).
 The dated records named here are in the `changelog-archive` tag's
 `docs/changelog/`.
 
-A **driven transition** is a short sequence of commands and prompts that the
+A **driven transition** is a short sequence of commands and a prompt that the
 plugin runs for the user once the turn that prepared it ends. The checkpoint
-composes the sequence into a sentinel; a Claude Code mod
-(`hooks/handoff.ts`) runs it through the host's own command and prompt entry
-points. The code calls a driven transition `typed`, a name from when the
-sequence was keystrokes in a tmux pane; the payload fields `clear` and
-`compact` are what make one. Nothing reads or writes the terminal.
-
-## The kinds and their lines
-
-| kind | runs before | runs after | confirming source |
-|---|---|---|---|
-| `rename` | `/rename <title>` | — | — |
-| `compact` | `/compact [directive]` | the continuation line, if any | `compact` |
-| `clear` | `/rename <title>`, `/clear` | the continuation line, if any | `clear` |
-| `compact` (prepared) | — | — | `compact` |
-
-The after-line is optional on both driven kinds, because running the
-transition and submitting a prompt into what it opens are separate decisions.
-When present it is always the checkpoint's one fixed continuation line, so no
-sentinel carries agent-authored prose; the parser's rule that a prose line may
-not begin with `/` stays as the bound on a file written by anything else.
-`/restart` is not a kind: it is a Claude Code built-in, and a relaunch with
-`--resume` carries the conversation over whole, so nothing here has a frame or
-a continuation to add to it. `/autodrive-handoff:autoname` stays a skill; its checkpoint
-call composes a `rename` sentinel and rides the same drive.
+composes a sentinel that names the transition as data; a Claude Code mod
+(`hooks/handoff.ts`), which holds the commands and the prompt as literals,
+runs it through the host's own command and prompt entry points. The code calls
+a driven transition `typed`, a name from when the sequence was keystrokes in a
+tmux pane; the payload fields `clear` and `compact` are what make one. Nothing
+reads or writes the terminal.
 2026-10-08 The plugin becomes a mod
 
-## The sentinel
-
-One sentinel, `.claude/autodrive`, whose first line is its **state** and
-second line the kind. The states are `held` → `armed` → `pending` → gone.
-`held` and `armed` name their **owner** on the same line, `held <session-id>`
-and `armed <session-id>`: the session that composed or approved the
-transition, whose turn end takes it. `pending` names none, because past the
-take the transition belongs to the confirming `SessionStart` in whichever
-session it opened.
-`checkpoint.py` is the file's one composer (`handoff_drive_arm` rewrites only
-line 1): it reads its own output back through `handoff_drive_read`, so
-composer and parser cannot drift, and a direct agent Write or Edit is denied
-at `PreToolUse`.
-Everything after the first two lines is a command or a prompt, one per line,
-and validation anchors it — the *n*th line of kind *k* must begin with the
-expected command literal, and a prose line may not begin with `/` — so the
-file cannot be made to run something else. One fact per line throughout.
-
-A symbolic link at the sentinel is never followed. No writer makes one, and a
-repository can commit one to any readable file, whose bytes a reader would
-then parse, quote into a report, offer as lines to type or rewrite on arming.
-`handoff_drive_read` refuses a link, dangling or not, before reading a byte:
-the test and the read are one `O_NOFOLLOW` open (`handoff_read_regular`), so a
-link put at the name after a caller looked at it is refused too. Every caller gates on the name existing as a link or a file, so a dangling
-one is refused too rather than read as no file and left for ever. Each takes
-its malformed path: the loaders and `drive-take.sh` remove the link and report
-it, the sweep removes it as its own `link` state, and `handoff-approved`
-refuses to arm. Both writers rename a file into place: the checkpoint, and
-`handoff_drive_arm`, whose temporary file is `mktemp`'s rather than a name a
-repository could commit a link at, and whose rename is `os.replace`, which
-replaces a link put at the sentinel since it was read where `mv` would move
-the file into the directory it points at. The bound is the last component, as
-for the root files: a symlinked `.claude/` is read and written where it
-points, and one shared between roots is unsupported (see [Sessions sharing a
-root](sessions-sharing-a-root.md#limits)).
-
-A reader whose `python3 -I` helper fails prints nothing, which says nothing
-about the file. `handoff_drive_read` returns 2 for it rather than 1, and every
-caller keeps the file and says so: `drive-take.sh` prints a `kind: null` plan
-carrying only the message, the loaders report it, and the sweep records it as
-its own `unread` state and removes nothing.
-
-`held` is the checkpoint's, released by `handoff-approved`
-([The checkpoint directive](the-checkpoint-directive.md)). Everything after it
-is a hook's: `drive-take.sh` moves `armed` to `pending`, dropping the owner, and
-the transition's own `SessionStart` loader removes `pending`. Which session may
-take or sweep a file another session owns is in [Sessions sharing a
-root](sessions-sharing-a-root.md).
+What the sentinel holds, and the bound on what it can make the mod run, is in
+[The sentinel](the-sentinel.md). The plan on this page is that file taken and
+printed as data: a kind, a flag and one argument.
 
 ## Who runs it, and when
 
@@ -134,18 +71,21 @@ tests also consume:
   owner's `/rename` and `/clear` in itself.
 - **No session id given** over an `armed` file takes nothing — whose file it
   is cannot be told — and prints a `kind: null` plan saying so. The mod writes
-  that message to `failFile`, as for a rejected line, so the next prompt
+  that message to `failFile`, as for a rejected command, so the next prompt
   reports it and sweeps the file; a `Stop` that carried no id is a host fault
   nothing else would surface.
-- Otherwise one line of JSON, `{kind, before[], after[], failFile, message}`.
+- Otherwise one line of JSON, `{kind, arg, continue, failFile, message}`, in
+  that key order: the sentinel's kind, its argument and `continue` as a JSON
+  boolean, data only; the message names the first line the transition will run.
   `armed` is left **before** the plan is printed: `pending` for a kind with a
   confirming `SessionStart`, removal for `rename`, which has none and would
-  otherwise leave a `pending` nobody clears.
-- **FR-G.** A `compact` kind line alone (the prepare-only compact) has no
-  before-lines. The file is left `pending`, the lists are empty, and the
-  message says so; the mod toasts it and runs nothing. That `pending` state is
-  what `SessionStart(compact)` gates the todo's re-injection on, so a
-  hand-typed `/compact` re-injects nothing.
+  otherwise leave a `pending` nobody clears. A plan that carries a message and
+  runs nothing (`kind: null`, and `prepare`) has `arg: ""` and
+  `continue: false`.
+- **FR-G.** A `prepare` kind runs nothing. The file is left `pending`, the plan
+  has kind `prepare`, and the message says so; the mod toasts it and runs
+  nothing. That `pending` state is what `SessionStart(compact)` gates the todo's
+  re-injection on, so a hand-typed `/compact` re-injects nothing.
 - **Malformed** files are removed and reported with `kind` null and the
   constraint that failed, so the complaint does not repeat each turn.
 
@@ -157,9 +97,18 @@ because the script owns root resolution.
 
 ## Running the plan
 
-For each line of `before` then `after`, in order, a line starting with `/`
-runs as `$.command.run({command, args})`, the command name without its slash;
-any other line is `$.prompt.submit({text, asUser: true})`.
+The mod maps the plan's `kind` to its own commands, by a `switch` over literal
+names, and the plan's `arg` is only their argument: `rename` runs
+`$.command.run({command: 'rename', args: arg})`; `clear` runs that and then
+`{command: 'clear', args: ''}`; `compact` runs `{command: 'compact', args: arg}`;
+every other kind, `null` and `prepare` included, runs nothing. After all the
+commands have run, a plan with `continue` true submits the mod's one fixed
+prompt, `$.prompt.submit({text: CONTINUATION, asUser: true})`; a plan that runs
+no command submits none. A plan field the mod does not name, such as a command
+or a prompt text, is ignored, so a plan can reach only what the kind table
+holds ([The sentinel](the-sentinel.md#what-holding-the-file-can-reach)). The
+cancel check, before each command, and the window's close, as the last command
+is issued, are in [A prompt after `Stop`](queued-prompts.md#a-prompt-after-stop).
 
 The mod does not read the prompt box. It once stopped on any text there, to
 avoid typing over a person; but `command.run` and `prompt.submit` do not type
@@ -171,10 +120,11 @@ stashed and then restored before the turn ended made the mod take the
 sentinel, toast that it would run, and run nothing.
 2026-10-16 A prompt queued into the arming turn
 
-**A line that fails ends the sequence**, which is what makes a `/rename` that
-never lands under kind `clear` cost a wrong title and nothing more. The mod
-writes `<root>/.claude/autodrive.failed` with the line and the host's reason,
-and toasts the same text. `$.fs.write` follows a link and the mods API has no
+**A command or prompt that fails ends the sequence**, which is what makes a
+`/rename` that never lands under kind `clear` cost a wrong title and nothing
+more. The mod writes `<root>/.claude/autodrive.failed` with the command as it
+would be typed (`/rename T`), or the prompt's text, and the host's reason, and
+toasts the same text. `$.fs.write` follows a link and the mods API has no
 write that replaces one, so the mod stats the name first (`isLink`) and, on a
 link, skips the record and says so in the toast. A link put there between the
 stat and the write is still followed: the bound, in a project directory the
@@ -228,11 +178,11 @@ it always said. The bridge, and the condition that retires it, are argued in
 
 ## Reporting a failure, sweeping a stale sentinel
 
-A rejected line has no turn left to speak in, so the mod's report is the
+A rejected command has no turn left to speak in, so the mod's report is the
 `autodrive.failed` file and `report-drive-failure.sh`, which reads it at the
 next `UserPromptSubmit` — the first moment anything can act on the news — and
 reports on both channels. The mod writes the record only on what it observed
-itself: a rejected line, or a turn end that carried no session id, which is
+itself: a rejected command, or a turn end that carried no session id, which is
 recorded like one. A failure part-way through a sequence strands the
 sentinel in `pending`, because the confirming `SessionStart` never fires; the
 same hook clears it with the report. Nothing is inferred from a file merely
@@ -260,8 +210,9 @@ Claude Code that does not list the plugin in managed settings (Claude Code
 and the mod learns the turn ended only through that event). The mod needs
 2.1.287 and the plugin manifest has no field to pin a minimum, so this note is
 where the requirement surfaces: it names the mod as the likely cause, discards the
-file so it cannot fire into unrelated work days later, and prints the lines it
-held for the user to run in order. A file that will not parse is swept too,
+file so it cannot fire into unrelated work days later, and prints the lines its
+kind would have run (`handoff_drive_lines`, rendered for display from the
+kind, argument and flag) for the user to type in order. A file that will not parse is swept too,
 without lines — it describes no transition anyone can complete. `held` is
 exempt whoever owns it: it waits on an approval whose answer arrives at this
 very hook, so surviving the turn boundary is what it is for. Lines are offered
@@ -272,7 +223,7 @@ into this conversation.
 
 The owner's own prompt can fire this hook inside the arming turn, before its
 `Stop`: the sweep tells it from an aborted turn by its `prompt_id` and leaves a
-`rename`, cancels a `clear` or `compact` and offers no lines. The argument, the
+`rename`, cancels a `clear`, `compact` or `prepare` and offers no lines. The argument, the
 marker that carries the id and the bounds are in
 [A prompt queued into the arming turn](queued-prompts.md).
 
@@ -294,14 +245,18 @@ Three layers, because the mod's own seams are each reachable only one way:
 
 - `tests/drive-take.bats` runs the real script over real sentinel files and
   asserts stdout equals the fixtures in `tests/mod/fixtures/`, plus each state
-  gate and the worktree-scoped paths.
+  gate and the worktree-scoped paths; `tests/lib-drive.bats` pins the reader's
+  shapes and every malformed form, the old format included.
 - `tests/mod/handoff.test.ts` and `window.test.ts`, run by `claude plugin test`,
   stub every mods API call the mod makes and assert the exact call sequence: the deferral to
   `turn.complete`, stop-on-first-failure with the `failFile` write, the
   absence of any prompt-box read, the no-op on empty stdout and on an aborted
-  turn. It consumes
-  the same fixtures through a generated module, `tests/gen_mod_fixtures.py`,
-  which `tests/test_mod_fixtures.py` keeps in step. Both gate `just precommit`.
+  turn, and that a plan runs only its kind's commands: an unknown kind runs
+  nothing, extra `before`, `after` or `text` fields are ignored, and a `/plugin`
+  argument is only a rename's argument. It consumes the same fixtures through a
+  generated module, `tests/gen_mod_fixtures.py`, which `tests/test_mod_fixtures.py`
+  keeps in step, and which also pins the mod's `CONTINUATION` literal to
+  `HANDOFF_CONTINUATION`. Both gate `just precommit`.
 - `tests/test_mod_live.py` (`just mod-smoke`, outside precommit) drives a real
   `claude -p` in a throwaway repo with an armed sentinel and reads the session
   transcripts: a `custom-title` entry for `rename`, the continuation as a fresh
@@ -313,14 +268,14 @@ drive with a zero-delay timer from `Stop` and was wrong, which no stub could
 have shown, because the stub answers whatever it is told to. A change to the
 mod or to a loader lands with a `just mod-smoke` run for the same reason.
 
-**The rejection path has no live coverage.** `handoff_drive_read` pins every
-slot to a literal the host accepts and the mod drives from `turn.complete`,
-where the call-context refusal does not apply, so no sentinel can make the host
-reject a line today. A forced-failure dogfood with a well-formed `/compact`
+**The rejection path has no live coverage.** The mod issues only `/rename`,
+`/clear` and `/compact`, with free-text arguments, from `turn.complete`, where
+the call-context refusal does not apply, so no sentinel can make the host
+reject a command today. A forced-failure dogfood with a well-formed `/compact`
 was accepted and compacted the session (step 7, check 3). The `failFile`
 write, the toast and the next prompt's report rest on the stub rig's
 stop-on-first-failure row and the `report-drive-failure.sh` rows in
 `tests/report-drive-failure*.bats`. The path stays because a host change is the failure
 class the live test has already caught once, and without it a rejection would
 end the drive with nothing said. No test seam is added to reach it: that would
-loosen the pinned slots to test code that exists to report a failure.
+loosen the mod's fixed commands to test code that exists to report a failure.

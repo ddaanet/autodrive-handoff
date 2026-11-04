@@ -120,7 +120,7 @@ context_of() {
 @test "report-drive-failure (project root with a newline in a directory component): sweeps an armed sentinel" {
     nl="$BATS_TEST_TMPDIR/nl"$'\n'"proj"
     mkdir -p "$nl/.claude"
-    seed_drive "$nl" "clear" "/rename Title" "/clear" "continue the work"
+    seed_drive "$nl" "clear continue" "Title"
     CLAUDE_PROJECT_DIR="$nl" run_report_failure "$nl"
     [ "$status" -eq 0 ]
     [ ! -e "$nl/.claude/autodrive" ]
@@ -135,7 +135,7 @@ context_of() {
     nl="$BATS_TEST_TMPDIR/nl"$'\n'"proj"
     mkdir -p "$nl/.claude"
     printf '## Current task\n\nnewline root body\n' > "$nl/TASK.md"
-    seed_pending "$nl" "clear" "/rename A Title" "/clear" "pick up per the task file"
+    seed_pending "$nl" "clear continue" "A Title"
     CLAUDE_PROJECT_DIR="$nl" run_load_handoff "$nl" clear
     [ "$status" -eq 0 ]
     [ ! -e "$nl/.claude/autodrive" ]
@@ -144,7 +144,7 @@ context_of() {
 @test "report-drive-failure (held file owned by this session, project root with a newline): left alone" {
     nl="$BATS_TEST_TMPDIR/nl"$'\n'"proj"
     mkdir -p "$nl/.claude"
-    printf '%s\n' "held $SESSION_ID" "clear" "/rename A Title" "/clear" "resume" \
+    printf '%s\n' "held $SESSION_ID" "clear continue" "A Title" \
         > "$nl/.claude/autodrive"
     CLAUDE_PROJECT_DIR="$nl" run_report_failure "$nl"
     [ "$status" -eq 0 ]

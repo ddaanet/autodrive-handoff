@@ -164,15 +164,16 @@ def hold_decision(
 ) -> bool:
     """Return whether the transition is held pending an explicit release.
 
-    Held iff the sentinel names any command and a memory directive is owed, or
-    the transition is driven (`typed`) and this turn carries a commit. The
-    second disjunct is scoped to `typed` rather than to "names any command":
-    what it protects under a commit is work from a transition that would run
-    over a failed commit, and an untyped handoff's only command is `/rename`,
-    whose misfire costs nothing — holding that case too would add an approval
-    call to the common "handoff and commit" invocation for no protected state.
+    Held iff the sentinel is not the prepare marker (which runs nothing) and a
+    memory directive is owed, or the transition is driven (`typed`) and this
+    turn carries a commit. The second disjunct is scoped to `typed` rather than
+    to "runs something": what it protects under a commit is work from a
+    transition that would run over a failed commit, and an untyped handoff's
+    only command is `/rename`, whose misfire costs nothing — holding that case
+    too would add an approval call to the common "handoff and commit" invocation
+    for no protected state.
     """
-    return (bool(transition.cmds) and memory) or (transition.typed and commit)
+    return (transition.kind != "prepare" and memory) or (transition.typed and commit)
 
 
 def compose_sentinel(
@@ -193,9 +194,12 @@ def compose_sentinel(
     state = f"held {owner}" if held else f"armed {owner}"
 
     drive_path = root / HANDOFF_REL_DRIVE
-    sentinel_lines = [state, transition.kind, *transition.cmds]
+    kind_line = transition.kind
     if continuation:
-        sentinel_lines.append(CONTINUATION)
+        kind_line = f"{transition.kind} continue"
+    sentinel_lines = [state, kind_line]
+    if transition.arg:
+        sentinel_lines.append(transition.arg)
     # Renamed into place rather than written through the name: a link at the
     # sentinel is swapped for the new file, never followed onto what it names.
     # The temporary file takes the `autodrive.` prefix, which the
@@ -270,9 +274,6 @@ def _cannot_write(error: OSError) -> NoReturn:
 # Mirrors _lib.sh's HANDOFF_REL_DRIVE_LOCK, the lock every actor holds across
 # its own read-decide-write of the sentinel (_drive_lock.py).
 HANDOFF_REL_DRIVE_LOCK = ".claude/autodrive.lock"
-
-# The fixed prompt submitted after a driven transition when `continue` is true.
-CONTINUATION = "Continue where the previous context stopped."
 
 
 def check_sentinel_target(root: Path) -> None:

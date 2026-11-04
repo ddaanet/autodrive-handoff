@@ -154,17 +154,21 @@ def _json_type(value: object) -> str:
 def build_transition(payload: JSONDict, skill: str, title: str) -> Transition:
     """Return the transition this call types, per the skill's own rules."""
     if skill == "autoname":
-        return Transition("rename", [f"/rename {title}"], typed=False)
+        return Transition("rename", title, typed=False)
     if skill == "handoff":
         return _build_handoff_transition(payload, title)
     return _build_precompact_transition(payload)
 
 
 class Transition(NamedTuple):
-    """The sentinel's kind, its command lines, and whether it is typed."""
+    """The sentinel's kind, its argument, and whether it is typed.
+
+    `arg` is line 3: the title under rename and clear, the focus under compact
+    ("" for none), "" under prepare. The commands the kind runs are the mod's.
+    """
 
     kind: str
-    cmds: list[str]
+    arg: str
     typed: bool
 
 
@@ -176,8 +180,8 @@ def _build_handoff_transition(payload: JSONDict, title: str) -> Transition:
     if not isinstance(payload["clear"], bool):
         lib.err("clear", "must be true or false")
     if payload["clear"] is True:
-        return Transition("clear", [f"/rename {title}", "/clear"], typed=True)
-    return Transition("rename", [f"/rename {title}"], typed=False)
+        return Transition("clear", title, typed=True)
+    return Transition("rename", title, typed=False)
 
 
 def _build_precompact_transition(payload: JSONDict) -> Transition:
@@ -189,11 +193,11 @@ def _build_precompact_transition(payload: JSONDict) -> Transition:
     ctype = _json_type(compact_val)
     if ctype == "boolean":
         if compact_val is True:
-            return Transition("compact", ["/compact"], typed=True)
-        return Transition("compact", [], typed=False)
+            return Transition("compact", "", typed=True)
+        return Transition("prepare", "", typed=False)
     if ctype == "string":
         require_one_line("compact", compact_val)
-        return Transition("compact", [f"/compact {compact_val}"], typed=True)
+        return Transition("compact", compact_val, typed=True)
     lib.err("compact", "must be true, false, or a focus directive string")
     raise AssertionError("unreachable")  # lib.err() always raises
 
@@ -221,9 +225,9 @@ def require_one_line(field: str, value: str) -> None:
     """Error unless value is non-blank and holds no line break.
 
     A line break is any character `str.splitlines` breaks on (LF, CR, VT, FF,
-    FS, GS, RS, NEL, LS, PS), not LF alone: each line of the sentinel is
-    submitted with one Enter, and a CR or a Unicode separator is a break to the
-    TUI or to a line-wise read of the file as much as LF is.
+    FS, GS, RS, NEL, LS, PS), not LF alone: the sentinel's argument is one line
+    of the file, and a CR or a Unicode separator is a break to the TUI or to a
+    line-wise read of the file as much as LF is.
     """
     if not re.sub(r"\s", "", value):
         lib.err(field, "must not be empty or whitespace only")

@@ -27,6 +27,8 @@ Behaviour lives in `docs/design/the-write-path.md` and
   cannot drift.
 - The memory directive is the same text under both commit modes.
 - `tests/test_checkpoint_*.py` drive `scripts/checkpoint.py` end to end
-  through a subprocess (`run_checkpoint`). They import `CONTINUATION` from
-  `checkpoint.py` rather than restating it, and read the sentinel back
-  through `handoff_drive_read`.
+  through a subprocess (`run_checkpoint`). The sentinel carries a kind, a
+  `continue` flag and an argument, never the continuation text (that is the
+  mod's literal; tests read `HANDOFF_CONTINUATION` through
+  `tests/continuation.py`), and they read the sentinel back through
+  `handoff_drive_read`.

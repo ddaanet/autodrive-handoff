@@ -4,11 +4,10 @@ source "$BATS_TEST_DIRNAME/hook-helpers.bash"
 
 # --- _lib.sh: handoff_drive_read shape matrix ---
 #
-# Line 1 is the kind and the kind fixes the shape, so the remaining lines need
-# no separator and each kind keeps its own rules. The lines are the literal
-# commands the mod runs: it must not know which command any kind uses, and
-# validation is what anchors it — the nth line of kind k must begin with the
-# expected command literal, so the file cannot be made to run something else.
+# Line 1 is the state and line 2 the kind, `continue` flagged on the two driven
+# kinds; the kind fixes whether line 3 is required, optional or absent. The file
+# carries data only: the commands and the one prompt are literals in the mod, so
+# a line is never a command name or prompt text, only a title or a focus.
 
 # Write the args as lines of a sentinel and read it back. On rejection the
 # reason is printed, so a `run read_drive ...` can assert on it — the reader
@@ -21,94 +20,106 @@ read_drive() {
     return 1
 }
 
-@test "handoff_drive_read (rename): one before-line, no after-line" {
-    read_drive "armed sess-42" "rename" "/rename Driven Transitions"
+@test "handoff_drive_read (rename): the title is the argument, no continuation" {
+    read_drive "armed sess-42" "rename" "Driven Transitions"
     [ "$DRIVE_STATE" = armed ]
     [ "$DRIVE_KIND" = rename ]
-    [ "${#DRIVE_BEFORE[@]}" -eq 1 ]
-    [ "${DRIVE_BEFORE[0]}" = "/rename Driven Transitions" ]
-    [ "${#DRIVE_AFTER[@]}" -eq 0 ]
+    [ "$DRIVE_ARG" = "Driven Transitions" ]
+    [ "$DRIVE_CONTINUE" -eq 0 ]
 }
 
-@test "handoff_drive_read (compact): command before, prose after" {
-    read_drive "armed sess-42" "compact" "/compact focus on the parser" "continue with task 3"
+@test "handoff_drive_read (compact continue): the focus is the argument, continuation flagged" {
+    read_drive "armed sess-42" "compact continue" "focus on the parser"
     [ "$DRIVE_KIND" = compact ]
-    [ "${DRIVE_BEFORE[0]}" = "/compact focus on the parser" ]
-    [ "${DRIVE_AFTER[0]}" = "continue with task 3" ]
+    [ "$DRIVE_ARG" = "focus on the parser" ]
+    [ "$DRIVE_CONTINUE" -eq 1 ]
 }
 
-@test "handoff_drive_read (compact, bare command): accepted, /compact takes no argument" {
-    read_drive "armed sess-42" "compact" "/compact" "continue with task 3"
-    [ "${DRIVE_BEFORE[0]}" = "/compact" ]
-}
-
-# FR-G: the kind line alone. Nothing is run, but the transition is expected,
-# and that expectation is what the frame's re-injection is gated on.
-@test "handoff_drive_read (compact, kind line alone): legal, both sequences empty" {
-    read_drive "armed sess-42" "compact"
+@test "handoff_drive_read (compact continue, bare): accepted, no focus" {
+    read_drive "armed sess-42" "compact continue"
     [ "$DRIVE_KIND" = compact ]
-    [ "${#DRIVE_BEFORE[@]}" -eq 0 ]
-    [ "${#DRIVE_AFTER[@]}" -eq 0 ]
+    [ "$DRIVE_ARG" = "" ]
+    [ "$DRIVE_CONTINUE" -eq 1 ]
 }
 
-@test "handoff_drive_read (clear): two before-lines in order, prose after" {
-    read_drive "armed sess-42" "clear" "/rename A Title" "/clear" "pick up per the task file"
+# FR-G: the prepare marker. Nothing is run, but the transition is expected, and
+# that expectation is what the frame's re-injection is gated on.
+@test "handoff_drive_read (prepare): legal, no argument, no continuation" {
+    read_drive "armed sess-42" "prepare"
+    [ "$DRIVE_KIND" = prepare ]
+    [ "$DRIVE_ARG" = "" ]
+    [ "$DRIVE_CONTINUE" -eq 0 ]
+}
+
+@test "handoff_drive_read (clear continue): the title is the argument, continuation flagged" {
+    read_drive "armed sess-42" "clear continue" "A Title"
     [ "$DRIVE_KIND" = clear ]
-    [ "${#DRIVE_BEFORE[@]}" -eq 2 ]
-    [ "${DRIVE_BEFORE[0]}" = "/rename A Title" ]
-    [ "${DRIVE_BEFORE[1]}" = "/clear" ]
-    [ "${DRIVE_AFTER[0]}" = "pick up per the task file" ]
+    [ "$DRIVE_ARG" = "A Title" ]
+    [ "$DRIVE_CONTINUE" -eq 1 ]
 }
 
 # The continuation is optional on both driven kinds: driving a transition and
 # submitting a prompt into what it opens are separate decisions, and the cross
 # product is what the two payload fields express.
-@test "handoff_drive_read (clear, no continuation): nothing submitted after" {
-    read_drive "armed sess-42" "clear" "/rename A Title" "/clear"
+@test "handoff_drive_read (clear, no continuation): the flag is clear" {
+    read_drive "armed sess-42" "clear" "A Title"
     [ "$DRIVE_KIND" = clear ]
-    [ "${#DRIVE_BEFORE[@]}" -eq 2 ]
-    [ "${DRIVE_BEFORE[1]}" = "/clear" ]
-    [ "${#DRIVE_AFTER[@]}" -eq 0 ]
+    [ "$DRIVE_CONTINUE" -eq 0 ]
 }
 
-@test "handoff_drive_read (compact, no continuation): nothing submitted after" {
-    read_drive "armed sess-42" "compact" "/compact focus on the parser"
+@test "handoff_drive_read (compact, no continuation): the flag is clear" {
+    read_drive "armed sess-42" "compact" "focus on the parser"
     [ "$DRIVE_KIND" = compact ]
-    [ "${DRIVE_BEFORE[0]}" = "/compact focus on the parser" ]
-    [ "${#DRIVE_AFTER[@]}" -eq 0 ]
+    [ "$DRIVE_ARG" = "focus on the parser" ]
+    [ "$DRIVE_CONTINUE" -eq 0 ]
+}
+
+@test "handoff_drive_read (compact, bare, no continuation): legal" {
+    read_drive "armed sess-42" "compact"
+    [ "$DRIVE_KIND" = compact ]
+    [ "$DRIVE_ARG" = "" ]
+}
+
+# The variables are reset by every read: a caller reading a second file must not
+# see the first one's argument or flag.
+@test "handoff_drive_read (the argument and flag do not carry over to the next read)" {
+    read_drive "armed sess-42" "clear continue" "A Title"
+    read_drive "armed sess-42" "prepare"
+    [ "$DRIVE_ARG" = "" ]
+    [ "$DRIVE_CONTINUE" -eq 0 ]
 }
 
 # The state drive-take.sh has already taken. The parser does not know which caller
 # wants which state — it reports the value and the gates decide.
 @test "handoff_drive_read (pending): parsed like any other state" {
-    read_drive "pending" "clear" "/rename A Title" "/clear" "pick up per the task file"
+    read_drive "pending" "clear continue" "A Title"
     [ "$DRIVE_STATE" = pending ]
     [ "$DRIVE_KIND" = clear ]
-    [ "${DRIVE_AFTER[0]}" = "pick up per the task file" ]
+    [ "$DRIVE_CONTINUE" -eq 1 ]
 }
 
 @test "handoff_drive_read (unknown kind): rejected, naming the kinds" {
-    run read_drive "armed sess-42" "reboot" "/reboot"
+    run read_drive "armed sess-42" "reboot" "now"
     [ "$status" -ne 0 ]
     [[ "$output" == *"transition kind"* ]]
 }
 
-# The state a memory approval holds a typing transition in, so the keystrokes
-# do not reach a pane whose turn is about to end on the approval question.
+# The state a memory approval holds a driven transition in, so it does not run
+# ahead of a turn about to end on the approval question.
 # It names its owner: the session whose approval it waits on.
 @test "handoff_drive_read (held): parsed like any other state, and names its owner" {
-    read_drive "held sess-42" "clear" "/rename A Title" "/clear" "pick up per the task file"
+    read_drive "held sess-42" "clear continue" "A Title"
     [ "$DRIVE_STATE" = held ]
     [ "$DRIVE_OWNER" = sess-42 ]
     [ "$DRIVE_KIND" = clear ]
-    [ "${DRIVE_AFTER[0]}" = "pick up per the task file" ]
+    [ "$DRIVE_CONTINUE" -eq 1 ]
 }
 
 # An unowned `held` names no session, so nothing can tell whose approval it
 # waits on — which is exactly the file the sweep and handoff-approved must be
 # able to reject.
 @test "handoff_drive_read (held with no owner): rejected, naming the owner" {
-    run read_drive "held" "clear" "/rename A Title" "/clear" "resume"
+    run read_drive "held" "clear continue" "A Title"
     [ "$status" -ne 0 ]
     [[ "$output" == *"session"* ]]
 }
@@ -117,19 +128,19 @@ read_drive() {
 # session sharing the root runs the UserPromptSubmit sweep, and only the owner
 # tells another session's prompt from the owner's own next one.
 @test "handoff_drive_read (armed): names its owner" {
-    read_drive "armed sess-42" "clear" "/rename A Title" "/clear" "resume"
+    read_drive "armed sess-42" "clear continue" "A Title"
     [ "$DRIVE_STATE" = armed ]
     [ "$DRIVE_OWNER" = sess-42 ]
 }
 
 @test "handoff_drive_read (armed with no owner): rejected, naming the owner" {
-    run read_drive "armed" "clear" "/rename A Title" "/clear" "resume"
+    run read_drive "armed" "clear continue" "A Title"
     [ "$status" -ne 0 ]
     [[ "$output" == *"must name the session"* ]]
 }
 
 @test "handoff_drive_read (armed with two words for an owner): rejected" {
-    run read_drive "armed sess-42 extra" "clear" "/rename A Title" "/clear" "resume"
+    run read_drive "armed sess-42 extra" "clear continue" "A Title"
     [ "$status" -ne 0 ]
     [[ "$output" == *"one session id"* ]]
 }
@@ -140,7 +151,7 @@ read_drive() {
 # owner's to decide: the confirming SessionStart consumes it in whichever
 # session the transition opened.
 @test "handoff_drive_read (owner on pending): rejected" {
-    run read_drive "pending sess-42" "clear" "/rename A Title" "/clear" "resume"
+    run read_drive "pending sess-42" "clear continue" "A Title"
     [ "$status" -ne 0 ]
     [[ "$output" == *"no session"* ]]
 }
@@ -149,15 +160,15 @@ read_drive() {
 # caller comparing it acts on the previous file's session — which is the whole
 # discriminator.
 @test "handoff_drive_read (pending after held): no owner carried over" {
-    read_drive "held sess-42" "clear" "/rename A Title" "/clear"
+    read_drive "held sess-42" "clear" "A Title"
     [ "$DRIVE_OWNER" = sess-42 ]
-    read_drive "pending" "clear" "/rename A Title" "/clear"
+    read_drive "pending" "clear" "A Title"
     [ "$DRIVE_STATE" = pending ]
     [ "$DRIVE_OWNER" = "" ]
 }
 
 @test "handoff_drive_read (unknown state): rejected, naming the states" {
-    run read_drive "queued" "clear" "/rename A Title" "/clear" "resume"
+    run read_drive "queued" "clear continue" "A Title"
     [ "$status" -ne 0 ]
     [[ "$output" == *"transition state"* ]]
     [[ "$output" == *"queued"* ]]
@@ -179,7 +190,7 @@ read_drive() {
 }
 
 @test "handoff_drive_read (a pre-state-line sentinel): rejected on line 1" {
-    run read_drive "clear" "/rename A Title" "/clear" "resume"
+    run read_drive "clear continue" "A Title"
     [ "$status" -ne 0 ]
     [[ "$output" == *"transition state"* ]]
 }
@@ -190,58 +201,188 @@ read_drive() {
     [[ "$output" == *"transition state"* ]]
 }
 
-@test "handoff_drive_read (wrong line count for the kind): rejected, naming the count" {
-    run read_drive "armed sess-42" "rename" "/rename A Title" "extra line"
+# Every malformed form is refused through rc=1 with the reason in DRIVE_ERR.
+@test "handoff_drive_read (rename or clear without the title): rejected" {
+    run read_drive "armed sess-42" "rename"
     [ "$status" -ne 0 ]
-    [[ "$output" == *"exactly 3 lines"* ]]
+    [[ "$output" == *"title"* ]]
 
-    run read_drive "armed sess-42" "clear" "/rename A Title"
+    run read_drive "armed sess-42" "clear"
     [ "$status" -ne 0 ]
-    [[ "$output" == *"4 or 5 lines"* ]]
+    [[ "$output" == *"title"* ]]
 
-    run read_drive "armed sess-42" "compact" "/compact" "continue" "extra"
-    [ "$status" -ne 0 ]
-    [[ "$output" == *"2, 3 or 4 lines"* ]]
-}
-
-@test "handoff_drive_read (command literal not in the kind's slot): rejected" {
-    run read_drive "armed sess-42" "clear" "/clear" "/rename A Title" "resume"
-    [ "$status" -ne 0 ]
-    [[ "$output" == *"line 3"* ]]
-
-    run read_drive "armed sess-42" "compact" "compact now" "continue"
-    [ "$status" -ne 0 ]
-    [[ "$output" == *"/compact"* ]]
-}
-
-@test "handoff_drive_read (/rename with no argument): rejected" {
-    run read_drive "armed sess-42" "rename" "/rename"
-    [ "$status" -ne 0 ]
-    [[ "$output" == *"non-empty argument"* ]]
-
-    run read_drive "armed sess-42" "rename" "/rename    "
+    run read_drive "armed sess-42" "clear continue"
     [ "$status" -ne 0 ]
 }
 
-@test "handoff_drive_read (/clear with an argument): rejected" {
-    run read_drive "armed sess-42" "clear" "/rename A Title" "/clear now" "resume"
+@test "handoff_drive_read (a blank line 3): rejected on every kind that takes one" {
+    run read_drive "armed sess-42" "rename" ""
     [ "$status" -ne 0 ]
-    [[ "$output" == *"exactly"* ]]
+    [[ "$output" == *"must not be blank"* ]]
+
+    run read_drive "armed sess-42" "rename" "   "
+    [ "$status" -ne 0 ]
+
+    run read_drive "armed sess-42" "clear" "  "
+    [ "$status" -ne 0 ]
+
+    run read_drive "armed sess-42" "compact" ""
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"must not be blank"* ]]
+
+    run read_drive "armed sess-42" "compact continue" "   "
+    [ "$status" -ne 0 ]
 }
 
-@test "handoff_drive_read (empty continuation prompt): rejected" {
-    run read_drive "armed sess-42" "compact" "/compact" ""
+@test "handoff_drive_read (a fourth line): rejected on every kind" {
+    run read_drive "armed sess-42" "rename" "A Title" "extra line"
     [ "$status" -ne 0 ]
-    [[ "$output" == *"must not be empty"* ]]
+    [[ "$output" == *"4 lines"* ]]
+
+    run read_drive "armed sess-42" "clear continue" "A Title" "extra line"
+    [ "$status" -ne 0 ]
+
+    run read_drive "armed sess-42" "compact continue" "focus" "extra line"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"4 lines"* ]]
 }
 
-# The mod dispatches on the leading character: a `/` line runs as a command,
-# prose is submitted as a prompt. A prose line that looks like a command would
-# run as the wrong one.
-@test "handoff_drive_read (continuation prompt beginning with /): rejected" {
-    run read_drive "armed sess-42" "clear" "/rename A Title" "/clear" "/resume the work"
+@test "handoff_drive_read (prepare with a line 3): rejected" {
+    run read_drive "armed sess-42" "prepare" "a focus"
     [ "$status" -ne 0 ]
-    [[ "$output" == *"must not begin"* ]]
+    [[ "$output" == *"takes no line 3"* ]]
+}
+
+@test "handoff_drive_read (continue where the kind takes none: rename, prepare): rejected" {
+    run read_drive "armed sess-42" "rename continue" "A Title"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"takes no \`continue\`"* ]]
+
+    run read_drive "armed sess-42" "prepare continue"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"takes no \`continue\`"* ]]
+}
+
+@test "handoff_drive_read (an unknown second token or spacing on line 2): rejected" {
+    run read_drive "armed sess-42" "clear now" "A Title"
+    [ "$status" -ne 0 ]
+
+    run read_drive "armed sess-42" "clear  continue" "A Title"
+    [ "$status" -ne 0 ]
+
+    run read_drive "armed sess-42" "compact continue now"
+    [ "$status" -ne 0 ]
+
+    run read_drive "armed sess-42" "continue clear" "A Title"
+    [ "$status" -ne 0 ]
+}
+
+# The old format is refused or, where line 3 is a free argument, is only an
+# argument. None of these is a command to the mod, which holds the commands.
+@test "handoff_drive_read (old format, a /-line kind): refused as an unknown kind" {
+    run read_drive "armed sess-42" "/rename x"
+    [ "$status" -ne 0 ]
+    run read_drive "armed sess-42" "/clear"
+    [ "$status" -ne 0 ]
+    run read_drive "armed sess-42" "/plugin marketplace add hacker1337/payload"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"transition kind"* ]]
+}
+
+@test "handoff_drive_read (old format, a prose line 2): refused as an unknown kind" {
+    run read_drive "armed sess-42" "Continue where the previous context stopped."
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"transition kind"* ]]
+}
+
+@test "handoff_drive_read (old format clear: kind, /rename, /clear, prose): refused, five and four lines" {
+    run read_drive "armed sess-42" "clear" "/rename x" "/clear" "Continue where the previous context stopped."
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"5 lines"* ]]
+
+    run read_drive "armed sess-42" "clear" "/rename x" "/clear"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"4 lines"* ]]
+}
+
+@test "handoff_drive_read (old format compact with prose after the command): refused, four lines" {
+    run read_drive "armed sess-42" "compact" "/compact" "Continue where the previous context stopped."
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"4 lines"* ]]
+}
+
+# Where line 3 is a free argument, a slash line is only text: the mod passes it
+# on as an argument of its own literal command and never as a command.
+@test "handoff_drive_read (a /-line as line 3): only an argument" {
+    read_drive "armed sess-42" "rename" "/plugin marketplace add hacker1337/payload"
+    [ "$DRIVE_KIND" = rename ]
+    [ "$DRIVE_ARG" = "/plugin marketplace add hacker1337/payload" ]
+
+    read_drive "armed sess-42" "compact" "/clear"
+    [ "$DRIVE_KIND" = compact ]
+    [ "$DRIVE_ARG" = "/clear" ]
+
+    read_drive "armed sess-42" "clear continue" "/rename x"
+    [ "$DRIVE_ARG" = "/rename x" ]
+}
+
+@test "handoff_drive_read (old format rename, a /rename line 3): only the title" {
+    read_drive "armed sess-42" "rename" "/rename x"
+    [ "$DRIVE_ARG" = "/rename x" ]
+}
+
+# --- _lib.sh: handoff_drive_lines, the display renderer ---
+
+# <kind> <arg> <continue>: render into DRIVE_LINES.
+render_lines() {
+    DRIVE_KIND="$1" DRIVE_ARG="$2" DRIVE_CONTINUE="$3"
+    handoff_drive_lines
+}
+
+@test "handoff_drive_lines (rename, clear, compact): the lines a person would type, in order" {
+    render_lines rename "A Title" 0
+    [ "${DRIVE_LINES[*]}" = "/rename A Title" ]
+    [ "${#DRIVE_LINES[@]}" -eq 1 ]
+
+    render_lines clear "A Title" 0
+    [ "${#DRIVE_LINES[@]}" -eq 2 ]
+    [ "${DRIVE_LINES[0]}" = "/rename A Title" ]
+    [ "${DRIVE_LINES[1]}" = "/clear" ]
+
+    render_lines clear "A Title" 1
+    [ "${#DRIVE_LINES[@]}" -eq 3 ]
+    [ "${DRIVE_LINES[2]}" = "$HANDOFF_CONTINUATION" ]
+
+    render_lines compact "" 0
+    [ "${#DRIVE_LINES[@]}" -eq 1 ]
+    [ "${DRIVE_LINES[0]}" = "/compact" ]
+
+    render_lines compact "keep it" 1
+    [ "${#DRIVE_LINES[@]}" -eq 2 ]
+    [ "${DRIVE_LINES[0]}" = "/compact keep it" ]
+    [ "${DRIVE_LINES[1]}" = "$HANDOFF_CONTINUATION" ]
+}
+
+@test "handoff_drive_lines (prepare): nothing to type" {
+    DRIVE_LINES=(stale)
+    render_lines prepare "" 0
+    [ "${#DRIVE_LINES[@]}" -eq 0 ]
+}
+
+# --- _lib.sh: handoff_drive_plan ---
+
+@test "handoff_drive_plan (a clear: data only, key order kind, arg, continue, failFile, message)" {
+    read_drive "armed sess-42" "clear continue" "A Title"
+    run handoff_drive_plan clear "/x/.claude/autodrive.failed"
+    [ "$status" -eq 0 ]
+    [ "$output" = '{"kind":"clear","arg":"A Title","continue":true,"failFile":"/x/.claude/autodrive.failed","message":"handoff: will run /rename A Title once the turn ends."}' ]
+}
+
+@test "handoff_drive_plan (a rename: continue is a JSON false)" {
+    read_drive "armed sess-42" "rename" "A Title"
+    run handoff_drive_plan rename "/x/f"
+    [ "$status" -eq 0 ]
+    [ "$(jq -c '[.continue, .arg]' <<<"$output")" = '[false,"A Title"]' ]
 }
 
 # No writer of the sentinel makes a link, and a repository can commit one to
@@ -249,7 +390,7 @@ read_drive() {
 # into a report and let a later rewrite land on it. A link is refused before a
 # byte is read, whatever it names.
 @test "handoff_drive_read (a symlink to a well-formed sentinel): refused, nothing parsed" {
-    printf '%s\n' "armed sess-42" "rename" "/rename Linked" > "$other/sentinel"
+    printf '%s\n' "armed sess-42" "rename" "Linked" > "$other/sentinel"
     ln -s "$other/sentinel" "$BATS_TEST_TMPDIR/sentinel"
     run handoff_drive_read "$BATS_TEST_TMPDIR/sentinel"
     [ "$status" -ne 0 ]
@@ -271,29 +412,27 @@ read_drive() {
 # the kind's shape, which is what lets one helper serve drive-take.sh and
 # handoff-approved.
 @test "handoff_drive_arm (rewrites line 1, preserves every line below)" {
-    printf '%s\n' "armed sess-42" "clear" "/rename A Title" "/clear" "pick up per the task file" \
+    printf '%s\n' "armed sess-42" "clear continue" "A Title" \
         > "$BATS_TEST_TMPDIR/sentinel"
     handoff_drive_arm "$BATS_TEST_TMPDIR/sentinel" pending
     [ "$(cat "$BATS_TEST_TMPDIR/sentinel")" = "pending
-clear
-/rename A Title
-/clear
-pick up per the task file" ]
+clear continue
+A Title" ]
 }
 
 # The FR-G marker is two lines, so the tail below line 1 is a single line.
 @test "handoff_drive_arm (two-line file: still just the state line)" {
-    printf '%s\n' "armed sess-42" "compact" > "$BATS_TEST_TMPDIR/sentinel"
+    printf '%s\n' "armed sess-42" "prepare" > "$BATS_TEST_TMPDIR/sentinel"
     handoff_drive_arm "$BATS_TEST_TMPDIR/sentinel" pending
     [ "$(cat "$BATS_TEST_TMPDIR/sentinel")" = "pending
-compact" ]
+prepare" ]
 }
 
 # The helper writes line 1 as given, so the owner is the caller's to carry or
 # drop: handoff-approved keeps it across held -> armed, drive-take.sh drops it
 # on armed -> pending.
 @test "handoff_drive_arm (held -> armed with its owner: still parses, owner kept)" {
-    printf '%s\n' "held sess-42" "clear" "/rename A Title" "/clear" \
+    printf '%s\n' "held sess-42" "clear" "A Title" \
         > "$BATS_TEST_TMPDIR/sentinel"
     handoff_drive_arm "$BATS_TEST_TMPDIR/sentinel" "armed sess-42"
     handoff_drive_read "$BATS_TEST_TMPDIR/sentinel"
@@ -302,7 +441,7 @@ compact" ]
 }
 
 @test "handoff_drive_arm (armed -> pending: the owner goes with the state)" {
-    printf '%s\n' "armed sess-42" "clear" "/rename A Title" "/clear" \
+    printf '%s\n' "armed sess-42" "clear" "A Title" \
         > "$BATS_TEST_TMPDIR/sentinel"
     handoff_drive_arm "$BATS_TEST_TMPDIR/sentinel" pending
     [ "$(head -n1 "$BATS_TEST_TMPDIR/sentinel")" = "pending" ]
@@ -315,7 +454,7 @@ compact" ]
 # file — so a half-written file must never be observable under the
 # real name. The temp lands beside it and is renamed over it.
 @test "handoff_drive_arm (leaves no temp file behind)" {
-    printf '%s\n' "armed sess-42" "compact" "/compact" "continue" > "$BATS_TEST_TMPDIR/sentinel"
+    printf '%s\n' "armed sess-42" "compact continue" > "$BATS_TEST_TMPDIR/sentinel"
     handoff_drive_arm "$BATS_TEST_TMPDIR/sentinel" pending
     [ "$(find "$BATS_TEST_TMPDIR" -maxdepth 1 -name 'sentinel*' | wc -l)" -eq 1 ]
 }
@@ -325,21 +464,21 @@ compact" ]
 # would write the state line through one and rename the link over the
 # sentinel. `$$` here is the PID the helper sees, the name it used to take.
 @test "handoff_drive_arm (a link at the old temporary name: not written through, the sentinel stays a file)" {
-    printf '%s\n' "armed sess-42" "compact" "/compact" > "$BATS_TEST_TMPDIR/sentinel"
+    printf '%s\n' "armed sess-42" "compact" "keep it" > "$BATS_TEST_TMPDIR/sentinel"
     ln -s "$other/planted" "$BATS_TEST_TMPDIR/sentinel.arming.$$"
     handoff_drive_arm "$BATS_TEST_TMPDIR/sentinel" pending
     [ ! -e "$other/planted" ]
     [ ! -L "$BATS_TEST_TMPDIR/sentinel" ]
     [ "$(cat "$BATS_TEST_TMPDIR/sentinel")" = "pending
 compact
-/compact" ]
+keep it" ]
 }
 
 # A link to a directory put at the sentinel after it was read: mv would move
 # the temporary file into that directory. The rename replaces the link.
 # shellcheck disable=SC2317   # tail() below is called by handoff_drive_arm, in _lib.sh, which setup sources
 @test "handoff_drive_arm (the sentinel became a link to a directory: replaced, nothing moved into it)" {
-    printf '%s\n' "armed sess-42" "compact" "/compact" > "$BATS_TEST_TMPDIR/sentinel"
+    printf '%s\n' "armed sess-42" "compact" > "$BATS_TEST_TMPDIR/sentinel"
     mkdir -p "$other/dir"
     # The swap lands between the arm's copy of the lines below line 1 and its
     # rename: a `tail` that plants the link as it returns.

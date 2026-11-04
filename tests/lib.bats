@@ -178,7 +178,7 @@ broken_python() {
 
 @test "load-compact (resolver crashes): says so, exit 0" {
     stub="$(broken_python)"
-    seed_pending "$tmp" "compact" "/compact" "continue"
+    seed_pending "$tmp" "compact continue"
     PATH="$stub:$PATH" run_load_compact "$other"
     [ "$status" -eq 0 ]
     echo "$output" | jq -e '.systemMessage | test("did not resolve")' >/dev/null

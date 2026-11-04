@@ -1,1 +1,1 @@
-{"kind":"compact","before":["/compact keep the parser work"],"after":["Continue where the previous context stopped."],"failFile":"@ROOT@/.claude/autodrive.failed","message":"handoff: will run /compact keep the parser work once the turn ends."}
+{"kind":"compact","arg":"keep the parser work","continue":true,"failFile":"@ROOT@/.claude/autodrive.failed","message":"handoff: will run /compact keep the parser work once the turn ends."}

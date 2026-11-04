@@ -65,7 +65,10 @@ if (( lock_rc == 0 )); then
     # armed file belongs to a Stop that has not fired; a pending `clear` armed in
     # this session and overtaken by a threshold auto-compaction would otherwise
     # fire its continuation into the session the clear was meant to replace.
-    [[ "$DRIVE_STATE" == "pending" && "$DRIVE_KIND" == "compact" ]] || exit 0
+    # A `prepare` marker (`compact: false`) is consumed too: the hand-typed
+    # /compact it expects fires this same SessionStart.
+    [[ "$DRIVE_STATE" == "pending" \
+        && ( "$DRIVE_KIND" == "compact" || "$DRIVE_KIND" == "prepare" ) ]] || exit 0
 
     # Consume unconditionally: a transition is taken at most once.
     rm -f "$drive"

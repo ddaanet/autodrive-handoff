@@ -24,7 +24,7 @@ start_report_failure() {
 
 # <kind> — the sentinel as the take leaves it, under the lock.
 become_pending() {
-    printf '%s\n' pending "$1" "/rename Queued Title" "/clear" "pick up the queued task" \
+    printf '%s\n' pending "$1 continue" "Queued Title" \
         > "$tmp/.claude/autodrive"
 }
 
@@ -81,7 +81,7 @@ assert_sweep_left_pending() {
 # cleared only with the report, so with the lock busy the record stays for the
 # next prompt, which can judge both, and is not reported twice.
 @test "report-drive-failure (the lock is held past the wait: a failure record is left for the next prompt)" {
-    seed_pending "$tmp" clear "/rename A Title" "/clear" "pick up the task"
+    seed_pending "$tmp" "clear continue" "A Title"
     printf '%s\n' "/clear rejected" > "$tmp/.claude/autodrive.failed"
     cp "$tmp/.claude/autodrive" "$BATS_TEST_TMPDIR/sentinel.before"
     hold_drive_lock "$tmp"
@@ -106,13 +106,13 @@ assert_sweep_left_pending() {
     [ "$MSG" = $'\033[0m'"handoff: autodrive not judged — the sentinel's lock could not be set up; left in place." ]
 }
 
-# A sentinel that does not parse — here, a `clear` with only one of its four
-# command/prose lines — describes no transition this session can complete.
+# A sentinel that does not parse — here, a `clear` without its title line —
+# describes no transition this session can complete.
 # handoff_drive_read returns 1, drive_state is recorded as "malformed", and
 # the sweep (any state other than "pending" or "held") discards it, but offers
 # no lines to type: there is nothing it could say they were.
 @test "report-drive-failure (malformed sentinel: discarded and reported)" {
-    seed_drive "$tmp" "clear" "/rename A Title"
+    seed_drive "$tmp" "clear"
     run_report_failure "$tmp"
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
@@ -142,14 +142,14 @@ start_loader() {
 # <kind> — what a checkpoint writes over the pending file.
 become_armed() {
     if [ "$1" = compact ]; then
-        printf '%s\n' "armed $SESSION_ID" compact "/compact keep it" "next task"
+        printf '%s\n' "armed $SESSION_ID" "compact continue" "keep it"
     else
-        printf '%s\n' "armed $SESSION_ID" clear "/rename Next Title" "/clear" "next task"
+        printf '%s\n' "armed $SESSION_ID" "clear continue" "Next Title"
     fi > "$tmp/.claude/autodrive"
 }
 
 @test "load-handoff (the pending clear is replaced while the loader waits on the lock: the new file is left alone)" {
-    seed_pending "$tmp" clear "/rename A Title" "/clear" "pick up per the task file"
+    seed_pending "$tmp" "clear continue" "A Title"
     hold_drive_lock "$tmp"
     start_loader load-handoff.sh clear "$BATS_TEST_TMPDIR/loader.out"
     wait_until_blocked
@@ -160,7 +160,7 @@ become_armed() {
 }
 
 @test "load-compact (the pending compact is replaced while the loader waits on the lock: the new file is left alone)" {
-    seed_pending "$tmp" compact "/compact" "continue"
+    seed_pending "$tmp" "compact continue"
     hold_drive_lock "$tmp"
     start_loader load-compact.sh compact "$BATS_TEST_TMPDIR/loader.out"
     wait_until_blocked
@@ -175,7 +175,7 @@ become_armed() {
 # unread and still injects the frame, saying on both channels that it did not
 # touch the transition state.
 @test "load-handoff (the lock is held past the wait: the pending file is left, the frame is still injected, both channels say so)" {
-    seed_pending "$tmp" clear "/rename A Title" "/clear" "pick up per the task file"
+    seed_pending "$tmp" "clear continue" "A Title"
     cp "$tmp/.claude/autodrive" "$BATS_TEST_TMPDIR/sentinel.before"
     hold_drive_lock "$tmp"
     HANDOFF_LOCK_WAIT_SECS=0.05 run_load_handoff "$tmp" clear
@@ -191,7 +191,7 @@ become_armed() {
 @test "load-compact (the lock is held past the wait: the pending file is left, the frame is still injected, both channels say so)" {
     rm -f "$tmp/TASK.md"
     printf '## Remaining\n\n- finish the parser\n' > "$tmp/TODO.md"
-    seed_pending "$tmp" compact "/compact" "continue"
+    seed_pending "$tmp" "compact continue"
     cp "$tmp/.claude/autodrive" "$BATS_TEST_TMPDIR/sentinel.before"
     hold_drive_lock "$tmp"
     HANDOFF_LOCK_WAIT_SECS=0.05 run_load_compact "$tmp"
@@ -208,7 +208,7 @@ become_armed() {
 # whether a compaction was pending, so it says so rather than staying silent.
 @test "load-compact (the lock is held past the wait, no todo: the note alone is injected)" {
     rm -f "$tmp/TASK.md" "$tmp/TODO.md"
-    seed_pending "$tmp" compact "/compact" "continue"
+    seed_pending "$tmp" "compact continue"
     cp "$tmp/.claude/autodrive" "$BATS_TEST_TMPDIR/sentinel.before"
     hold_drive_lock "$tmp"
     HANDOFF_LOCK_WAIT_SECS=0.05 run_load_compact "$tmp"
@@ -220,7 +220,7 @@ become_armed() {
 }
 
 @test "load-handoff (a link at the lock: the pending file is left and the note says the lock could not be set up)" {
-    seed_pending "$tmp" clear "/rename A Title" "/clear" "pick up per the task file"
+    seed_pending "$tmp" "clear continue" "A Title"
     cp "$tmp/.claude/autodrive" "$BATS_TEST_TMPDIR/sentinel.before"
     : > "$BATS_TEST_TMPDIR/elsewhere"
     ln -s "$BATS_TEST_TMPDIR/elsewhere" "$tmp/.claude/autodrive.lock"
@@ -233,7 +233,7 @@ become_armed() {
 
 @test "load-compact (a link at the lock: the pending file is left and the note says the lock could not be set up)" {
     printf '## Remaining\n\n- finish the parser\n' > "$tmp/TODO.md"
-    seed_pending "$tmp" compact "/compact" "continue"
+    seed_pending "$tmp" "compact continue"
     cp "$tmp/.claude/autodrive" "$BATS_TEST_TMPDIR/sentinel.before"
     : > "$BATS_TEST_TMPDIR/elsewhere"
     ln -s "$BATS_TEST_TMPDIR/elsewhere" "$tmp/.claude/autodrive.lock"

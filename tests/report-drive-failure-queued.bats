@@ -86,6 +86,17 @@ assert_cancel_report() {
     marker_holds arming-prompt
 }
 
+# The prepare marker is a pending compaction in the user's eyes: a queued prompt
+# cancels it with the compact note, and nothing is offered to type.
+@test "report-drive-failure (queued prompt: an owner's armed prepare marker is swept and recorded with the compact note)" {
+    seed_queued prepare
+    PROMPT_ID=arming-prompt run_report_failure "$tmp"
+    [ "$status" -eq 0 ]
+    [ ! -e "$tmp/.claude/autodrive" ]
+    assert_cancel_report "$output" /compact precompact
+    [[ "$(cat "$tmp/.claude/autodrive.swept")" == *$'\tstate=armed\towner='"$SESSION_ID"$'\tkind=prepare\t'* ]]
+}
+
 @test "report-drive-failure (fresh prompt id: the owner's armed compact is swept with the unloaded-mod note)" {
     seed_armed_kind compact
     seed_prompt_marker arming-prompt
@@ -244,7 +255,7 @@ assert_cancel_report() {
     PROMPT_ID=arming-prompt run_report_failure "$tmp"
     [ "$output" = "" ]
     [ "$(head -n1 "$tmp/.claude/autodrive")" = "held $SESSION_ID" ]
-    seed_pending "$tmp" compact "/compact" "continue"
+    seed_pending "$tmp" "compact continue"
     PROMPT_ID=arming-prompt run_report_failure "$tmp"
     [ "$output" = "" ]
     [ "$(head -n1 "$tmp/.claude/autodrive")" = "pending" ]
@@ -252,7 +263,7 @@ assert_cancel_report() {
 }
 
 @test "report-drive-failure (queued id, a malformed file: swept as malformed, not spared)" {
-    seed_drive "$tmp" "clear" "/rename A Title"
+    seed_drive "$tmp" "clear"
     seed_prompt_marker arming-prompt
     PROMPT_ID=arming-prompt run_report_failure "$tmp"
     [ "$status" -eq 0 ]

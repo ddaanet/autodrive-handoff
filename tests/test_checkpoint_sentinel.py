@@ -10,7 +10,6 @@ tests/conftest.py.
 from pathlib import Path
 
 import pytest
-from checkpoint import CONTINUATION
 from conftest import (
     make_repo,
     read_back_drive,
@@ -123,7 +122,8 @@ def test_continue_true_is_legal_when_either_half_has_a_body(
     seed_frame(repo, None, todo_was)
     result = run_checkpoint(repo, clear_continue_payload(task, todo, cont=True))
     assert result.returncode == 0, result.stderr
-    assert (repo / ".claude" / "autodrive").read_text().endswith(f"\n{CONTINUATION}\n")
+    sentinel = (repo / ".claude" / "autodrive").read_text()
+    assert sentinel.splitlines()[1] == "clear continue"
 
 
 @pytest.mark.parametrize("todo", [todo_clear(), todo_keep()], ids=["clear", "keep"])
@@ -140,7 +140,8 @@ def test_precompact_continue_true_needs_no_file_the_summary_carries_the_task(
     }
     result = run_checkpoint(repo, payload)
     assert result.returncode == 0, result.stderr
-    assert (repo / ".claude" / "autodrive").read_text().endswith(f"\n{CONTINUATION}\n")
+    sentinel = (repo / ".claude" / "autodrive").read_text()
+    assert sentinel.splitlines()[1] == "compact continue"
 
 
 # --- the legal combinations and the sentinel's bytes ---
@@ -161,7 +162,7 @@ def test_handoff_clear_true_no_continuation(tmp_path: Path) -> None:
     assert result.returncode == 0
     assert (
         repo / ".claude" / "autodrive"
-    ).read_text() == "armed sess-checkpoint\nclear\n/rename A Title\n/clear\n"
+    ).read_text() == "armed sess-checkpoint\nclear\nA Title\n"
     assert read_back_drive(repo / ".claude" / "autodrive")
 
 
@@ -179,12 +180,12 @@ def test_handoff_clear_true_with_continuation(tmp_path: Path) -> None:
     result = run_checkpoint(repo, payload)
     assert result.returncode == 0
     assert (repo / ".claude" / "autodrive").read_text() == (
-        f"armed sess-checkpoint\nclear\n/rename A Title\n/clear\n{CONTINUATION}\n"
+        "armed sess-checkpoint\nclear continue\nA Title\n"
     )
     assert read_back_drive(repo / ".claude" / "autodrive")
 
 
-def test_precompact_compact_false_two_line_marker(tmp_path: Path) -> None:
+def test_precompact_compact_false_composes_the_prepare_marker(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
     payload = {
         "skill": "precompact",
@@ -197,7 +198,8 @@ def test_precompact_compact_false_two_line_marker(tmp_path: Path) -> None:
     assert result.returncode == 0
     assert (
         repo / ".claude" / "autodrive"
-    ).read_text() == "armed sess-checkpoint\ncompact\n"
+    ).read_text() == "armed sess-checkpoint\nprepare\n"
+    assert read_back_drive(repo / ".claude" / "autodrive")
 
 
 def test_precompact_compact_true_no_continuation_bare_compact(tmp_path: Path) -> None:
@@ -213,7 +215,7 @@ def test_precompact_compact_true_no_continuation_bare_compact(tmp_path: Path) ->
     assert result.returncode == 0
     assert (
         repo / ".claude" / "autodrive"
-    ).read_text() == "armed sess-checkpoint\ncompact\n/compact\n"
+    ).read_text() == "armed sess-checkpoint\ncompact\n"
     assert read_back_drive(repo / ".claude" / "autodrive")
 
 
@@ -229,7 +231,7 @@ def test_precompact_compact_true_with_continuation(tmp_path: Path) -> None:
     result = run_checkpoint(repo, payload)
     assert result.returncode == 0
     assert (repo / ".claude" / "autodrive").read_text() == (
-        f"armed sess-checkpoint\ncompact\n/compact\n{CONTINUATION}\n"
+        "armed sess-checkpoint\ncompact continue\n"
     )
     assert read_back_drive(repo / ".claude" / "autodrive")
 
@@ -246,7 +248,7 @@ def test_precompact_focus_directive_no_continuation(tmp_path: Path) -> None:
     result = run_checkpoint(repo, payload)
     assert result.returncode == 0
     assert (repo / ".claude" / "autodrive").read_text() == (
-        "armed sess-checkpoint\ncompact\n/compact keep the parser work\n"
+        "armed sess-checkpoint\ncompact\nkeep the parser work\n"
     )
     assert read_back_drive(repo / ".claude" / "autodrive")
 
@@ -265,7 +267,6 @@ def test_precompact_focus_directive_and_continuation_both_carried(
     result = run_checkpoint(repo, payload)
     assert result.returncode == 0
     assert (repo / ".claude" / "autodrive").read_text() == (
-        f"armed sess-checkpoint\ncompact\n/compact keep the parser work\n"
-        f"{CONTINUATION}\n"
+        "armed sess-checkpoint\ncompact continue\nkeep the parser work\n"
     )
     assert read_back_drive(repo / ".claude" / "autodrive")

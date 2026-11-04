@@ -20,7 +20,7 @@ reader_stub() {
 }
 
 @test "load-handoff (clear, the reader's helper fails: pending kept, said so)" {
-    seed_pending "$tmp" "clear" "/rename A Title" "/clear" "pick up per the task file"
+    seed_pending "$tmp" "clear continue" "A Title"
     before="$(cat "$tmp/.claude/autodrive")"
     PATH="$(reader_stub):$PATH" run_load_handoff "$tmp" clear
     [ "$status" -eq 0 ]
@@ -29,7 +29,7 @@ reader_stub() {
 }
 
 @test "load-compact (the reader's helper fails: pending kept, said so)" {
-    seed_pending "$tmp" "compact" "/compact" "continue"
+    seed_pending "$tmp" "compact continue"
     before="$(cat "$tmp/.claude/autodrive")"
     PATH="$(reader_stub):$PATH" run_load_compact "$tmp"
     [ "$status" -eq 0 ]
@@ -38,7 +38,7 @@ reader_stub() {
 }
 
 @test "report-drive-failure (the reader's helper fails: armed file kept, not swept, said so)" {
-    seed_drive "$tmp" "compact" "/compact" "continue"
+    seed_drive "$tmp" "compact continue"
     before="$(cat "$tmp/.claude/autodrive")"
     PATH="$(reader_stub):$PATH" run_report_failure "$tmp"
     [ "$status" -eq 0 ]
@@ -110,7 +110,7 @@ clear" ]
 # The sweep quotes no line of a malformed file, but it prints an armed one's
 # lines for the user to type: through a link, those would be another file's.
 @test "report-drive-failure (the sentinel is a symlink to this session's armed file: swept unread, no lines offered)" {
-    printf '%s\n' "armed $SESSION_ID" "clear" "/rename LINKED-TITLE" "/clear" > "$other/linked-sentinel"
+    printf '%s\n' "armed $SESSION_ID" "clear" "LINKED-TITLE" > "$other/linked-sentinel"
     ln -s "$other/linked-sentinel" "$tmp/.claude/autodrive"
     run_report_failure "$tmp"
     [ "$status" -eq 0 ]
@@ -136,7 +136,7 @@ clear" ]
 # kill a live continuation. Only the failure branch above, which acts on
 # something the mod observed itself, may clear one.
 @test "report-drive-failure (pending file: left alone, no report)" {
-    seed_pending "$tmp" "compact" "/compact" "continue"
+    seed_pending "$tmp" "compact continue"
     run_report_failure "$tmp"
     [ "$status" -eq 0 ]
     [ "$output" = "" ]
@@ -148,7 +148,7 @@ clear" ]
 # at a UserPromptSubmit — this hook. Sweeping this session's own held file would
 # silently cancel the transition the user is in the middle of approving.
 @test "report-drive-failure (held file owned by this session: left alone)" {
-    printf '%s\n' "held $SESSION_ID" "clear" "/rename A Title" "/clear" "resume" \
+    printf '%s\n' "held $SESSION_ID" "clear continue" "A Title" \
         > "$tmp/.claude/autodrive"
     run_report_failure "$tmp"
     [ "$status" -eq 0 ]
@@ -163,7 +163,7 @@ clear" ]
 # owner's file is replaced by the next checkpoint in the root, and only its
 # owner's handoff-approved can arm it.
 @test "report-drive-failure (held file of another session, no transcript_path: left untouched)" {
-    printf '%s\n' "held sess-someone-else" "clear" "/rename A Title" "/clear" "resume" \
+    printf '%s\n' "held sess-someone-else" "clear continue" "A Title" \
         > "$tmp/.claude/autodrive"
     before="$(cat "$tmp/.claude/autodrive")"
     run_report_failure "$tmp"

@@ -61,15 +61,13 @@ run_approved() {
 
 @test "handoff-approved: a held sentinel becomes armed, every line below preserved" {
     repo="$(make_repo)"
-    printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" clear "/rename A Title" /clear \
-        "pick up per the task file" > "$repo/.claude/autodrive"
+    printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" "clear continue" "A Title" \
+        > "$repo/.claude/autodrive"
     run_approved "$repo"
     [ "$status" -eq 0 ]
     [ "$(cat "$repo/.claude/autodrive")" = "armed $CLAUDE_CODE_SESSION_ID
-clear
-/rename A Title
-/clear
-pick up per the task file" ]
+clear continue
+A Title" ]
 }
 
 # The sentinel's lock. Another actor holds it, an approval starts and has to
@@ -78,14 +76,14 @@ pick up per the task file" ]
 # the first and armed it.
 @test "handoff-approved: the held file is replaced while the approval waits on the lock -> it judges the new file, exit 2" {
     repo="$(make_repo)"
-    printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" clear "/rename A Title" /clear \
+    printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" clear "A Title" \
         "pick up per the task file" > "$repo/.claude/autodrive"
     hold_drive_lock "$repo"
     (cd "$repo" && HANDOFF_ROOT="$repo" HANDOFF_LOCK_WAIT_SECS=30 bash "$APPROVED") \
         > "$BATS_TEST_TMPDIR/approved.out" 2>&1 3>&- &
     approved_pid=$!
     wait_until_blocked
-    printf '%s\n' "held sess-someone-else" clear "/rename A Title" /clear \
+    printf '%s\n' "held sess-someone-else" clear "A Title" \
         > "$repo/.claude/autodrive"
     release_drive_lock
     approved_rc=0
@@ -100,7 +98,7 @@ pick up per the task file" ]
 # exits 2 naming the lock and leaves the held file as it was.
 @test "handoff-approved: the lock is held past the wait -> exit 2 naming the lock, the held file untouched" {
     repo="$(make_repo)"
-    printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" clear "/rename A Title" /clear \
+    printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" clear "A Title" \
         "pick up per the task file" > "$repo/.claude/autodrive"
     cp "$repo/.claude/autodrive" "$BATS_TEST_TMPDIR/sentinel.before"
     hold_drive_lock "$repo"
@@ -114,7 +112,7 @@ pick up per the task file" ]
 
 @test "handoff-approved: a link at the lock -> exit 2 saying it could not be set up, the held file untouched" {
     repo="$(make_repo)"
-    printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" clear "/rename A Title" /clear \
+    printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" clear "A Title" \
         "pick up per the task file" > "$repo/.claude/autodrive"
     cp "$repo/.claude/autodrive" "$BATS_TEST_TMPDIR/sentinel.before"
     : > "$BATS_TEST_TMPDIR/elsewhere"
@@ -131,7 +129,7 @@ pick up per the task file" ]
 # conversation — so the state alone is not enough to act on.
 @test "handoff-approved: a held sentinel from another session -> exit 2, left held" {
     repo="$(make_repo)"
-    printf '%s\n' "held sess-someone-else" clear "/rename A Title" /clear \
+    printf '%s\n' "held sess-someone-else" clear "A Title" \
         > "$repo/.claude/autodrive"
     run_approved "$repo"
     [ "$status" -eq 2 ]
@@ -150,7 +148,7 @@ pick up per the task file" ]
 # say the approval released something it did not.
 @test "handoff-approved: an armed sentinel -> exit 2 naming the state it found" {
     repo="$(make_repo)"
-    printf '%s\n' "armed $CLAUDE_CODE_SESSION_ID" clear "/rename A Title" /clear \
+    printf '%s\n' "armed $CLAUDE_CODE_SESSION_ID" clear "A Title" \
         > "$repo/.claude/autodrive"
     run_approved "$repo"
     [ "$status" -eq 2 ]
@@ -161,7 +159,7 @@ pick up per the task file" ]
 # Armed through a link, the approval would rewrite whatever file it names.
 @test "handoff-approved: the sentinel is a symlink to a held file -> exit 2, target untouched" {
     repo="$(make_repo)"
-    printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" compact "/compact" > "$BATS_TEST_TMPDIR/linked"
+    printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" compact > "$BATS_TEST_TMPDIR/linked"
     ln -s "$BATS_TEST_TMPDIR/linked" "$repo/.claude/autodrive"
     run_approved "$repo"
     [ "$status" -eq 2 ]
@@ -174,7 +172,7 @@ pick up per the task file" ]
 # unreadable, not malformed, and left where it is.
 @test "handoff-approved: the reader helper failing -> exit 2 saying it could not be read, file kept" {
     repo="$(make_repo)"
-    printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" compact "/compact" > "$repo/.claude/autodrive"
+    printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" compact > "$repo/.claude/autodrive"
     stub="$BATS_TEST_TMPDIR/broken-python"; mkdir -p "$stub"
     # The lock's helper still runs (a lock that cannot be set up fails closed
     # before the read, and has its own row); every other python3 call fails.
@@ -201,7 +199,7 @@ pick up per the task file" ]
 # non-executable entry point is a failure every other row here would miss.
 @test "handoff-approved: runs by bare name off PATH" {
     repo="$(make_repo)"
-    printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" compact "/compact" \
+    printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" compact \
         > "$repo/.claude/autodrive"
     run bash -c 'cd "$1" && PATH="$2:$PATH" HANDOFF_ROOT="$1" handoff-approved' _ "$repo" "$repo_root/bin"
     [ "$status" -eq 0 ]
@@ -224,7 +222,7 @@ print(closing_directive('$skill', typed=$typed), end='')
 
 @test "handoff-approved: status fact, blank line, the checkpoint's closing line — rename" {
     repo="$(make_repo)"
-    printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" rename "/rename A Title" \
+    printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" rename "A Title" \
         > "$repo/.claude/autodrive"
     run_approved "$repo"
     [ "$status" -eq 0 ]
@@ -235,7 +233,7 @@ print(closing_directive('$skill', typed=$typed), end='')
 
 @test "handoff-approved: status fact, blank line, the checkpoint's closing line — clear" {
     repo="$(make_repo)"
-    printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" clear "/rename A Title" /clear \
+    printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" clear "A Title" \
         > "$repo/.claude/autodrive"
     run_approved "$repo"
     [ "$status" -eq 0 ]
@@ -246,7 +244,7 @@ print(closing_directive('$skill', typed=$typed), end='')
 
 @test "handoff-approved: status fact, blank line, the checkpoint's closing line — compact" {
     repo="$(make_repo)"
-    printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" compact "/compact" \
+    printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" compact \
         > "$repo/.claude/autodrive"
     run_approved "$repo"
     [ "$status" -eq 0 ]

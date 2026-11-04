@@ -114,7 +114,7 @@ ASMTASK
 # consumes the sentinel and injects the frame.
 
 @test "load-handoff (clear, pending present: consumes it, injects the frame)" {
-    seed_pending "$tmp" "clear" "/rename A Title" "/clear" "pick up per the task file"
+    seed_pending "$tmp" "clear continue" "A Title"
     run_load_handoff "$tmp" clear
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
@@ -129,7 +129,7 @@ ASMTASK
 # transition's sentinel is read as one still in flight.
 @test "load-handoff (clear, pending present but NO frame: still consumes, and says so)" {
     rm -f "$tmp/TASK.md" "$tmp/TODO.md"
-    seed_pending "$tmp" "clear" "/rename A Title" "/clear" "resume anyway"
+    seed_pending "$tmp" "clear continue" "A Title"
     run_load_handoff "$tmp" clear
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
@@ -142,7 +142,7 @@ ASMTASK
 # there is nothing to submit into the session it opened. The pending file is
 # still this loader's to consume, and the frame still goes out.
 @test "load-handoff (clear, pending with no continuation: consumed, frame only)" {
-    seed_pending "$tmp" "clear" "/rename A Title" "/clear"
+    seed_pending "$tmp" "clear" "A Title"
     run_load_handoff "$tmp" clear
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
@@ -162,15 +162,23 @@ ASMTASK
 # Each loader consumes only its own transition. A hand-typed /clear fires the
 # same hook, and a compact armed in the outgoing session must survive it.
 @test "load-handoff (clear, pending of kind compact: left for SessionStart(compact))" {
-    seed_pending "$tmp" "compact" "/compact" "continue with task 3"
+    seed_pending "$tmp" "compact continue"
     run_load_handoff "$tmp" clear
     [ "$status" -eq 0 ]
     [ "$(head -n1 "$tmp/.claude/autodrive")" = "pending" ]
-    [ "$(sed -n 2p "$tmp/.claude/autodrive")" = "compact" ]
+    [ "$(sed -n 2p "$tmp/.claude/autodrive")" = "compact continue" ]
+}
+
+@test "load-handoff (clear, pending prepare marker: left for SessionStart(compact))" {
+    seed_pending "$tmp" "prepare"
+    run_load_handoff "$tmp" clear
+    [ "$status" -eq 0 ]
+    [ "$(head -n1 "$tmp/.claude/autodrive")" = "pending" ]
+    [ "$(sed -n 2p "$tmp/.claude/autodrive")" = "prepare" ]
 }
 
 @test "load-handoff (startup with a pending present: does not consume it)" {
-    seed_pending "$tmp" "clear" "/rename A Title" "/clear" "pick up per the task file"
+    seed_pending "$tmp" "clear continue" "A Title"
     run_load_handoff "$tmp" startup
     [ "$status" -eq 0 ]
     [ -f "$tmp/.claude/autodrive" ]
@@ -200,7 +208,7 @@ ASMTASK
 # turn end that has not come — the agent wrote it and the turn ended on an Esc
 # (or the mod never loaded), so the sweep is what deals with it, not this.
 @test "load-handoff (clear, armed file: not consumed, left for the sweep)" {
-    seed_drive "$tmp" "clear" "/rename A Title" "/clear" "pick up per the task file"
+    seed_drive "$tmp" "clear continue" "A Title"
     run_load_handoff "$tmp" clear
     [ "$status" -eq 0 ]
     [ "$(head -n1 "$tmp/.claude/autodrive")" = "armed $SESSION_ID" ]

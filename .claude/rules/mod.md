@@ -24,6 +24,12 @@ Behaviour lives in `docs/design/driving-the-transition.md`; read it first.
 - The mod reads neither the sentinel nor the prompt box: it runs
   `drive-take.sh` and executes the plan on its stdout, and a prompt in the
   window after `Stop` runs `drive-cancel.sh` once.
+- The plan is data: `{kind, arg, continue, failFile, message}`. Every command
+  name and the one prompt are literals in `hooks/handoff.ts` (`commandsFor`,
+  `CONTINUATION`); a plan field is an argument, never a command or text to
+  submit, and an unknown kind runs nothing. A new command or prompt is a new
+  literal and a new kind in the sentinel's table
+  (`docs/design/the-sentinel.md`), never a field read off the plan.
 - `claude plugin test` runs `tests/mod/*.test.ts` against
   `tests/mod/rig.ts`, a stub rig that answers every mods API call the mod makes
   and logs them in order; `process.run` answers per script
@@ -38,16 +44,18 @@ Behaviour lives in `docs/design/driving-the-transition.md`; read it first.
   rendered from them by `tests/gen_mod_fixtures.py`, because a hooks-module
   test can neither read files nor import JSON: regenerate it with
   `python3 tests/gen_mod_fixtures.py`, never by hand.
-  `tests/test_mod_fixtures.py` fails when they disagree, and ties every prose
-  line a fixture submits to `CONTINUATION`.
+  `tests/test_mod_fixtures.py` fails when they disagree, and pins the mod's
+  `CONTINUATION` literal to `HANDOFF_CONTINUATION` in `_lib_drive.sh`.
 - A new mod row goes in `tests/mod/handoff.test.ts`, or `window.test.ts` when it
   is about a prompt after `Stop`; a new plan shape is a
   fixture JSON plus a regeneration.
 - The load-bearing mod rows (driving inside `Stop`, continuing after a
   rejection, dropping the consume-once reset, skipping the fast path, the
-  cancel check before each line, closing the window before the last line, a
-  drive clearing only its own window at its end and at the last line, the
-  window's answer living on the window) are mutation-checked, not observed passing. A new load-bearing row is too.
+  cancel check before each command, closing the window before the last
+  command, a drive clearing only its own window at its end and at the last
+  command, the window's answer living on the window, an unknown kind running
+  nothing, `continue` false submitting nothing) are mutation-checked, not
+  observed passing. A new load-bearing row is too.
 - Run `just mod-smoke` whenever the mod, a loader or the sentinel's shape
   changes; it found the `Stop` call-context refusal no stub could. It boots a
   real `claude -p --model haiku` with this repo as `--plugin-dir` and a fixed

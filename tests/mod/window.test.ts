@@ -92,7 +92,7 @@ test('a prompt while /rename is in flight under clear: /clear and the continuati
   expect(r.submitted[0].context).toEqual([CANCEL_NOTE])
 })
 
-test('a prompt after the last before-line is issued: no drive-cancel spawn, the continuation still runs', async ($, on) => {
+test('a prompt after the last command is issued: no drive-cancel spawn, the continuation still runs', async ($, on) => {
   const r = rig(on, {
     sentinelExists: true,
     stdout: fixture('armed-clear', CWD),
@@ -277,7 +277,7 @@ test("the outer drive's end leaves the next drive's window open: a prompt after 
   expect(r.submitted[1].context).toEqual([CANCEL_NOTE])
 })
 
-// Likewise the outer drive closing its window at its last before-line: here the
+// Likewise the outer drive closing its window at its last command: here the
 // next turn's drive is already in flight, and its window stays open.
 test("the outer drive's /clear being issued leaves the next drive's window open: a prompt after it still cancels", async ($, on) => {
   const r = rig(on, {
@@ -299,4 +299,60 @@ test("the outer drive's /clear being issued leaves the next drive's window open:
   await done2
   expect(r.log.filter((l: string) => l === 'command.run clear []').length).toBe(1)
   expect(r.submitted.find((s: any) => s.text === 'say banana').context).toEqual([CANCEL_NOTE])
+})
+
+// The window's answer lives on the window. A later Stop opens a new window while
+// the earlier drive is still in flight; the earlier drive reads its own answer
+// before its next command, so a cancel it received still stops it.
+test("a later Stop opened while a drive is in flight leaves that drive's own cancel answer in force", async ($, on) => {
+  const r = rig(on, {
+    sentinelExists: true,
+    stdout: [fixture('armed-clear', CWD), ''],
+    cancelStdout: CANCEL_CLEAR(CWD),
+    holdLine: '/rename A Title',
+  })
+  const done = endTurn($)
+  await until(() => r.log.includes('command.run rename [A Title]'))
+  await $.prompt.submit(PROMPT)
+  await $.classic.Stop({ cwd: CWD, session_id: 's1' })
+  r.release.line()
+  await done
+  expect(r.log).toEqual(['process.run', 'command.run rename [A Title]', 'process.run cancel', SAY])
+})
+
+// A window asks once, and the next window asks again: its answer is not the
+// earlier window's.
+test('a prompt in a later window spawns drive-cancel again', async ($, on) => {
+  const r = rig(on, { sentinelExists: true, stdout: fixture('armed-clear', CWD), cancelStdout: CANCEL_CLEAR(CWD) })
+  await $.classic.Stop({ cwd: CWD, session_id: 's1' })
+  await $.prompt.submit(PROMPT)
+  await endTurn($, null)
+  await $.classic.Stop({ cwd: CWD, session_id: 's1' })
+  await $.prompt.submit(PROMPT)
+  expect(r.cancelArgv.length).toBe(2)
+})
+
+// The converse: a cancel answered in a later window is that window's, and an
+// earlier drive that never got one runs on.
+test("a cancel answered in a later window does not stop an earlier drive that was not asked", async ($, on) => {
+  const r = rig(on, {
+    sentinelExists: true,
+    stdout: [fixture('armed-clear', CWD), ''],
+    cancelStdout: CANCEL_CLEAR(CWD),
+    holdLine: '/rename A Title',
+  })
+  const done = endTurn($)
+  await until(() => r.log.includes('command.run rename [A Title]'))
+  await $.classic.Stop({ cwd: CWD, session_id: 's1' })
+  await $.prompt.submit(PROMPT)
+  r.release.line()
+  await done
+  expect(r.log).toEqual([
+    'process.run',
+    'command.run rename [A Title]',
+    'process.run cancel',
+    SAY,
+    'command.run clear []',
+    `prompt.submit ${CONTINUATION} asUser=true`,
+  ])
 })

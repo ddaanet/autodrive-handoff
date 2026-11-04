@@ -43,7 +43,7 @@ def test_rename_only_sentinel_written_neither_file_created(tmp_path: Path) -> No
     assert result.returncode == 0
     assert (
         repo / ".claude" / "autodrive"
-    ).read_text() == "armed sess-checkpoint\nrename\n/rename Two Words Title\n"
+    ).read_text() == "armed sess-checkpoint\nrename\nTwo Words Title\n"
     assert read_back_drive(repo / ".claude" / "autodrive")
     assert not (repo / "TASK.md").exists()
     assert not (repo / "TODO.md").exists()
@@ -64,7 +64,7 @@ def test_multiline_title_flattened_to_one_line(tmp_path: Path) -> None:
     assert result.returncode == 0
     content = (repo / ".claude" / "autodrive").read_text()
     assert len(content.splitlines()) == 3
-    assert "/rename Two Words And More" in content.splitlines()
+    assert "Two Words And More" in content.splitlines()
 
 
 def test_whitespace_only_title_errors(tmp_path: Path) -> None:
@@ -142,7 +142,7 @@ def test_autoname_rename_sentinel_armed_nothing_else(tmp_path: Path) -> None:
     assert result.returncode == 0
     assert (
         repo / ".claude" / "autodrive"
-    ).read_text() == "armed sess-checkpoint\nrename\n/rename A Side Conversation\n"
+    ).read_text() == "armed sess-checkpoint\nrename\nA Side Conversation\n"
     state, owner = drive_state(repo / ".claude" / "autodrive")
     assert (state, owner) == ("armed", "sess-checkpoint")
 

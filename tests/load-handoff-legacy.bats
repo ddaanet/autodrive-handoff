@@ -117,7 +117,7 @@ link_root() {
     rm -f "$tmp/TASK.md"
     printf '## Remaining\n\n- linked item\n' > "$other/todo.md"
     link_root TODO.md "$other/todo.md"
-    seed_pending "$tmp" "compact" "/compact" "continue with task 3"
+    seed_pending "$tmp" "compact continue"
     run_load_compact "$tmp"
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
@@ -129,7 +129,7 @@ link_root() {
 @test "load-compact (TASK.md is a symlink to a body): not injected" {
     printf '## Current task\n\nlinked task body\n' > "$other/task.md"
     link_root TASK.md "$other/task.md"
-    seed_pending "$tmp" "compact" "/compact" "continue with task 3"
+    seed_pending "$tmp" "compact continue"
     run_load_compact "$tmp"
     [ "$status" -eq 0 ]
     split_output "$output"
@@ -140,7 +140,7 @@ link_root() {
 @test "load-compact (TASK.md and TODO.md are dangling symlinks): consumed, No todo" {
     link_root TASK.md "$other/nowhere-task.md"
     link_root TODO.md "$other/nowhere-todo.md"
-    seed_pending "$tmp" "compact" "/compact" "continue with task 3"
+    seed_pending "$tmp" "compact continue"
     run_load_compact "$tmp"
     [ "$status" -eq 0 ]
     split_output "$output"

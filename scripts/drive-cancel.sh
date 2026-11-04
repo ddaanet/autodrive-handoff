@@ -11,7 +11,7 @@
 #   `message` the user's toast, `note` the agent's directive.
 # - An `armed` `rename` this session owns is not cancelled but taken, as
 #   drive-take.sh would: the file is removed (nothing is recorded, nothing was
-#   cancelled) and the line is that take's plan {kind, before, after, failFile,
+#   cancelled) and the line is that take's plan {kind, arg, continue, failFile,
 #   message}, with no `note`. The sweep reads `armed` at the prompt, ahead of
 #   the take, and would otherwise discard the rename; the mod runs the plan
 #   after the prompt's turn like any other.
@@ -20,11 +20,11 @@
 # here can tell whose it is; the mod calls this only inside its own window, in
 # which the `pending` file is the one its own take just made.
 #
-# - An `armed` prepare-only `compact` this session owns (nothing to run, FR-G)
+# - An `armed` `prepare` this session owns (nothing to run, FR-G)
 #   is moved to `pending`, as the take does, and nothing is printed: the sweep
 #   that follows spares it, and the hand-typed /compact still finds the marker.
 #
-# A `pending` prepare-only compact, a `held` file, another session's `armed`
+# A `pending` `prepare`, a `held` file, another session's `armed`
 # file and anything unreadable print nothing and are left as they are, to the
 # take and the sweep.
 set -euo pipefail
@@ -58,12 +58,10 @@ case "$DRIVE_STATE" in
     armed) [[ "$DRIVE_OWNER" == "$session_id" ]] || exit 0 ;;
     *) exit 0 ;;
 esac
-before=( ${DRIVE_BEFORE[@]+"${DRIVE_BEFORE[@]}"} )
-if (( ${#before[@]} == 0 )); then
+if [[ "$DRIVE_KIND" == "prepare" ]]; then
     # FR-G, nothing to run: moved to pending as the take does and left, so the
     # sweep that follows spares the marker and the hand-typed /compact finds it.
-    # Only an armed one needs the move; a pending one is already there. The
-    # grammar leaves only a compact with nothing to run.
+    # Only an armed one needs the move; a pending one is already there.
     if [[ "$DRIVE_STATE" == "armed" ]]; then
         handoff_drive_arm "$drive" pending || true
     fi
@@ -78,5 +76,5 @@ if handoff_drive_has_source "$DRIVE_KIND"; then
         '{kind: $k, message: ("handoff: " + $m + "."), note: $n}'
 else
     rm -f "$drive"
-    handoff_drive_plan rename "$root/$HANDOFF_REL_DRIVE_FAILED" "${before[@]}"
+    handoff_drive_plan rename "$root/$HANDOFF_REL_DRIVE_FAILED"
 fi

@@ -184,14 +184,17 @@ seed_prompt_marker() {
 seed_armed_kind() {
     case "$1" in
         rename)
-            seed_drive "$tmp" rename "/rename Queued Title"
+            seed_drive "$tmp" rename "Queued Title"
             LINES="/rename Queued Title" ;;
         clear)
-            seed_drive "$tmp" clear "/rename Queued Title" "/clear" "pick up the queued task"
-            LINES=$'/rename Queued Title\n/clear\npick up the queued task' ;;
+            seed_drive "$tmp" "clear continue" "Queued Title"
+            LINES=$'/rename Queued Title\n/clear\n'"$(continuation_line)" ;;
         compact)
-            seed_drive "$tmp" compact "/compact keep the parser work" "continue the task"
-            LINES=$'/compact keep the parser work\ncontinue the task' ;;
+            seed_drive "$tmp" "compact continue" "keep the parser work"
+            LINES=$'/compact keep the parser work\n'"$(continuation_line)" ;;
+        prepare)
+            seed_drive "$tmp" prepare
+            LINES="" ;;
     esac
 }
 
@@ -235,5 +238,5 @@ seed_transcript() {
 }
 
 seed_owned() {  # <state> <owner>
-    printf '%s\n' "$1 $2" "clear" "/rename A Title" "/clear" "resume" > "$tmp/.claude/autodrive"
+    printf '%s\n' "$1 $2" "clear continue" "A Title" > "$tmp/.claude/autodrive"
 }

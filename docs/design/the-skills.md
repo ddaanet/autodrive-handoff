@@ -64,7 +64,7 @@ is not carried out, since nothing would submit the prompt, and at the clear
 boundary also when neither file would have a body once the plans are applied
 (checked before any write, the legacy fallback counted; after a compaction the
 summary carries the task, so `precompact` is exempt). The prompt it asks
-for is one fixed line, `CONTINUATION` in `checkpoint.py`, that points the fresh
+for is one fixed prompt, `CONTINUATION` in the mod (`hooks/handoff.ts`), that points the fresh
 context at the task and todo files. It was once a line of prose the agent
 wrote, and the agent used it to carry the task: a description of the next step,
 or the facts it hinged on, that no file held and that the next `/clear` lost.

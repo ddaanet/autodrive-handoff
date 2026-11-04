@@ -17,7 +17,6 @@ from pathlib import Path
 
 import _checkpoint_lib as lib
 import pytest
-from checkpoint import CONTINUATION
 from conftest import (
     CHECKPOINT,
     COMMIT_ACT,
@@ -337,7 +336,7 @@ def test_continue_counts_the_effective_todo_the_legacy_file_included(
     put(repo, LEGACY_TODO_REL, legacy_before)
     result = run_checkpoint(repo, continuing_payload(task_clear(), todo_keep()))
     ok(result)
-    assert (repo / SENTINEL_REL).read_text().endswith(f"\n{CONTINUATION}\n")
+    assert (repo / SENTINEL_REL).read_text().splitlines()[1] == "clear continue"
 
 
 @pytest.mark.parametrize(

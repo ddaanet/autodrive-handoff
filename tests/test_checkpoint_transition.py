@@ -10,7 +10,6 @@ tests/conftest.py.
 from pathlib import Path
 
 import pytest
-from checkpoint import CONTINUATION
 from conftest import (
     make_repo,
     read_back_drive,
@@ -18,6 +17,7 @@ from conftest import (
     task_clear,
     todo_keep,
 )
+from continuation import continuation
 
 pytestmark = pytest.mark.usefixtures("_session_id")
 
@@ -170,11 +170,30 @@ def test_continue_missing_errors_at_either_boundary(tmp_path: Path) -> None:
     assert "continue" in result.stderr
 
 
-def test_the_continuation_is_one_line_the_drive_will_not_run_as_a_command() -> None:
-    assert CONTINUATION
-    assert CONTINUATION.strip() == CONTINUATION
-    assert len(CONTINUATION.splitlines()) == 1
-    assert not CONTINUATION.startswith("/")
+def test_the_continuation_is_one_line_the_mod_submits_as_a_prompt() -> None:
+    text = continuation()
+    assert text
+    assert text.strip() == text
+    assert len(text.splitlines()) == 1
+    assert not text.startswith("/")
+
+
+@pytest.mark.parametrize("boundary", ["clear", "compact", "compact-focus"])
+def test_the_sentinel_carries_the_flag_and_never_the_continuation_text(
+    tmp_path: Path, boundary: str
+) -> None:
+    """A driven transition with `continue` writes `continue` on line 2 and no
+    prompt text anywhere: the mod holds the one prompt it submits."""
+    repo = make_repo(tmp_path)
+    payload = {**boundary_payload(boundary, cont=True), "todo": "- run the gate\n"}
+    result = run_checkpoint(repo, payload)
+    assert result.returncode == 0, result.stderr
+    sentinel = (repo / ".claude" / "autodrive").read_text()
+    assert sentinel.splitlines()[1].endswith(" continue")
+    assert continuation() not in sentinel
+    assert "/rename" not in sentinel
+    assert "/clear" not in sentinel
+    assert "/compact" not in sentinel
 
 
 # --- `continue` is a boolean; `true` needs a carried-out transition ---
@@ -206,7 +225,7 @@ def boundary_payload(boundary: str, cont: object) -> dict[str, object]:
 @pytest.mark.parametrize("boundary", BOUNDARIES)
 @pytest.mark.parametrize(
     "value",
-    [None, CONTINUATION, "", "pick up per the task file", 0, 1, 1.5, [], {}],
+    [None, continuation(), "", "pick up per the task file", 0, 1, 1.5, [], {}],
     ids=["null", "string", "empty", "prose", "zero", "one", "float", "list", "object"],
 )
 def test_continue_that_is_not_a_boolean_errors(
