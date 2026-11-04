@@ -275,7 +275,8 @@ HANDOFF_CANCEL_MSG='transition cancelled — a prompt arrived before it ran'
 handoff_cancel_note() {
     case "$1" in
         clear) printf '%s' "The driven /clear did not run. Answer this prompt, then run the handoff skill again with the same transition, unless this prompt changes that." ;;
-        compact|prepare) printf '%s' "The driven /compact did not run. Answer this prompt, then run the precompact skill again with the same transition, unless this prompt changes that." ;;
+        compact) printf '%s' "The driven /compact did not run. Answer this prompt, then run the precompact skill again with the same transition, unless this prompt changes that." ;;
+        prepare) printf '%s' "The prepare marker was removed, so a /compact typed by hand will not re-inject the todo. Answer this prompt, then run the precompact skill again with the same transition, unless this prompt changes that." ;;
     esac
 }
 

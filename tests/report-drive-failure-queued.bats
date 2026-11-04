@@ -86,14 +86,17 @@ assert_cancel_report() {
     marker_holds arming-prompt
 }
 
-# The prepare marker is a pending compaction in the user's eyes: a queued prompt
-# cancels it with the compact note, and nothing is offered to type.
-@test "report-drive-failure (queued prompt: an owner's armed prepare marker is swept and recorded with the compact note)" {
+# The prepare marker drives nothing: a queued prompt sweeps it, and what that
+# loses is the marker a hand-typed /compact would find, so the note says that
+# and not that a driven /compact did not run. Nothing is offered to type.
+@test "report-drive-failure (queued prompt: an owner's armed prepare marker is swept and recorded with the prepare note)" {
     seed_queued prepare
     PROMPT_ID=arming-prompt run_report_failure "$tmp"
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
-    assert_cancel_report "$output" /compact precompact
+    split_output "$output"
+    [ "$MSG" = $'\033[0m'"handoff: $cancel_msg." ]
+    [ "$CTX" = "The prepare marker was removed, so a /compact typed by hand will not re-inject the todo. Answer this prompt, then run the precompact skill again with the same transition, unless this prompt changes that." ]
     [[ "$(cat "$tmp/.claude/autodrive.swept")" == *$'\tstate=armed\towner='"$SESSION_ID"$'\tkind=prepare\t'* ]]
 }
 

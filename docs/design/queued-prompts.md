@@ -32,13 +32,15 @@ this session owns, so an ordinary prompt forks nothing new. A prompt is
 
 - **`rename`** is left in place, and nothing is reported or recorded. The drive
   takes it at the end of the turn the prompt is in.
-- **`clear` and `compact`**, and a `prepare` marker, which is a compaction the
-  user expects, are swept and recorded (state `armed`), with the
-  user told `transition cancelled — a prompt arrived before it ran` and the
-  agent given a note to answer the prompt and then run the skill again with the
-  same transition, unless the prompt changes it. No lines are offered: typing
-  them would replay a transition and continuation composed before the prompt
-  arrived.
+- **`clear` and `compact`**, and a `prepare` marker, are swept and recorded
+  (state `armed`), with the user told `transition cancelled — a prompt arrived
+  before it ran` and the agent given a note to answer the prompt and then run
+  the skill again with the same transition, unless the prompt changes it. No
+  lines are offered: typing them would replay a transition and continuation
+  composed before the prompt arrived. The `prepare` note differs: the marker
+  drives nothing, so no `/compact` failed to run. What the sweep loses is the
+  marker a hand-typed `/compact` would have found, which gates the todo's
+  re-injection, and the note says so.
 
 Cancelling rather than sparing these two is not for want of a working drive: a
 spared `clear` or `compact` runs cleanly after the prompt's turn. It is that
