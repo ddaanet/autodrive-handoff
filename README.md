@@ -146,21 +146,30 @@ through gitlore's skill.
 
 ### What the mod submits
 
-The mod runs only what `.claude/autodrive` holds, and only for the session
-that file names as its owner. The lines it can hold:
+`.claude/autodrive` holds only a kind (`rename`, `clear`, `compact` or
+`prepare`), a `continue` flag and one argument, a session title or a
+one-line focus directive. It holds no command and no prompt text. The commands
+and the one prompt are literals in the mod (`hooks/handoff.ts`), which runs
+them only for the session the file names as its owner:
 
 - `/rename <title>`
 - `/clear`
-- `/compact`, or `/compact <focus>` with a one-line focus directive
-- the one prompt the plugin ever submits:
+- `/compact`, or `/compact <focus>`
+- the one prompt the plugin ever submits, when the file says to continue:
 
   ```
   Continue where the previous context stopped.
   ```
 
+So whatever writes the file can reach `/rename`, `/clear` and `/compact` with
+a free-text argument, plus that fixed prompt, and nothing else: a `/plugin`
+line in the file is only the argument of one of those. The `PreToolUse(Write|Edit)` guard denies the
+agent a direct `Write` or `Edit` to the file; it does not cover other ways of
+writing it, which is why the bound is in the mod and not in the guard.
+
 The mod does not read the prompt box, and text you have typed there is left
-alone. A rejected line stops the sequence and is reported at your next
-prompt. The file's reader refuses any other slash command.
+alone. A rejected command stops the sequence and is reported at your next
+prompt. The file's reader refuses a kind or shape it does not know.
 
 ### The `PreToolUse(Bash)` rewrite
 
@@ -199,7 +208,7 @@ run is denied). To run the checkpoint without a prompt, allow all three in
 | `.claude/` | created by `handoff-checkpoint` when absent |
 | `.claude/autodrive` | the transition to carry out; composed only by `handoff-checkpoint`; past that, the plugin's own scripts only rewrite its state line or remove it, and direct writes are denied by the `PreToolUse(Write\|Edit)` guard |
 | `.claude/autodrive.lock` | an empty lock file, mode 0600, held while the plugin reads or changes `.claude/autodrive`; never deleted |
-| `.claude/autodrive.failed` | written by the mod when a line is rejected; consumed at your next prompt |
+| `.claude/autodrive.failed` | written by the mod when a command is rejected; consumed at your next prompt |
 | `.claude/autodrive.swept` | one line per stale or cancelled transition file removed; last 50 kept |
 | `.claude/handoff-todo.md`, `.claude/handoff-task.md` | files from an earlier version of the plugin; `handoff-checkpoint` moves the todo to `TODO.md` or removes either, and nothing else touches them |
 | `/tmp/claude/handoff-drift-<session id>` | marker so a session-root drift note appears once; `/tmp/claude` is created mode 0700 and markers older than 7 days are deleted |
@@ -217,7 +226,8 @@ transcript, to tell a live session from a dead one.
 - No `git commit`, `git push` or any git command that changes anything. When
   you ask for a commit, the agent makes it under your permission rules.
 - No prompt other than the one above, and no slash command other than
-  `/rename`, `/clear` and `/compact`.
+  `/rename`, `/clear` and `/compact`: the file selects among them and cannot
+  add one.
 
 ## Privacy
 

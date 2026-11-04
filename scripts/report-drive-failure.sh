@@ -110,7 +110,7 @@ record_sweep() {
 drive_state=""
 drive_owner=""
 drive_kind=""
-drive_lines=()   # the lines an armed file held, before then after
+drive_lines=()   # the lines an armed file would run, rendered for display
 drive_err=""
 # Held from the read to the exit, so the sweep's decision and every removal it
 # makes, record_sweep and the failure branch's removal of a stranded `pending`
@@ -133,7 +133,8 @@ elif [[ -L "$drive" || -f "$drive" ]]; then
         drive_state="$DRIVE_STATE"
         drive_owner="$DRIVE_OWNER"
         drive_kind="$DRIVE_KIND"
-        drive_lines=( ${DRIVE_BEFORE[@]+"${DRIVE_BEFORE[@]}"} ${DRIVE_AFTER[@]+"${DRIVE_AFTER[@]}"} )
+        handoff_drive_lines
+        drive_lines=( ${DRIVE_LINES[@]+"${DRIVE_LINES[@]}"} )
     elif (( read_rc == 2 )); then
         # The reader could not run: no evidence about the file, which may be
         # a live transition. Reported and never swept.
@@ -154,7 +155,7 @@ if [[ "$drive_state" == "armed" && -n "$session_id" && "$drive_owner" != "$sessi
     drive_state="foreign"
 fi
 
-# The mod writes the record only on what it observed itself, a rejected line or
+# The mod writes the record only on what it observed itself, a rejected command or
 # a turn end with no session id, and never a link: a link there, dangling or
 # not, is no record the mod wrote, and following it would
 # quote another file's first line onto both channels. It is removed unread and
@@ -174,7 +175,7 @@ fi
 if [[ "$failed_status" == link ]]; then
     rm -f "$failed"
     msgs+=("a symbolic link at $HANDOFF_REL_DRIVE_FAILED was removed unread")
-    notes+=("A symbolic link sat where the handoff drive mod records a rejected line ($HANDOFF_REL_DRIVE_FAILED). The mod never writes one, so it was removed without reading what it points at; it says nothing about whether a transition ran.")
+    notes+=("A symbolic link sat where the handoff drive mod records a rejected command ($HANDOFF_REL_DRIVE_FAILED). The mod never writes one, so it was removed without reading what it points at; it says nothing about whether a transition ran.")
 elif [[ "$failed_status" == ok && "$drive_state" == "locked" ]]; then
     # Its report and the clearing of a stranded `pending` go together, and the
     # sentinel was not judged: the record stays for the next prompt.

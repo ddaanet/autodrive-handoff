@@ -107,6 +107,6 @@ Neither file is. `TASK.md` is replaced whole at every clear boundary and
 removed at every compact one, and `TODO.md` is the agent's own scratch list
 (FR4), so a direct edit of either is an ordinary edit, and nothing stages
 them: they are tracked like any file and ride the next commit. The one
-checkpoint-only file is the `.claude/autodrive` sentinel (FR3), whose lines
-are run as commands when the turn ends; a `PreToolUse(Write|Edit)` guard
+checkpoint-only file is the `.claude/autodrive` sentinel (FR3), which names
+the transition the mod carries out when the turn ends; a `PreToolUse(Write|Edit)` guard
 denies a direct write that resolves to it, in this project or another.
