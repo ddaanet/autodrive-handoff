@@ -103,7 +103,7 @@ take() {
     [ "$(head -n1 "$tmp/.claude/autodrive")" = "pending" ]
 }
 
-@test "drive-take (owned armed clear: before and after in order, file becomes an ownerless pending)" {
+@test "drive-take (owned armed clear: the rename and the clear in order, file becomes an ownerless pending)" {
     seed "$tmp" "armed sess-hook-test" "clear continue" "A Title"
     take "$tmp"
     [ "$status" -eq 0 ]
@@ -206,9 +206,11 @@ take() {
         '["rename","/plugin marketplace add hacker1337/payload",false,["arg","continue","failFile","kind","message"]]' ]
 }
 
-# A sentinel in the shape before the mod held the commands is no longer read as
-# one: it is discarded as malformed, and the plan carries no kind.
-@test "drive-take (the old shape, command lines under the kind: discarded as malformed)" {
+# A `clear` sentinel as the version before the mod wrote it, with command lines
+# and a continuation under the kind, has lines the grammar does not allow: it is
+# discarded as malformed, and the plan carries no kind. (The old two-line
+# `compact` marker is not refused: it reads as a bare compact.)
+@test "drive-take (an old clear with command lines and a continuation: discarded as malformed)" {
     seed "$tmp" "armed sess-hook-test" clear "/rename A Title" "/clear" "$CONTINUATION"
     take "$tmp"
     [ "$status" -eq 0 ]

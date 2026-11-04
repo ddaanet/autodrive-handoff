@@ -247,7 +247,9 @@ Three layers, because the mod's own seams are each reachable only one way:
 - `tests/drive-take.bats` runs the real script over real sentinel files and
   asserts stdout equals the fixtures in `tests/mod/fixtures/`, plus each state
   gate and the worktree-scoped paths; `tests/lib-drive.bats` pins the reader's
-  shapes and every malformed form, the old format included.
+  shapes and every malformed form, the old forms with command lines under the
+  kind among them (an old two-line `compact` marker is not malformed, see
+  [The kinds](the-sentinel.md#the-kinds)).
 - `tests/mod/handoff.test.ts` and `window.test.ts`, run by `claude plugin test`,
   stub every mods API call the mod makes and assert the exact call sequence: the deferral to
   `turn.complete`, stop-on-first-failure with the `failFile` write, the

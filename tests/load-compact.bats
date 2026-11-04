@@ -209,7 +209,7 @@ source "$BATS_TEST_DIRNAME/hook-helpers.bash"
 }
 
 # A driven compaction with no continuation — the /compact line ran, and nothing
-# follows it. Same effect here as the prepare-only marker, from a different
+# follows it. Same effect here as the `prepare` marker, from a different
 # sentinel: consume, inject what there is.
 @test "load-compact (pending with no continuation: consumed, frame only)" {
     seed_pending "$tmp" "compact" "keep the parser work"

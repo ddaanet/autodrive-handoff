@@ -77,7 +77,7 @@ A Title" ]
 @test "handoff-approved: the held file is replaced while the approval waits on the lock -> it judges the new file, exit 2" {
     repo="$(make_repo)"
     printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" clear "A Title" \
-        "pick up per the task file" > "$repo/.claude/autodrive"
+        > "$repo/.claude/autodrive"
     hold_drive_lock "$repo"
     (cd "$repo" && HANDOFF_ROOT="$repo" HANDOFF_LOCK_WAIT_SECS=30 bash "$APPROVED") \
         > "$BATS_TEST_TMPDIR/approved.out" 2>&1 3>&- &
@@ -99,7 +99,7 @@ A Title" ]
 @test "handoff-approved: the lock is held past the wait -> exit 2 naming the lock, the held file untouched" {
     repo="$(make_repo)"
     printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" clear "A Title" \
-        "pick up per the task file" > "$repo/.claude/autodrive"
+        > "$repo/.claude/autodrive"
     cp "$repo/.claude/autodrive" "$BATS_TEST_TMPDIR/sentinel.before"
     hold_drive_lock "$repo"
     HANDOFF_LOCK_WAIT_SECS=0.05 run_approved "$repo"
@@ -113,7 +113,7 @@ A Title" ]
 @test "handoff-approved: a link at the lock -> exit 2 saying it could not be set up, the held file untouched" {
     repo="$(make_repo)"
     printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" clear "A Title" \
-        "pick up per the task file" > "$repo/.claude/autodrive"
+        > "$repo/.claude/autodrive"
     cp "$repo/.claude/autodrive" "$BATS_TEST_TMPDIR/sentinel.before"
     : > "$BATS_TEST_TMPDIR/elsewhere"
     ln -s "$BATS_TEST_TMPDIR/elsewhere" "$repo/.claude/autodrive.lock"

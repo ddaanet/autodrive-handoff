@@ -6,7 +6,8 @@
 # nothing unless it acts, and then one line of JSON:
 #
 # - A `clear` or `compact` is cancelled: an `armed` file this session owns, or a
-#   `pending` one, with at least one line to run. The sentinel is recorded in
+#   `pending` one, whose kind a SessionStart confirms
+#   (`handoff_drive_has_source`). The sentinel is recorded in
 #   .claude/autodrive.swept and removed, and the line is {kind, message, note}:
 #   `message` the user's toast, `note` the agent's directive.
 # - An `armed` `rename` this session owns is not cancelled but taken, as

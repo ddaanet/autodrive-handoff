@@ -105,7 +105,7 @@ async function drive($: any, w: Window) {
   }
   $.ui.toast(plan.message)
   // A Stop with no session id: drive-take.sh took nothing and said so. Recorded
-  // like a rejected line, so the next prompt reports it rather than it passing
+  // like a rejected command, so the next prompt reports it rather than it passing
   // as a toast alone.
   if (session === '' && plan.failFile) {
     await recordFailure($, plan.failFile, plan.message)

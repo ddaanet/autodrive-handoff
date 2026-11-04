@@ -204,7 +204,7 @@ test('continue true with the prepare kind, or no kind, submits nothing', async (
 
 // --- failure ---------------------------------------------------------------
 
-test('first rejected line ends the sequence and writes failFile', async ($, on) => {
+test('first rejected command ends the sequence and writes failFile', async ($, on) => {
   const r = rig(on, {
     sentinelExists: true,
     stdout: fixture('armed-clear', CWD),
@@ -242,7 +242,7 @@ test('a rejected continuation prompt is recorded the same way', async ($, on) =>
 })
 
 // A Stop with no session id drives nothing (drive-take.sh cannot tell whose
-// file it is), but says so on the rejected-line path: failFile written, toast.
+// file it is), but says so on the rejected-command path: failFile written, toast.
 test('a Stop with no session id writes failFile and toasts', async ($, on) => {
   const r = rig(on, { sentinelExists: true, stdout: fixture('no-session', CWD) })
   await $.classic.Stop({ cwd: CWD, session_id: undefined })

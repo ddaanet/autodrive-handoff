@@ -33,6 +33,13 @@ transition and submitting a prompt into what it opens are separate decisions.
 transition is expected, and that expectation is what `SessionStart(compact)`
 gates the todo's re-injection on.
 
+The grammar refuses the old forms that carry command lines under the kind. It
+cannot refuse the old marker for `compact: false`, two lines of `<state>` and
+`compact`, which reads as a driven bare compact. Such a file survives as
+`armed` only if the mod did not take it at the turn end; the prompt-time sweep
+then discards it and offers its owner `/compact` to type. Left `pending`,
+`load-compact.sh` consumes it as it would any compact.
+
 `/restart` is not a kind: it is a Claude Code built-in, and a relaunch with
 `--resume` carries the conversation over whole, so nothing here has a frame or
 a continuation to add to it. `/autodrive-handoff:autoname` stays a skill; its

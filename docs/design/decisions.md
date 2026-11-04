@@ -197,7 +197,7 @@ actors and not the arrival of a prompt: a prompt after the arming turn's
 **Observability is not gated on the happy path.** A clean run says nothing
 about whether a dirty one would be noticed, and the failing run is exactly
 the one nobody is watching. The drive runs after the turn that armed it, so a
-rejected line has no one to tell; every non-delivery the mod observes itself
+rejected command has no one to tell; every non-delivery the mod observes itself
 writes a reason to a file, and the next prompt reports it. Nothing is inferred
 from state that is legitimately present (a file in state `pending` during the
 whole window between the take and the transition): a false-positive-free

@@ -155,7 +155,7 @@ if [[ "$drive_state" == "armed" && -n "$session_id" && "$drive_owner" != "$sessi
     drive_state="foreign"
 fi
 
-# The mod writes the record only on what it observed itself, a rejected line or
+# The mod writes the record only on what it observed itself, a rejected command or
 # a turn end with no session id, and never a link: a link there, dangling or
 # not, is no record the mod wrote, and following it would
 # quote another file's first line onto both channels. It is removed unread and
@@ -175,7 +175,7 @@ fi
 if [[ "$failed_status" == link ]]; then
     rm -f "$failed"
     msgs+=("a symbolic link at $HANDOFF_REL_DRIVE_FAILED was removed unread")
-    notes+=("A symbolic link sat where the handoff drive mod records a rejected line ($HANDOFF_REL_DRIVE_FAILED). The mod never writes one, so it was removed without reading what it points at; it says nothing about whether a transition ran.")
+    notes+=("A symbolic link sat where the handoff drive mod records a rejected command ($HANDOFF_REL_DRIVE_FAILED). The mod never writes one, so it was removed without reading what it points at; it says nothing about whether a transition ran.")
 elif [[ "$failed_status" == ok && "$drive_state" == "locked" ]]; then
     # Its report and the clearing of a stranded `pending` go together, and the
     # sentinel was not judged: the record stays for the next prompt.
