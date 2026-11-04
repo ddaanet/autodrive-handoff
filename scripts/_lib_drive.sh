@@ -162,9 +162,6 @@ handoff_drive_read() {
         rename | clear | compact | prepare) DRIVE_KIND="${lines[1]}" ;;
         "clear continue" | "compact continue")
             DRIVE_KIND="${lines[1]% *}"; DRIVE_CONTINUE=1 ;;
-        "rename continue" | "prepare continue")
-            DRIVE_ERR="kind \`${lines[1]% *}\` takes no \`continue\`"
-            return 1 ;;
         *)
             DRIVE_ERR="line 2 must be the transition kind — rename, clear, compact or prepare, then \`continue\` on clear or compact — not \`${lines[1]}\`"
             return 1 ;;
@@ -328,18 +325,26 @@ handoff_record_sweep() {
     handoff_replace "$tmp_record" "$swept" 2>/dev/null || rm -f "$tmp_record" || true
 }
 
-# handoff_drive_plan <kind> <failFile>: print the plan of a taken transition
+# _handoff_drive_plan_json <kind-json> <arg> <continue-json> <failFile> <message>:
+# print a plan as one line of JSON {kind, arg, continue, failFile, message}, in
+# that order. The one place the plan's keys are written: `kind` and `continue`
+# arrive as JSON (`null`, `"prepare"`, `true`), the rest as strings.
+_handoff_drive_plan_json() {
+    jq -nc --argjson k "$1" --arg a "$2" --argjson c "$3" --arg f "$4" --arg m "$5" \
+        '{kind: $k, arg: $a, "continue": $c, failFile: $f, message: $m}'
+}
+
+# handoff_drive_plan <failFile>: print the plan of a taken transition
 # (drive-take.sh's, and drive-cancel.sh's for a rename) as one line of JSON
-# {kind, arg, continue, failFile, message}: data only, with `arg` and `continue`
-# read from DRIVE_ARG and DRIVE_CONTINUE (`continue` a JSON boolean). The mod
-# maps `kind` to its own commands; the message names the first line it will run,
-# rendered by handoff_drive_lines for display.
+# {kind, arg, continue, failFile, message}: data only, with `kind`, `arg` and
+# `continue` read from DRIVE_KIND, DRIVE_ARG and DRIVE_CONTINUE
+# (`continue` a JSON boolean). The mod maps `kind` to its own commands; the
+# message names the first line it will run, rendered by handoff_drive_lines for
+# display.
 handoff_drive_plan() {
-    local kind="$1" fail_file="$2" cont=false
+    local fail_file="$1" cont=false
     handoff_drive_lines
     [ "$DRIVE_CONTINUE" -eq 1 ] && cont=true
-    jq -nc --arg k "$kind" --arg a "$DRIVE_ARG" --argjson c "$cont" --arg f "$fail_file" \
-        --arg l "${DRIVE_LINES[0]-}" \
-        '{kind: $k, arg: $a, "continue": $c, failFile: $f,
-          message: ("handoff: will run " + $l + " once the turn ends.")}'
+    _handoff_drive_plan_json "\"$DRIVE_KIND\"" "$DRIVE_ARG" "$cont" "$fail_file" \
+        "handoff: will run ${DRIVE_LINES[0]-} once the turn ends."
 }

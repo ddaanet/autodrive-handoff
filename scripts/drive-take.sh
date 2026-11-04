@@ -24,9 +24,8 @@ root="$HANDOFF_ROOT"
 # Nothing can be taken without the root; the plan carries the message alone, as
 # for a malformed file, so the mod toasts it instead of the turn ending silent.
 if [[ "$HANDOFF_ROOT_BRANCH" == "unresolved" ]]; then
-    jq -nc --arg m "$HANDOFF_UNRESOLVED_MSG" \
-        '{kind: null, arg: "", "continue": false, failFile: "",
-          message: ("handoff: " + $m + "; no transition taken.")}'
+    _handoff_drive_plan_json null "" false "" \
+        "handoff: $HANDOFF_UNRESOLVED_MSG; no transition taken."
     exit 0
 fi
 session_id="${2:-}"
@@ -53,9 +52,8 @@ fail_file="$root/$HANDOFF_REL_DRIVE_FAILED"
 lock_rc=0
 handoff_lock_take "$root/$HANDOFF_REL_DRIVE_LOCK" || lock_rc=$?
 if (( lock_rc != 0 )); then
-    jq -nc --arg m "$HANDOFF_LOCK_MSG" \
-        '{kind: null, arg: "", "continue": false, failFile: "",
-          message: ("handoff: " + $m + "; " + ".claude/autodrive left untouched, nothing taken.")}'
+    _handoff_drive_plan_json null "" false "" \
+        "handoff: $HANDOFF_LOCK_MSG; .claude/autodrive left untouched, nothing taken."
     exit 0
 fi
 [[ -L "$drive" || -f "$drive" ]] || exit 0
@@ -66,18 +64,16 @@ if (( read_rc == 2 )); then
     # The reader could not run: the file may be a valid transition, so it is
     # left where it is and the plan carries the message alone, as for an
     # unresolved root. A later turn end, with a working reader, takes it.
-    jq -nc --arg e "$DRIVE_ERR" \
-        '{kind: null, arg: "", "continue": false, failFile: "",
-          message: ("handoff: autodrive not read — " + $e + "; left in place, nothing taken.")}'
+    _handoff_drive_plan_json null "" false "" \
+        "handoff: autodrive not read — $DRIVE_ERR; left in place, nothing taken."
     exit 0
 fi
 if (( read_rc != 0 )); then
     # A file no writer of this version composed: consume it so the complaint
     # does not repeat at every turn.
     rm -f "$drive"
-    jq -nc --arg e "$DRIVE_ERR" --arg f "$fail_file" \
-        '{kind: null, arg: "", "continue": false, failFile: $f,
-          message: ("handoff: autodrive malformed — " + $e + "; discarded, transition not armed.")}'
+    _handoff_drive_plan_json null "" false "$fail_file" \
+        "handoff: autodrive malformed — $DRIVE_ERR; discarded, transition not armed."
     exit 0
 fi
 
@@ -92,9 +88,8 @@ fi
 # mod writes, so the next prompt reports it and sweeps the file.
 [[ "$DRIVE_STATE" == "armed" ]] || exit 0
 if [[ -z "$session_id" ]]; then
-    jq -nc --arg f "$fail_file" \
-        '{kind: null, arg: "", "continue": false, failFile: $f,
-          message: "handoff: the turn ended with no session id, so the armed transition was not taken; the next prompt reports it."}'
+    _handoff_drive_plan_json null "" false "$fail_file" \
+        "handoff: the turn ended with no session id, so the armed transition was not taken; the next prompt reports it."
     exit 0
 fi
 [[ "$DRIVE_OWNER" == "$session_id" ]] || exit 0
@@ -109,10 +104,9 @@ fi
 # FR-G: nothing to run. The pending state alone is the loader's signal that the
 # frame belongs in this compaction.
 if [[ "$DRIVE_KIND" == "prepare" ]]; then
-    jq -nc --arg f "$fail_file" \
-        '{kind: "prepare", arg: "", "continue": false, failFile: $f,
-          message: "handoff: prepared for compact; nothing to run, frame will be re-injected."}'
+    _handoff_drive_plan_json '"prepare"' "" false "$fail_file" \
+        "handoff: prepared for compact; nothing to run, frame will be re-injected."
     exit 0
 fi
 
-handoff_drive_plan "$DRIVE_KIND" "$fail_file"
+handoff_drive_plan "$fail_file"

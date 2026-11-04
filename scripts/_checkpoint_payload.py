@@ -154,14 +154,14 @@ def _json_type(value: object) -> str:
 def build_transition(payload: JSONDict, skill: str, title: str) -> Transition:
     """Return the transition this call types, per the skill's own rules."""
     if skill == "autoname":
-        return Transition("rename", title, typed=False)
+        return Transition("rename", title)
     if skill == "handoff":
         return _build_handoff_transition(payload, title)
     return _build_precompact_transition(payload)
 
 
 class Transition(NamedTuple):
-    """The sentinel's kind, its argument, and whether it is typed.
+    """The sentinel's kind and its argument; `typed` follows from the kind.
 
     `arg` is line 3: the title under rename and clear, the focus under compact
     ("" for none), "" under prepare. The commands the kind runs are the mod's.
@@ -169,7 +169,11 @@ class Transition(NamedTuple):
 
     kind: str
     arg: str
-    typed: bool
+
+    @property
+    def typed(self) -> bool:
+        """Whether the transition is carried out, as clear and compact are."""
+        return self.kind in ("clear", "compact")
 
 
 def _build_handoff_transition(payload: JSONDict, title: str) -> Transition:
@@ -180,8 +184,8 @@ def _build_handoff_transition(payload: JSONDict, title: str) -> Transition:
     if not isinstance(payload["clear"], bool):
         lib.err("clear", "must be true or false")
     if payload["clear"] is True:
-        return Transition("clear", title, typed=True)
-    return Transition("rename", title, typed=False)
+        return Transition("clear", title)
+    return Transition("rename", title)
 
 
 def _build_precompact_transition(payload: JSONDict) -> Transition:
@@ -193,11 +197,11 @@ def _build_precompact_transition(payload: JSONDict) -> Transition:
     ctype = _json_type(compact_val)
     if ctype == "boolean":
         if compact_val is True:
-            return Transition("compact", "", typed=True)
-        return Transition("prepare", "", typed=False)
+            return Transition("compact", "")
+        return Transition("prepare", "")
     if ctype == "string":
         require_one_line("compact", compact_val)
-        return Transition("compact", compact_val, typed=True)
+        return Transition("compact", compact_val)
     lib.err("compact", "must be true, false, or a focus directive string")
     raise AssertionError("unreachable")  # lib.err() always raises
 

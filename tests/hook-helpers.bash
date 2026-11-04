@@ -188,10 +188,10 @@ seed_armed_kind() {
             LINES="/rename Queued Title" ;;
         clear)
             seed_drive "$tmp" "clear continue" "Queued Title"
-            LINES=$'/rename Queued Title\n/clear\n'"$(continuation_line)" ;;
+            LINES=$'/rename Queued Title\n/clear\n'"$HANDOFF_CONTINUATION" ;;
         compact)
             seed_drive "$tmp" "compact continue" "keep the parser work"
-            LINES=$'/compact keep the parser work\n'"$(continuation_line)" ;;
+            LINES=$'/compact keep the parser work\n'"$HANDOFF_CONTINUATION" ;;
         prepare)
             seed_drive "$tmp" prepare
             LINES="" ;;

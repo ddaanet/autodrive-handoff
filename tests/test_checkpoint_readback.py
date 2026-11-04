@@ -236,7 +236,7 @@ def test_an_unexpected_read_back_failure_removes_the_sentinel(
         raise RuntimeError("boom")
 
     monkeypatch.setattr(checkpoint, "_read_back_drive", boom)
-    transition = validation.Transition(kind="rename", arg="X", typed=False)
+    transition = validation.Transition(kind="rename", arg="X")
     with pytest.raises(RuntimeError):
         checkpoint.compose_sentinel(
             repo, transition, continuation=False, owner="sess-x", held=False

@@ -170,14 +170,6 @@ def test_continue_missing_errors_at_either_boundary(tmp_path: Path) -> None:
     assert "continue" in result.stderr
 
 
-def test_the_continuation_is_one_line_the_mod_submits_as_a_prompt() -> None:
-    text = continuation()
-    assert text
-    assert text.strip() == text
-    assert len(text.splitlines()) == 1
-    assert not text.startswith("/")
-
-
 @pytest.mark.parametrize("boundary", ["clear", "compact", "compact-focus"])
 def test_the_sentinel_carries_the_flag_and_never_the_continuation_text(
     tmp_path: Path, boundary: str

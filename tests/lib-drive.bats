@@ -256,11 +256,11 @@ read_drive() {
 @test "handoff_drive_read (continue where the kind takes none: rename, prepare): rejected" {
     run read_drive "armed sess-42" "rename continue" "A Title"
     [ "$status" -ne 0 ]
-    [[ "$output" == *"takes no \`continue\`"* ]]
+    [[ "$output" == *"then \`continue\` on clear or compact — not \`rename continue\`"* ]]
 
     run read_drive "armed sess-42" "prepare continue"
     [ "$status" -ne 0 ]
-    [[ "$output" == *"takes no \`continue\`"* ]]
+    [[ "$output" == *"then \`continue\` on clear or compact — not \`prepare continue\`"* ]]
 }
 
 @test "handoff_drive_read (an unknown second token or spacing on line 2): rejected" {
@@ -373,14 +373,14 @@ render_lines() {
 
 @test "handoff_drive_plan (a clear: data only, key order kind, arg, continue, failFile, message)" {
     read_drive "armed sess-42" "clear continue" "A Title"
-    run handoff_drive_plan clear "/x/.claude/autodrive.failed"
+    run handoff_drive_plan "/x/.claude/autodrive.failed"
     [ "$status" -eq 0 ]
     [ "$output" = '{"kind":"clear","arg":"A Title","continue":true,"failFile":"/x/.claude/autodrive.failed","message":"handoff: will run /rename A Title once the turn ends."}' ]
 }
 
 @test "handoff_drive_plan (a rename: continue is a JSON false)" {
     read_drive "armed sess-42" "rename" "A Title"
-    run handoff_drive_plan rename "/x/f"
+    run handoff_drive_plan "/x/f"
     [ "$status" -eq 0 ]
     [ "$(jq -c '[.continue, .arg]' <<<"$output")" = '[false,"A Title"]' ]
 }

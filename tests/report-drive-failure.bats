@@ -294,7 +294,7 @@ STUB
 @test "report-drive-failure (stale armed autodrive: names the mod and prints the lines to type)" {
     # shellcheck disable=SC2016  # the literal $HOME is the odd content under test
     seed_drive "$tmp" "clear continue" 'Fix "the  $HOME" bug & more'
-    continuation="$(continuation_line)"
+    continuation="$HANDOFF_CONTINUATION"
     run_report_failure "$tmp"
     [ "$status" -eq 0 ]
     echo "$output" | jq -e '.hookSpecificOutput.additionalContext | test("drive mod")' >/dev/null

@@ -76,5 +76,5 @@ if handoff_drive_has_source "$DRIVE_KIND"; then
         '{kind: $k, message: ("handoff: " + $m + "."), note: $n}'
 else
     rm -f "$drive"
-    handoff_drive_plan rename "$root/$HANDOFF_REL_DRIVE_FAILED"
+    handoff_drive_plan "$root/$HANDOFF_REL_DRIVE_FAILED"
 fi
