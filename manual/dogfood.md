@@ -101,14 +101,19 @@ live then depends on what changed:
 The sync copies everything git does not ignore, tracked or not, minus every
 `.git` and `dist/plugin/` itself, and deletes from the copy what left the
 source. What an initialised submodule ignores through its own rules stays out
-too. It refuses to run without `.claude-plugin/plugin.json` at the root, when
-git does not ignore `dist/plugin/`, and when an ignored path's name holds `*`,
-`?`, `[`, `]` or a backslash, naming that path, and without `rsync` on PATH;
-each refusal leaves `dist/` untouched. A git error listing the root or an
-initialised submodule stops the sync with git's own message, `dist/` untouched.
-rsync's own errors are shown as they come, and a failure exits non-zero. A file
-vanishing mid-sync, or two syncs colliding, fails the same way; a re-run repairs
-it.
+too. With a [`dist.include`](dist-branch.md) at the root, it copies only the
+paths that allowlist names, still minus ignored paths, so a file it does not
+list never reaches the copy. It refuses to run without
+`.claude-plugin/plugin.json` at the root, when git does not ignore
+`dist/plugin/`, and when an ignored path's name holds `*`, `?`, `[`, `]` or a
+backslash, naming that path, and without `rsync` on PATH. It also refuses when
+`dist.sh paths` fails, as it does on a `dist.include` it rejects, and when a
+`dist.include` is present with no `dist.sh` beside `dogfood.sh`, since copying
+without the list would ship what it leaves out. Each refusal leaves `dist/`
+untouched. A git error listing the root or an initialised submodule stops the
+sync with git's own message, `dist/` untouched. rsync's own errors are shown as
+they come, and a failure exits non-zero. A file vanishing mid-sync, or two syncs
+colliding, fails the same way; a re-run repairs it.
 
 Run `just dogfood` from your own shell, not through an agent's Bash tool,
 whether or not your plugin ships a `.mcp.json`. The command sandbox masks a set

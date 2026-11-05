@@ -41,7 +41,7 @@ a repository the size of gitlore (about 0.35 s, measured on Linux under load).
 See
 [Gate sentinels](gates.md).
 
-It needs `bash`, `git`, `xargs` and a GNU or BSD `stat`.
+It needs `bash`, `git`, `xargs`, `mktemp` and a GNU or BSD `stat`.
 
 ## What it reads
 
@@ -61,6 +61,14 @@ The skips apply in this order; a file stops at the first that takes it:
 6. **Built-ins**: `plugin-dev/` and a root `plans/`, each as a whole leading
    path component (`plans-old/` is not skipped, nor is `docs/plans/`), and a
    file named `uv.lock` or `package-lock.json` at any depth.
+7. **Generated files**: those whose `linguist-generated` attribute is `set` or
+   `true` (`path linguist-generated`, or `=true`). `-linguist-generated`,
+   `=false`, `!linguist-generated` and any other value leave the file counted.
+   Only a file no built-in took is looked up, and a generated file is counted
+   with the built-ins in the sign-off. Every source `git check-attr` reads
+   counts, and only a committed `.gitattributes` is the same in every clone: set
+   the attribute there, since a rule anywhere else can pass a file in one clone
+   and fail it in another.
 
 What remains is counted. `size.exempt`, below, does not skip a file: it forgives
 an overage after the count.
@@ -98,22 +106,24 @@ fails the run even when no file is over a cap:
 | `no reason after the hash` | no ` #`, or nothing after it |
 | `matches no listed file` | the path is not a counted file or a directory holding one: a typo, an ignored, binary or deleted file, a skipped symlink |
 | `a built-in is always skipped` | the path is `plugin-dev`, `plans`, or inside either, or a lockfile basename |
+| `a generated file is always skipped` | the path is a file marked `linguist-generated`, which is skipped before the count |
 | `a file entry must be over its cap` | the named file is at or under its cap (a `SKILL.md` is held to the hub cap) |
 | `already listed on an earlier line` | the same path, after trimming a trailing `/` |
 
-`size.exempt` differs from `refs.exempt` (see
-[Reference check](../README.md#reference-check)) in two ways. Its entries
-**add** to the built-ins, never replace them; `refs.exempt` replaces its
-defaults, and an empty one exempts nothing. And its entries are held to being
-still needed, where `refs.exempt` is frozen history that is never re-examined.
-`size.exempt` is itself a file the check counts.
+`size.exempt` and `refs.exempt` (see
+[Reference check](../README.md#reference-check)) are read the same way and skip
+`plugin-dev/` and a root `plans/` the same way. They differ in two ways. Its
+entries **add** to the built-ins, never replace them; `refs.exempt` replaces its
+one default, `docs/changelog`, and an empty one exempts nothing. And its entries
+are held to being still needed, where `refs.exempt` is frozen history that is
+never re-examined. `size.exempt` is itself a file the check counts.
 
 ## The report
 
 A pass prints one line on stdout and exits 0:
 
 ```text
-check-size: cap 20000 bytes: 74 files; hub cap 10000: 2 SKILL.md; size.exempt: 1 entries, each with a reason and still needed; skipped: 31 plans/plugin-dev/lockfiles, 3 binary, 0 symlinks, 0 unreadable
+check-size: cap 20000 bytes: 74 files; hub cap 10000: 2 SKILL.md; size.exempt: 1 entries, each with a reason and still needed; skipped: 31 plans/plugin-dev/lockfiles/generated, 3 binary, 0 symlinks, 0 unreadable
 ```
 
 The counts are the files compared against a cap, the `SKILL.md` among them, the
@@ -126,8 +136,10 @@ oversized-file: skills/review/SKILL.md: 10412 bytes > 10000 (SKILL.md hub)
 hint: split each file along a seam; do not shave prose or docstrings to fit
 ```
 
-Running outside a git work tree, an unreadable `size.exempt` and an empty
-listing each end the run with one line, `check-size: <reason>`.
+A run that `check-size` detects it cannot complete ends with a
+`check-size: <reason>` line on stderr, after whatever the failing tool printed,
+and exit 1. An unreadable file is not such a failure: it is skipped, as step 4
+says.
 
 ## When it fails
 

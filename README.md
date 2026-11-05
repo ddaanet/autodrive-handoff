@@ -9,9 +9,10 @@ dotfiles).
 
 - **`release.just`** — the recipes imported into the consumer's `justfile`:
   `release`, `resume-release`, `check-version`, `check-refs`, `check-size`,
-  `update-plugin-dev` and `dogfood`. All are one-line wrappers: `release` and
-  `resume-release` around `release.sh`, `check-refs` around `check-refs.sh`,
-  `update-plugin-dev` around `update.sh`, `dogfood` around `dogfood.sh sync`.
+  `check-frontmatter`, `update-plugin-dev` and `dogfood`. All are one-line
+  wrappers: `release` and `resume-release` around `release.sh`, `check-refs`
+  around `check-refs.sh`, `update-plugin-dev` around `update.sh`, `dogfood`
+  around `dogfood.sh sync`.
 - **`update.sh`** — pulls a newer toolkit version into the consumer. With no ref
   it resolves the newest `dist-` tag from the remote. After the pull it prints
   the migration notes for every version crossed — guidance to apply by hand; an
@@ -32,8 +33,9 @@ dotfiles).
 - **`check-refs.sh`** — refuses a Markdown link whose target is missing, and,
   with a `dist.include`, one from a shipped file to an unshipped one. Run from
   `precommit`; the dist build runs it again on the tree it builds. Its parser
-  lives in `check-refs-parse.sh` beside it, which it sources. See
-  [Reference check](#reference-check).
+  lives in `check-refs-parse.sh` beside it, which it sources, as it does
+  `exempt-list.sh`, the reader of its exempt list that `check-size.sh` shares.
+  See [Reference check](#reference-check).
 - **`check-version.sh`** — compares `plugin.json`'s version against the plugin's
   `marketplace.json` entry. Exposed as `just check-version` and run as a
   `release` pre-flight, so a release refuses to start on top of a previous one
@@ -60,6 +62,10 @@ dotfiles).
   are unchanged. See [Gate sentinels](#gate-sentinels).
 - **`check-size.sh`** — opt-in, wired as `precommit: check-refs check-size`.
   Refuses a file over the byte cap. See [Size check](#size-check).
+- **`check-frontmatter.sh`** — opt-in, wired as
+  `precommit: check-refs check-size check-frontmatter`. Refuses a skill, agent
+  or command whose frontmatter is missing, not YAML, or breaks the toolkit's
+  field rules. See [Frontmatter check](#frontmatter-check).
 - **`run-bats.sh`** — opt-in quiet runner for `bats`: failures and a pass count
   instead of the TAP stream.
 - **`install.sh`** — one-shot install script: vendors the toolkit (resolving the
@@ -225,18 +231,19 @@ ignored target is refused, a target above the repository root too, and the match
 is exact-case even on a case-insensitive disk. Links with a scheme, pure
 `#anchors`, root `/paths`, fenced code, inline code spans and HTML comments are
 not checked, and neither are backticked paths. It reads every Markdown file on
-disk that git does not ignore, tracked or not, apart from `plugin-dev/` and
-submodules. Wire it into the commit gate as a dependency, so it runs on every
-call, ahead of any gate guard:
+disk that git does not ignore, tracked or not, apart from `plugin-dev/`, a root
+`plans/` and submodules. Wire it into the commit gate as a dependency, so it
+runs on every call, ahead of any gate guard:
 
 ```just
 precommit: check-refs
 ```
 
-Files under `docs/changelog/` and `plans/` are exempt, since a dated record's
-link to a file deleted later is still true. A `refs.exempt` at the root, one
-path per line with `#` comments, replaces that list; an empty one exempts
-nothing.
+Files under `docs/changelog/` are exempt, since a dated record's link to a file
+deleted later is still true. A `refs.exempt` at the root, one path per line with
+`#` comments and an optional ` # reason` after a path, replaces that default; an
+empty one exempts nothing. `plans/` is never read, like `plugin-dev/`, whatever
+`refs.exempt` says.
 
 With a `dist.include`, a link from a shipped file must also reach a shipped file
 that exists, exempt or not: the `dist` tree holds only the listed paths, and
@@ -266,6 +273,15 @@ Optional. `just check-size` refuses a file over 20000 bytes, or 10000 for a
 `precommit: check-refs check-size`; it runs uncached. The metric, what is
 skipped, the `size.exempt` format and the report are in
 [manual/size-check.md](manual/size-check.md).
+
+## Frontmatter check
+
+Optional. `just check-frontmatter` refuses a skill, agent or command whose
+frontmatter is missing, not YAML, or breaks the toolkit's field rules. Wire it
+as `precommit: check-refs check-size check-frontmatter`; it runs uncached and
+needs PyYAML in the dev group of `pyproject.toml`. What is read, each refusal,
+what is not refused and the setup are in
+[manual/frontmatter-check.md](manual/frontmatter-check.md).
 
 ## Dogfooding
 

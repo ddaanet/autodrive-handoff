@@ -198,7 +198,7 @@ pretool_cmd='bash "${CLAUDE_PROJECT_DIR}/plugin-dev/dogfood.sh" pre-tool'
 session_cmd='bash "${CLAUDE_PROJECT_DIR}/plugin-dev/dogfood.sh" session-start'
 
 mkdir -p .claude
-tmp="$(mktemp)"
+tmp="$(mktemp "${TMPDIR:-/tmp}/install.XXXXXX")"
 { if [ -f "$settings" ]; then cat "$settings"; else echo '{}'; fi \
     | add_hook PreToolUse 'Write|Edit' "$hook_cmd" "$legacy_hook_cmd" \
     | add_hook PreToolUse 'Write|Edit|NotebookEdit' "$pretool_cmd" \

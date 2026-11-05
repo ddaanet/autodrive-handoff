@@ -64,7 +64,7 @@ bump_commit_tag() {
     fi
     local prev
     prev=$(jq -r .version "$manifest")
-    tmp=$(mktemp)
+    tmp=$(mktemp "${TMPDIR:-/tmp}/release-publish.XXXXXX")
     jq --arg v "$V" '.version = $v' "$manifest" > "$tmp"
     mv "$tmp" "$manifest"
     git add "$manifest"
