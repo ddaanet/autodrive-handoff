@@ -3,8 +3,9 @@
 Each is NUL-terminated: where the write lands, where this project's sentinel
 lands, and the given path normalised without following links.
 
-A file rather than an inline `python3 -c`: the plugin directory's validator
-refuses a hook script holding that program (docs/design/the-write-path.md).
+Not an inline `python3 -c` because, with it in `write-guard.sh`, the plugin
+directory's portal refused the plugin: docs/design/the-write-path.md. Inline
+programs in other scripts passed that portal and need not move.
 """
 
 import os
