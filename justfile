@@ -9,7 +9,7 @@ export PLUGIN_DEV_GATE_TOOLS := "bats --version\nshellcheck --version\njq --vers
 # autodrive-handoff plugin — dev recipes
 #
 # `precommit` is the gate that runs before every commit: two cached gates, then
-# two uncached ones. The cached pair is split because the cheap plugin checks
+# three uncached ones. The cached pair is split because the cheap plugin checks
 # read `skills/` and `.claude-plugin/`,
 # which the slow code checks never do: a skill edit must not pay for the
 # bats and pytest runs. `check-plugin` lints the manifests + settings, validates
@@ -18,10 +18,11 @@ export PLUGIN_DEV_GATE_TOOLS := "bats --version\nshellcheck --version\njq --vers
 # through; its version is locked, so gating it can't break the build
 # spontaneously) and runs the hook + pytest suites. Each skips itself while the
 # files it reads are unchanged; `PLUGIN_DEV_GATE_FORCE=1 just precommit` runs
-# them regardless, as before a release. `check-refs` (Markdown links) and
+# them regardless, as before a release. `check-refs` (Markdown links),
 # `check-size` (the byte caps, with `size.exempt`) and `check-frontmatter` (each
 # skill's frontmatter is YAML and obeys the field rules) come from the toolkit
-# and run on every call, since they read files no cached gate's inputs cover.
+# and run on every call; `check-refs` and `check-size` because they read files
+# no cached gate's inputs cover.
 #
 # `prerelease` is the gate the imported `release` recipe depends on.
 # Here it is exactly `precommit`; widen it if the release ever needs

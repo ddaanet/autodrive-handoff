@@ -1,5 +1,5 @@
 ## Current task
 
-Getting the plugin through the directory portal. The portal passed a probe of the `dist` tree carrying the hook-script fixes, with 3 warnings, 11 policy holds and no blocking issue. Those fixes now sit on `dev`, and my human partner said no release just yet, so do not start one.
+Getting the plugin through the directory portal. `dev` carries the hook-script fixes a portal probe passed, with no blocking issue, and the toolkit 0.15.0 frontmatter check, whose adoption single-quoted the `handoff` and `precompact` descriptions. Each of those slices had its medium review and its fixes. My human partner has not named the release yet: do not start one.
 
-Next action: run a delegated `/code-review medium` of the fix commit, triage its findings, and have the reviewer fix the high and medium ones in a separate commit. Doc drift is fixed without a re-review. The report and the bisection table are in `plans/2026-10-15-directory-submission/portal-validation-2026-11-05.md`, and the portal facts are in the `directory-portal-validation` memory. Then stop and report: the next step is the release, when my human partner names it.
+Next action: when the release is named, run the prerelease pass over `dev` against `main` (`/simplify`, then the release review and its one fix round), fast-forward `main`, run `/ddaa:preflight`, and release. A brief about sandbox masks swept into a memory commit was dropped in gitlore's `inbox/`; it is that repo's now.
