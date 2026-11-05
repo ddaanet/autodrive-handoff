@@ -78,6 +78,7 @@ One line each, with the node under `docs/design/` that holds its behaviour.
 - `scripts/_checkpoint_lib.py` — `err`, `is_empty_body`, the directive texts
   → the-write-path.md, the-checkpoint-directive.md
 - `scripts/_drive_lock.py` — the sentinel's advisory lock → sentinel-lock.md
+- `scripts/_guard_paths.py` — the paths `write-guard.sh` judges → the-write-path.md
 - `scripts/worktree_root.py` — the session-root resolver → scoping.md
 - `scripts/_lib.sh` — the one sourced helper: constants, root resolver, lock,
   owner liveness; sources the next three → scoping.md,

@@ -245,6 +245,14 @@ through a symlink called something else, or a case variant on a
 case-insensitive filesystem. Judging any one of the three paths alone lets
 one of those spellings through, and each is a row in `tests/write-guard.bats`.
 
+The three paths come from `scripts/_guard_paths.py`, a file rather than an
+inline `python3 -c`, and the name's trailing whitespace is trimmed in two steps
+rather than by one nested expansion. Both shapes are there for the plugin
+directory's validator: with either one in `write-guard.sh`, its portal refused
+the plugin, naming a launcher or a command path it could not follow. Only the
+portal runs that check, so a change to a hook script's shape is validated there
+on a pushed ref.
+
 ## The Python half
 
 `checkpoint.py` and `_checkpoint_lib.py` are a 2026-08-10 Python port of what

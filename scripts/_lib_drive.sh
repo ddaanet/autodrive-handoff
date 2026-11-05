@@ -7,8 +7,8 @@
 #   source "$(dirname "$0")/_lib.sh"
 
 # The fixed prompt the mod submits into what a transition opens when line 2
-# carries `continue`. The mod holds its own literal copy
-# (hooks/handoff.ts); test_the_mods_continuation_literal_is_the_libraries_constant
+# carries `continue`. The mod holds its own literal copy;
+# test_the_mods_continuation_literal_is_the_libraries_constant
 # (tests/test_mod_fixtures.py) pins the two together.
 # shellcheck disable=SC2034  # read by the sourcing scripts
 HANDOFF_CONTINUATION='Continue where the previous context stopped.'
@@ -58,7 +58,7 @@ _handoff_drive_nonblank() {
 #                                     false`), a transition is expected
 #
 # The file carries data only: a kind, a flag and one free-text argument. The
-# commands and the one prompt are literals in the mod (hooks/handoff.ts), so no
+# commands and the one prompt are literals in the mod, so no
 # text on disk is ever a command name or a prompt. Running the transition and
 # submitting a prompt into what it opens are separate decisions, hence the
 # `continue` flag on the two driven kinds. The state is reported, never

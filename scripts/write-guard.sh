@@ -40,11 +40,7 @@ if [[ "$HANDOFF_ROOT_BRANCH" == "unresolved" ]]; then
 fi
 [[ -n "$cwd" ]] || exit 0
 { IFS= read -r -d '' target; IFS= read -r -d '' expected; IFS= read -r -d '' lexical; } < <(
-    python3 -I -c 'import os, sys
-given, sentinel = sys.argv[1:]
-for p in (os.path.realpath(given), os.path.realpath(sentinel),
-          os.path.normpath(os.path.abspath(given))):
-    sys.stdout.write(p + "\0")' "$file_path" "$cwd/$HANDOFF_REL_DRIVE"
+    python3 -I "$HANDOFF_LIB_DIR/_guard_paths.py" "$file_path" "$cwd/$HANDOFF_REL_DRIVE"
 ) || true
 
 if [[ -n "$target" && "$target" == "$expected" ]]; then
@@ -57,7 +53,8 @@ fi
 # project's. Trailing whitespace is dropped from the name first, so a variant a
 # tool might trim is denied rather than guessed at.
 for name in "${target##*/}" "${lexical##*/}"; do
-    name="${name%"${name##*[![:space:]]}"}"
+    trailing="${name##*[![:space:]]}"
+    name="${name%"$trailing"}"
     if [[ "$name" == "autodrive" ]]; then
         handoff_deny \
             "write blocked: autodrive outside this project's .claude/. resolved: $target; expected: $expected." \

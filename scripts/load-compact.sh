@@ -107,7 +107,7 @@ if (( lock_rc != 0 )); then
     context="${context:+$context$'\n\n'}$lock_ctx"
     msg+="; autodrive left in place — $HANDOFF_LOCK_MSG"
 fi
-msg+="."
+msg="$msg."
 
 jq -nc --arg f "$context" --arg m "$msg" \
     'if $f == "" then {}

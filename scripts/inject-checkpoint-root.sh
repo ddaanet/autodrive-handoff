@@ -24,9 +24,8 @@
 # A marker that cannot be written changes nothing here.
 set -euo pipefail
 
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source-path=SCRIPTDIR source=_lib.sh
-. "$DIR/_lib.sh"
+source "$(dirname "$0")/_lib.sh"
 
 payload="$(cat)"
 # One parse for all four fields, each NUL-terminated and read whole: a cwd or an
