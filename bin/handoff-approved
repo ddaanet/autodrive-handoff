@@ -27,8 +27,8 @@ err() {
 }
 
 # The same channel the checkpoint reads its root from, and the same refusal:
-# this runs in the agent's Bash, where CLAUDE_PROJECT_DIR is unset and $PWD is
-# wherever the session cwd has drifted to. scripts/inject-checkpoint-root.sh
+# this runs in the agent's Bash, where CLAUDE_PROJECT_DIR is unset and the
+# working directory is wherever the session cwd has drifted to. scripts/inject-checkpoint-root.sh
 # (PreToolUse(Bash)) resolves it fresh on every matching call and injects it
 # into this very invocation as HANDOFF_ROOT.
 root="${HANDOFF_ROOT:-}"
@@ -67,14 +67,14 @@ esac
 # to fire and a `pending` one is in flight, so rewriting either would say the
 # approval released something it did not.
 [ "$DRIVE_STATE" = "held" ] \
-    || err "the transition is in state \`$DRIVE_STATE\`, not \`held\`; nothing to arm"
+    || err "the transition is in state $DRIVE_STATE, not held; nothing to arm"
 
 # And only this session's. The approval this command speaks for is the one this
 # session was asked for; a held file another session left behind waits on an
 # answer that can no longer arrive, and arming it drives that session's
 # transition into this conversation.
 [ "$DRIVE_OWNER" = "$session_id" ] \
-    || err "the held transition belongs to session \`$DRIVE_OWNER\`, not this one; it is not this session's approval to give"
+    || err "the held transition belongs to session $DRIVE_OWNER, not this one; it is not this session's approval to give"
 
 # The owner carries over: the session that approved is the one whose turn end
 # takes the transition, and the prompt-time sweep tells its file from another
