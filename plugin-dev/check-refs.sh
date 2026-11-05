@@ -19,8 +19,8 @@
 #
 # The files read are the Markdown files on disk that git does not ignore,
 # tracked or not (`git ls-files -co --exclude-standard`), always from disk:
-# never a file under plugin-dev/, the vendored toolkit, nor one inside a
-# submodule. Two checks:
+# never a file under plugin-dev/, the vendored toolkit, nor under plans/,
+# nor one inside a submodule. Two checks:
 #
 #   resolves               the target exists: git lists it, tracked or
 #                          untracked but not ignored, and it is on disk; or it
@@ -29,8 +29,9 @@
 #                          leaves the repository. A file under an exempt path is
 #                          skipped: the paths listed in refs.exempt at the root,
 #                          one per line with # comments, or, with no such file,
-#                          docs/changelog and plans, whose dated records stay
-#                          true about a file deleted later.
+#                          docs/changelog, whose dated records stay true about
+#                          a file deleted later. plans/ is never read, like
+#                          plugin-dev/, whatever refs.exempt says.
 #   shipped stays shipped  with a dist.include, or --shipped, a reference from
 #                          a shipped file reaches a shipped file that exists.
 #                          No exemption applies. The set is read by
@@ -74,7 +75,7 @@ main() {
     done
     here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     bad=0
-    tmp="$(mktemp -d)"
+    tmp="$(mktemp -d "${TMPDIR:-/tmp}/check-refs.XXXXXX")"
     trap 'rm -rf "$tmp"' EXIT
     if [ "$mode" = tree ]; then
         check_tree "$tree"
@@ -120,8 +121,8 @@ check_disk() {
         elif [ -e "$f" ] || [ -L "$f" ]; then
             printf '%s\n' "$f" >> "$tmp/members"
         fi
+        in_scope_skip "$f" && continue
         case "$f" in
-            plugin-dev/*) continue ;;
             *.md|*.markdown) ;;
             *) continue ;;
         esac
@@ -219,21 +220,16 @@ in_tree() {
     git rev-parse --verify --quiet "$1:$2" >/dev/null
 }
 
-# load_exempt: sets exempt=() from refs.exempt, or to the defaults.
+# load_exempt: sets exempt=() from refs.exempt, or to the default. plans/ and
+# plugin-dev/ are never listed here: the read loop drops them whatever the list says.
 load_exempt() {
-    local line
     exempt=()
     if [ ! -f refs.exempt ]; then
-        exempt=(docs/changelog plans)
+        exempt=(docs/changelog)
         return
     fi
-    while IFS= read -r line || [ -n "$line" ]; do
-        line="${line%$'\r'}"
-        case "$line" in
-            ''|'#'*) continue ;;
-        esac
-        exempt+=("$(trim_slash "$line")")
-    done < refs.exempt
+    read_path_list refs.exempt || die "cannot read refs.exempt"
+    exempt=(${list_paths[@]+"${list_paths[@]}"})
 }
 
 # is_shipped <path>: the root holds every shipped path, so it counts as one.
@@ -278,5 +274,7 @@ die() {
 
 # shellcheck source=check-refs-parse.sh
 source "$(dirname "${BASH_SOURCE[0]}")/check-refs-parse.sh"
+# shellcheck source=exempt-list.sh
+source "$(dirname "${BASH_SOURCE[0]}")/exempt-list.sh"
 
 main "$@"

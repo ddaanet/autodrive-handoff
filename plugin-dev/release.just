@@ -59,7 +59,12 @@
 #
 # `check-size` refuses a file over the size cap, counted in bytes.
 # Like `check-refs`, no recipe here runs it: a plugin wires it into its own
-# gate, `precommit: check-refs check-size`.
+# gate, `precommit: check-refs check-size check-frontmatter`.
+#
+# `check-frontmatter` refuses a skill, agent or command whose frontmatter is
+# missing, not YAML, or breaks the toolkit's field rules. Like `check-size`, no
+# recipe here runs it: a plugin wires it into its own gate, as above. It needs
+# PyYAML for the python3 on PATH.
 #
 # Requirements: bash, jq, git, gh, rsync.
 
@@ -90,6 +95,10 @@ check-refs:
 # Refuse a file over the size cap in bytes, minus size.exempt.
 check-size:
     bash "{{toolkit_prefix}}/check-size.sh"
+
+# Refuse a skill, agent or command whose frontmatter is missing, not YAML, or breaks the field rules.
+check-frontmatter:
+    bash "{{toolkit_prefix}}/check-frontmatter.sh"
 
 # Pull the vendored toolkit up to a dist tag; no ref = newest on the remote.
 update-plugin-dev ref='':

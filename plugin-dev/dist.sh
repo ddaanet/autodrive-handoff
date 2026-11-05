@@ -204,7 +204,7 @@ problem() {
 }
 
 make_tmp() {
-    tmp="$(mktemp -d)"
+    tmp="$(mktemp -d "${TMPDIR:-/tmp}/dist.XXXXXX")"
     trap 'rm -rf "$tmp"' EXIT
 }
 

@@ -12,7 +12,7 @@
 
 bump_marketplace() {
     local mp_tmp repo_slug mp_branch mp_remote_head mp_local_head committed=0
-    mp_tmp=$(mktemp)
+    mp_tmp=$(mktemp "${TMPDIR:-/tmp}/release-marketplace.XXXXXX")
     if [ "$marketplace_entry_exists" = 1 ]; then
         # An opted-in plugin's entry follows the dist branch: only .source.ref is
         # added, the rest of the source is left as it is.
