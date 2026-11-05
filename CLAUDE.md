@@ -176,8 +176,10 @@ pytest runs off a uv-managed venv that direnv activates (`.envrc` exports
 - `just precommit` — the gate, run before every commit; needs the venv. It
   depends on `check-plugin` and `check-code`, cached gates that skip while
   their inputs are unchanged (`PLUGIN_DEV_GATE_FORCE=1` runs them regardless),
-  and on `check-refs` and `check-size`, uncached checks that run every time:
-  Markdown links, and the toolkit's byte caps (20000, 10000 for a `SKILL.md`).
+  and on `check-refs`, `check-size` and `check-frontmatter`, uncached checks
+  that run every time: Markdown links, the toolkit's byte caps (20000, 10000
+  for a `SKILL.md`), and that each `SKILL.md`'s frontmatter is YAML that obeys
+  the toolkit's field rules (it reads PyYAML through the venv's `python3`).
   A file kept over a cap is listed in the root `size.exempt`, with what ends
   its overage. `release` depends on `precommit` through `prerelease`.
 - The `justfile` lists each gate's inputs: a new component directory the

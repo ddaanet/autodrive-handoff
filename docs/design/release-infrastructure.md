@@ -21,8 +21,9 @@ toolkit, vendored at `plugin-dev/` via `git subtree`. Rationale:
   every commit, and `prerelease`, the gate `release` actually depends
   on. handoff's `precommit` lints its own manifests, syntax-checks
   scripts, and runs the handoff-specific hook + pytest suites, then the
-  toolkit's `check-refs` and `check-size`, the second reading the root
-  `size.exempt` for the files kept over its byte caps; its
+  toolkit's `check-refs`, `check-size` and `check-frontmatter`, the second
+  reading the root `size.exempt` for the files kept over its byte caps and the
+  third refusing a skill whose frontmatter is not YAML; its
   `prerelease` is exactly `precommit`. The indirection exists so a
   plugin whose release gate is wider than its commit gate — slow or
   paid checks — can widen `prerelease` without slowing every commit.
