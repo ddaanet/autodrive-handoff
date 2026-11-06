@@ -1,5 +1,5 @@
 ## Current task
 
-Getting the plugin through the directory portal. `dev` carries the hook-script fixes a portal probe passed, the toolkit 0.15.0 frontmatter check, and the reworded `bin/handoff-approved` lines behind the portal's credential hold; each slice had its medium review. The release sequence is now the `/release-ritual` user skill at `~/.claude/skills/release-ritual/SKILL.md`, with `~/.claude/bin/context-usage` reading the context size at its boundaries, and the shared conventions were aligned to it in a memory commit on 2026-11-06. My human partner has not named the release: do not start one.
+Getting the plugin through the directory portal. On 2026-11-06 the portal refused `dist` at 0.21.1 with `UNPINNED_NPX` in `scripts/load-compact.sh`; 0.21.2 carries the rewrite of its lock-note append, which a probe ref of that tree passed (3 warnings, 11 policy holds, no blocking issue). Its `/release-ritual` run found no high or medium finding.
 
-Next action: when the release is named, run `/release-ritual`; its first run also tests three unverified points, whether `/code-review` takes `main...dev` as a literal target, whether an agent id from before a compaction still answers after it, and `sort -V` on macOS in the companion lookup.
+Next action: my human partner re-validates and submits the listing in the developer portal against `dist` at 0.21.2.
