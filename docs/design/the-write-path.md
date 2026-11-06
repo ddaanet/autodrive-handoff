@@ -251,7 +251,9 @@ rather than by one nested expansion. Both shapes are there for the plugin
 directory's validator: with either one in `write-guard.sh`, its portal refused
 the plugin, naming a launcher or a command path it could not follow. For the
 same reason `load-compact.sh` closes its message with `msg="$msg."` rather
-than `msg+="."`, which the portal listed as a command path `.`. Only the
+than `msg+="."`, which the portal listed as a command path `.`, and appends
+the lock note to the context with an `if` rather than a nested
+`${context:+…}` expansion, which drew the same launcher refusal. Only the
 portal runs that check, so a change to a hook script's shape is validated there
 on a pushed ref.
 
