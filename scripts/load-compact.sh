@@ -104,7 +104,10 @@ done
 # A sentinel left because its lock could not be taken is named on both channels.
 if (( lock_rc != 0 )); then
     lock_ctx="The transition state ($HANDOFF_REL_DRIVE) was left in place, not consumed: $HANDOFF_LOCK_MSG."
-    context="${context:+$context$'\n\n'}$lock_ctx"
+    if [[ -n "$context" ]]; then
+        context+=$'\n\n'
+    fi
+    context+="$lock_ctx"
     msg+="; autodrive left in place — $HANDOFF_LOCK_MSG"
 fi
 msg="$msg."
