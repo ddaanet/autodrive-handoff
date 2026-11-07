@@ -1,0 +1,367 @@
+
+Soumissions
+Autodrive Handoff
+
+Plug-in · par ddaanet · submitted il y a 3 heures · Icon: En attente d’examen
+
+Modifier
+Check for new commits
+Withdraw submission
+
+Needs changes
+
+Files in the plugin’s bin/ folder accepted only from Verified organizations
+
+
+Soumis
+(terminé)
+il y a 3 heures
+Needs changes
+(étape actuelle)
+il y a 3 heures
+En cours d'examen
+(pas encore)
+En ligne
+(pas encore)
+Aperçu
+Utilisation
+Listing
+Review
+Versions
+Paramètres
+An automatic check stopped this version
+
+v0.21.2 · fd26fa6 · Checked il y a 3 heures
+
+Decided by
+
+Directory policy
+
+What to do
+Fix the findings listed under Needs you.
+Push a new version.
+
+See this version’s history
+
+Latest check
+Validation has warnings · Directory policy failed
+Needs you
+
+Blocking:
+Hooks of type command accepted only from Verified organizations
+
+
+The directory accepts command hooks only from Verified organizations, and your organization isn’t one, so this version is refused. Remove every hook of type command, then push a new commit. Hooks of type prompt can stay.
+
+This plugin declares a hook of type command, which runs a command on the user’s computer without asking. A plugin can act on the user’s computer, so the directory limits what it accepts from anyone but a Verified organization. Anthropic chooses who is a Verified organization, and there’s no way to ask to become one yet.
+
+LOCAL_CODE_HOOK_COMMAND
+
+
+Blocking:
+Mods accepted only from Verified organizations
+
+
+The directory accepts mods only from Verified organizations, and your organization isn’t one, so this version is refused. Remove the modules entry from each hooks file that has one, then push a new commit.
+
+This plugin declares a mod: code that Claude Code loads and runs inside itself. A plugin can act on the user’s computer, so the directory limits what it accepts from anyone but a Verified organization. Anthropic chooses who is a Verified organization, and there’s no way to ask to become one yet.
+
+LOCAL_CODE_MOD
+
+
+Blocking:
+Files in the plugin’s bin/ folder accepted only from Verified organizations
+
+
+The directory accepts files in the plugin’s bin/ folder only from Verified organizations, and your organization isn’t one, so this version is refused. Remove the bin/ folder, then push a new commit.
+
+This plugin ships files in its bin/ folder, which Claude Code adds to PATH on the user’s computer. A plugin can act on the user’s computer, so the directory limits what it accepts from anyone but a Verified organization. Anthropic chooses who is a Verified organization, and there’s no way to ask to become one yet.
+
+LOCAL_CODE_BIN
+
+
+Blocking:
+Files outside the allowed types accepted only from Verified organizations
+
+
+The directory accepts files outside the allowed types only from Verified organizations, and your organization isn’t one, so this version is refused. Remove each file that isn’t Markdown, text, JSON, YAML, or a PNG, JPEG, GIF, WebP, or ICO image, then push a new commit. A license, a readme, .gitignore, and the plugin’s icon can stay.
+
+This plugin ships a file whose type isn’t on the directory’s list of Markdown, text, JSON, YAML, and PNG, JPEG, GIF, WebP, and ICO images. A plugin can act on the user’s computer, so the directory limits what it accepts from anyone but a Verified organization. Anthropic chooses who is a Verified organization, and there’s no way to ask to become one yet.
+
+LOCAL_CODE_FILE_TYPE
+
+Other findings
+
+Avertissement:
+Mod can read local data and can also send data out
+hooks/handoff.ts · line 80
+
+
+Say in the plugin's README what the mod sends and where; if the way out is a call the directory does not know, say what that call does.
+
+This mod can read facts about local files (fs.stat) and can also send data out (process.run). The directory names the pair; it has not found that what is read is sent.
+
+hooks/handoff.ts · line 80
+
+MOD_LOCAL_DATA_LEAVES
+
+
+Avertissement:
+Mod may start a program the directory couldn’t fully check
+hooks/handoff.ts · line 80
+
+
+Write the whole command as fixed text in the call, or say in the plugin's README what it runs.
+
+This mod runs a program (process.run) whose name or arguments are not all written as fixed text at the call, so the directory cannot read the whole command.
+
+hooks/handoff.ts · line 80
+
+MOD_PROCESS_COMMAND_COMPUTED
+
+
+Avertissement:
+Mod starts other programs
+hooks/handoff.ts · line 80
+
+
+If the mod needs to run programs, say in the plugin's README which programs and why.
+
+This mod runs programs on the user's machine (process.run).
+
+hooks/handoff.ts · line 80
+
+MOD_RUNS_PROCESS
+
+
+Avertissement:
+Mod starts a shell, a network tool, or an inline script
+hooks/handoff.ts · line 80
+
+
+Run the one program the mod needs, by name, with fixed arguments; use the http call for requests.
+
+This mod runs a shell (process.run). That can run any command or fetch any file. Places like this that the directory recorded in the file: 2; the line given is the first.
+
+hooks/handoff.ts · line 80
+
+MOD_RUNS_SHELL_OR_DOWNLOADER
+
+
+Avertissement:
+Mod can read the conversation and can also send data out
+hooks/handoff.ts · line 80
+
+
+Say in the plugin's README what the mod sends and where; if the way out is a call the directory does not know, say what that call does.
+
+This mod can read the conversation (a hook on prompt.submit) and can also send data out (process.run). The directory names the pair; it has not found that conversation text is sent.
+
+hooks/handoff.ts · line 80
+
+MOD_SESSION_DATA_LEAVES
+
+
+Avertissement:
+Mod runs slash commands itself
+hooks/handoff.ts · line 126
+
+
+If the mod needs the call, say in the plugin's README which commands it runs and when.
+
+This mod runs slash commands itself (command.run). Calls of this kind counted in the mod: 1; the line given, where there is one, is the first.
+
+hooks/handoff.ts · line 126
+
+MOD_RUNS_COMMAND
+
+
+Avertissement:
+Mod can read the conversation or other data and can also submit a prompt that can carry text out
+hooks/handoff.ts · line 134
+
+
+Say in the plugin's README what the mod puts in the prompts it submits.
+
+This mod can read facts about local files (fs.stat) and can also submit a prompt (prompt.submit), which can carry text out of the mod. The directory names the pair; it has not found that what is read is put in a prompt.
+
+hooks/handoff.ts · line 134
+
+MOD_DATA_LEAVES_BY_PROMPT
+
+
+Avertissement:
+Mod writes a file that other tools run or obey
+hooks/handoff.ts · line 174
+
+
+If the mod is meant to edit a build, start-up, settings or instructions file, say so in the plugin's README; otherwise do not write it. Write the path in the call as fixed text, so that the directory can read it.
+
+This mod writes to a path that is not fixed text, which can be a build, start-up or settings file. What is written to a file that other tools run or obey takes effect outside this mod. Writes of this kind that the directory recorded in the mod: 1; the line given is the first.
+
+hooks/handoff.ts · line 174
+
+MOD_WRITES_BUILD_FILE
+
+
+Avertissement:
+Hook can approve tool calls or change their input
+hooks/hooks.json · PreToolUse
+
+
+To remove this finding, don't let the hook approve a tool call or change the call's input. The hook can deny the call or leave the decision to Claude Code's normal permission flow, and a PreToolUse hook can ask the user.
+
+As far as this check can tell, a hook in this plugin can approve tool calls without asking the user, or change a tool call's input before it runs. Such a hook can change what the user is asked to decide, or whether they are asked at all.
+
+hooks/hooks.json · PreToolUse
+
+Documentation
+
+HOOK_GRANTS_PERMISSION
+
+
+Avertissement:
+Uses a credential from the user’s machine
+.claude-plugin/plugin.json
+
+
+If the part that reads the credential and the part that sends data are related, pass a ${user_config.KEY} value the user chose to share instead of reading the installer's credential. If they are unrelated, you can leave them as they are and a reviewer confirms it, or remove every part that reads a credential, which clears this hold.
+
+Something in the plugin reads a credential (a token or API key) from the user’s environment or files and could send it to a server. A reviewer will check where it goes.
+
+.claude-plugin/plugin.json
+
+Documentation
+
+MCP_FORWARDS_CREDENTIAL_ENV
+
+
+Avertissement:
+Unrecognized field in plugin.json
+3 résultats
+
+
+If you expected the field to do something, check its spelling against the plugins reference. Otherwise remove it, unless it’s a listing field that only the directory reads, such as privacyPolicyUrl.
+
+plugin.json has a field that released Claude Code builds don’t read, so it does nothing when the plugin loads.
+
+.claude-plugin/plugin.json · documentationUrl
+
+The plugin directory reads 'documentationUrl' for the listing; Claude Code itself ignores it at load time. No action needed.
+
+.claude-plugin/plugin.json · privacyPolicyUrl
+
+The plugin directory reads 'privacyPolicyUrl' for the listing; Claude Code itself ignores it at load time. No action needed.
+
+.claude-plugin/plugin.json · termsOfServiceUrl
+
+The plugin directory reads 'termsOfServiceUrl' for the listing; Claude Code itself ignores it at load time. No action needed.
+
+Documentation
+
+UNKNOWN_KEY
+
+
+Avertissement:
+Uses hooks
+
+
+The plugin ships hooks, which Claude Code runs automatically on events such as tool calls. Listed for your information.
+
+USES_HOOKS
+
+
+Avertissement:
+Ships executable files
+
+
+Where you can, ship readable scripts outside bin/ rather than compiled programs or install-time downloads. Otherwise leave it for the reviewer.
+
+The plugin ships programs that run directly on the user’s machine: files in bin/, compiled executables elsewhere in the plugin, or files listed under binaries in plugin.json, which the installer downloads at install time. The automated checks don’t vouch for what these do, so a reviewer looks at them before this version is listed.
+
+BUNDLES_BINARIES
+
+
+Remarque:
+This plugin includes a mod
+hooks/handoff.ts
+
+
+Nothing to change: the directory records that the plugin has a mod.
+
+This plugin has a mod: code that Claude Code loads and runs, and that can act on the machine with the user's own access through the calls Claude Code gives it. The directory lists mods for Claude Code only. The directory's findings name the calls it could read in the mod's source; they are not a list of everything the mod can do.
+
+hooks/handoff.ts
+
+MOD_PRESENT
+
+
+Remarque:
+Mod hooks an event that settings, instructions, other hooks, or tool descriptions pass through
+hooks/handoff.ts · line 44
+
+
+Say in the plugin's README what the hook changes.
+
+This mod hooks a classic hook event (one whose name begins classic.). Settings, instructions, other hooks or tool descriptions pass through such a hook, which can see them and may be able to change them. Hooks of this kind that the directory recorded in the mod: 1; the line given is the first.
+
+hooks/handoff.ts · line 44
+
+MOD_HOOKS_POLICY_EVENT
+
+
+Remarque:
+Mod hooks an event that is also the name of a call, so it may see or change that call when other code makes it
+hooks/handoff.ts · line 63
+
+
+Say in the plugin's README what the hook does.
+
+This mod hooks prompt.submit. An event of this kind is also the name of a call: a hook on it may see that call when other code makes it, and may be able to change it, although the mod does not make the call itself. Hooks of this kind that the directory recorded in the mod: 1; the line given is the first.
+
+hooks/handoff.ts · line 63
+
+MOD_HOOKS_OPERATION
+
+
+Remarque:
+Mod writes files
+hooks/handoff.ts · line 174
+
+
+Say in the plugin's README what the mod writes.
+
+This mod writes files (fs.write).
+
+hooks/handoff.ts · line 174
+
+MOD_WRITES_FILES
+
+
+Remarque:
+Images and fonts passed without a code check
+.claude-plugin/plugin.json
+
+
+1 well-formed image or font file(s) were let through without being read as code (their printable text was still screened): .claude-plugin/icon.png.
+
+.claude-plugin/plugin.json
+
+ASSETS_PASSED_UNREAD
+
+
+All checks on this version
+
+
+Validation has warnings
+il y a 3 heures
+
+
+
+Directory policy failed
+il y a 3 heures
+
+
+
+Analyse de sécurité passed
+il y a 3 heures

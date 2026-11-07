@@ -1,5 +1,3 @@
 ## Current task
 
-Getting the plugin through the directory portal. On 2026-11-06 the portal refused `dist` at 0.21.1 with `UNPINNED_NPX` in `scripts/load-compact.sh`; 0.21.2 carries the rewrite of its lock-note append, which a probe ref of that tree passed (3 warnings, 11 policy holds, no blocking issue). Its `/release-ritual` run found no high or medium finding.
-
-Next action: my human partner re-validates and submits the listing in the developer portal against `dist` at 0.21.2.
+None open. The plugin directory refused `dist` at 0.21.2 (submitted 2026-11-06, status "Needs changes") on four blocking `LOCAL_CODE_*` rules: the directory refuses command hooks, mods, `bin/` files and any non-Markdown/text/JSON/YAML/image file from non-Verified organizations, and the portal says there is no way to ask to become one. Removing them removes the plugin, so it stays on the `claude-plugins` marketplace. The submission is left in the portal as is, and the review's text is in `plans/2026-10-15-directory-submission/portal-review-2026-11-06.raw.txt`. The 11 policy holds are only warnings there and no longer worth clearing.
