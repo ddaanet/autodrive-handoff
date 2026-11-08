@@ -47,28 +47,6 @@ of three with the choice of sample. **Reopen if** the residual moves: the
 method and its scripts are in the plan's `reports/overflow/`.
 2026-10-11 TASK.md and TODO.md move to the root
 
-**The old paths are read and moved, and the bridge retires by a condition.**
-A repository that crossed the move to the root keeps its frame under
-`.claude/handoff-task.md` and `.claude/handoff-todo.md`, and a loader that
-ignores those names reports an empty frame for one that is stranded. So per
-half the loader reads the root file when it has a body and the legacy file
-otherwise, and the checkpoint moves a legacy todo onto `TODO.md` or removes a
-legacy file its write would leave to be loaded again, inside plan resolution
-so nothing moves unless both halves resolve. The root file wins when it has a
-body: the legacy file is left as it is and the agent is told it is ignored,
-with no advice to delete it. Both ends decide by body (`is_empty_body`) and
-shadowing by the legacy file's existence. The checkpoint does no git work, so
-under `with-commit` it prints the `git rm --cached` line that makes git record
-a rename, as `git -C <root> rm …` over paths relative to
-the root, which runs from any directory. The fallback is a
-bridge: it goes once no sibling repository still has `.claude/handoff-*.md`,
-and not before 2026-11-16, a month past the day that first held (2026-10-16),
-with no version in code, docs or tests, and `grep -rni legacy scripts/ tests/`
-starts the one deletion pass. **Reopen if** the condition is not what ends it:
-a repository that keeps a shadowed legacy file is told so at every start, by
-design.
-2026-10-11 Legacy paths are read, and the checkpoint moves them
-
 **The compact boundary carries no task.** A compaction produces its own
 account of the task, the summary, and a snapshot written just before it is a
 second one: on disk beside the first, liable to disagree with it, and

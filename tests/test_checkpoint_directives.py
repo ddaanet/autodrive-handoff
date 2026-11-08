@@ -165,8 +165,8 @@ def test_commit_act_is_the_exact_no_git_verb_sentence(tmp_path: Path) -> None:
     """Pin the exact sentence rather than blacklisting verb spellings.
 
     A reword naming a verb another way ("stage and commit", "`git ci`") passes a
-    substring blacklist. Memory clean, no legacy file, nothing to continue: the
-    act and the closing line are all there is, so the whole stdout is pinned.
+    substring blacklist. Memory clean, nothing to continue: the act and the
+    closing line are all there is, so the whole stdout is pinned.
     """
     repo = make_gitlore_repo(tmp_path)
     result = run_checkpoint(repo, precompact_payload("with-commit"))
@@ -175,15 +175,15 @@ def test_commit_act_is_the_exact_no_git_verb_sentence(tmp_path: Path) -> None:
     assert result.stdout == COMMIT_ACT + "\n" + closing
 
 
-# Unit rows on the new `commit_directive(root, legacy_paths, *, memory)`
-# signature: the checkpoint rows above are the behavioural pins.
+# Unit rows on `commit_directive(*, memory)`: the checkpoint rows above are
+# the behavioural pins.
 @pytest.mark.parametrize(
     ("memory", "expected"),
     [(False, COMMIT_ACT), (True, COMMIT_ACT_WITH_MEMORY)],
     ids=["memory_clean", "memory_owed"],
 )
 def test_commit_directive_unit_follows_memory(*, memory: bool, expected: str) -> None:
-    assert lib.commit_directive("", (), memory=memory) == expected
+    assert lib.commit_directive(memory=memory) == expected
 
 
 # ==========================================================================

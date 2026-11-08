@@ -1,3 +1,2 @@
 # Files allowed over check-size's cap. Each line says what ends its overage;
 # a file entry refuses once its file is under the cap, so delete it then.
-tests/test_checkpoint_legacy.py # deleted whole by the legacy-path removal, not before 2026-11-16 (TODO.md)

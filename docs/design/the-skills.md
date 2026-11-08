@@ -62,7 +62,7 @@ precompact  compact:true|"…"     continue:true   compact and continue
 `continue` is a boolean, and `true` is a schema error against a transition that
 is not carried out, since nothing would submit the prompt, and at the clear
 boundary also when neither file would have a body once the plans are applied
-(checked before any write, the legacy fallback counted; after a compaction the
+(checked before any write; after a compaction the
 summary carries the task, so `precompact` is exempt). The prompt it asks
 for is one fixed prompt, `CONTINUATION` in the mod (`hooks/handoff.ts`), that points the fresh
 context at the task and todo files. It was once a line of prose the agent

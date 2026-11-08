@@ -44,26 +44,10 @@ ran.
 2026-09-14 A heading is not a leading `#`,
 2026-10-11 TASK.md and TODO.md move to the root
 
-The two files lived at `.claude/handoff-task.md` and `.claude/handoff-todo.md`
-before they moved to the root, and a repository that crossed the move still has
-them. They are the *legacy* files, and the frame reads them as a bridge: per
-half, the root file when it has a body, else the legacy file when it has a
-body. The root file wins, and a legacy file that exists beside a root file with
-a body, whatever it holds, is left as it is and reported ignored. A legacy
-path that is a symlink is treated as absent by the loaders, neither read nor
-reported ignored: the checkpoint refuses one naming the field, which is where
-it is reported. So is a root `TASK.md` or `TODO.md` that is a symlink: it has
-no body, so the legacy file beside it loads as beside any root file without
-one, and a repository cannot commit a link that has some other readable file
-injected as its frame. The loader
-names a half read from a legacy path and a legacy file left ignored on both
-channels, from one producer, `handoff_frame_notes`, so the two channels and the
-two loaders word them alike; the note carries a fact, and no advice to delete.
-A todo read from a legacy path is told to be edited there until the checkpoint
-moves it, since a new `TODO.md` written first would shadow the list the session
-inherited. What a legacy file is, and when the bridge goes, is argued in
-[Design decisions](decisions.md).
-2026-10-11 Legacy paths are read, and the checkpoint moves them
+A root `TASK.md` or `TODO.md` that is a symlink is treated as absent by the
+loaders, neither read nor counted: the checkpoint refuses one naming the field,
+which is where it is reported, and a repository cannot commit a link that has
+some other readable file injected as its frame.
 
 ## One channel, one writer
 
@@ -100,9 +84,8 @@ per-skill check has no point to run but ahead of those, where it would
 replace their wording with a generic one. What is left for it is a key
 belonging to no skill's vocabulary, which has nothing skill-specific to say
 about it. A `continue: true` at the clear boundary is refused, naming
-`continue`, when neither half would have a body after the plans (the legacy
-fallback counted), before anything is written; `precompact` is exempt, its
-summary carrying the task. The two
+`continue`, when neither half would have a body after the plans, before
+anything is written; `precompact` is exempt, its summary carrying the task. The two
 `required` messages name the whole vocabulary for the same reason: that
 branch is what an out-of-date producer sending the retired
 `{"file_path": …, "content": …}` shape lands on, so it has to say what to
@@ -111,9 +94,8 @@ write instead. There is no `file_path` —
 payload-supplied one would ask the agent to derive a path from a root it
 cannot read, only to be checked against the one the write uses anyway. A
 violation exits non-zero naming the offending field. The wrap-up is applied
-whole or not at all: both halves resolve to a plan — the path, the act, the
-body and what becomes of the half's legacy file — before either file is
-touched, so every failure the payload and the files can raise leaves the disk
+whole or not at all: both halves resolve to a plan — the path, the act and the
+body — before either file is touched, so every failure the payload and the files can raise leaves the disk
 as it was. A failure of the filesystem itself, found while a plan is applied,
 is the one thing resolution cannot see: it can follow the first half having
 been applied, as two writes in a row always could.
@@ -149,27 +131,10 @@ string is written as given, whatever is in it; a root file is removed by
 nothing else. An empty `TODO.md` somebody keeps for another purpose is not the
 checkpoint's to delete.
 
-What the call does to a half's legacy file is decided in the same plan, by one
-rule. The effective content of a half is the root file when it has a body,
-else the legacy file. A root file with a body before the call and after it is
-the frame, and the legacy file stays and is reported ignored. In any other
-case the legacy file goes, because it would otherwise come back as the frame:
-`keep` on the todo renames it onto `TODO.md`, keeping its modification time
-(across devices, by a copy to a sibling temporary file and a rename onto the
-root name); `edit` applies to the effective content and writes the result;
-a content string replaces it; `clear` removes both files. The task file is
-never moved, only replaced or removed, since the checkpoint always authors it
-whole or clears it. The root file is read only when a legacy file exists. A
-legacy path that is a symlink to a file is refused during resolution, naming
-the field, since its relative target would dangle once moved. A dangling
-symlink is no legacy file. The legacy file is taken off its path after the root
-file is written, never before, so a failed write loses nothing.
-2026-10-11 Legacy paths are read, and the checkpoint moves them
-
 What sits at a root name is checked during resolution, under every action,
-`keep` included, and with or without a legacy file: a symbolic link there is
-refused, since a write would follow it to a file the checkpoint does not own,
-and so is a directory, which no write, removal or move can land on. A root file
+`keep` included: a symbolic link there is refused, since a write would follow
+it to a file the checkpoint does not own, and so is a directory, which no write
+or removal can land on. A root file
 the call has to read and cannot, unreadable or, for an `edit`, not valid UTF-8,
 is refused the same way. Each refusal names the field and exits 2 with nothing
 written. A write then lands through a sibling temporary file renamed onto the
@@ -178,29 +143,17 @@ writing through it, and keeps the mode of the regular file it replaces; a
 removal unlinks the name itself. So a link put at the name between resolution
 and the write is replaced, not followed. The bound is the last component: a
 root reached through a symlinked directory is written where that directory
-lies, and the legacy paths are read through a symlinked `.claude/`.
+lies.
 2026-10-13 Root files are not followed through symlinks
 
 It **changes no git state** — it queries git read-only and stops there: it
 runs in the agent's sandboxed Bash, where `git add` can leave
 `.git/index.lock` behind and fail the *next* command (which in the routine
-wrap-up is the user's `/commit`). Nothing else stages on its behalf. Moving or
-removing a legacy file is a filesystem act and stays inside that line. Under
-`with-commit` the commit act the checkpoint prints names the two files, and
-leads with one line for the legacy paths this call moved or removed, `git
--C <root> rm --cached --ignore-unmatch -q -- <path> …`, so
-git records a rename once the files are added. The agent's working directory can
-be anywhere, and a bare relative path matched nothing from a subdirectory,
-silently, so `-C` names the root and each `<path>` is relative to it, as the
-reports name them. The line needs no query of where the root lies in its
-repository, which a top-anchored form (`:/`) does, with failure modes git leaves
-silent, and the root's name, a glob character or a leading `!` included, is a
-directory change and never a pathspec; the legacy paths are fixed names with no
-magic character, so no literal-pathspec option is printed. Every argument is shell-quoted; a newline in the root still splits the line. The
-line is owed only by the call that moved or removed the file: under `without-commit`
-nothing is printed and the files are left modified in the tree like any edited
-file, and a `with-commit` call after it has no legacy file left to report, so
-the deletion shows as unstaged in `git status`.
+wrap-up is the user's `/commit`). Nothing else stages on its behalf. Under
+`with-commit` the commit act the checkpoint prints names the two files, so git
+records what the call did to them once the files are added; under
+`without-commit` nothing is printed and the files are left modified in the tree
+like any edited file.
 
 ## The task is bounded
 
@@ -273,6 +226,6 @@ environment values the payload cannot carry (`validate_root` for `HANDOFF_ROOT`,
 `require_session_id` for `CLAUDE_CODE_SESSION_ID`), composes the sentinel and
 orders the directives; `_checkpoint_payload.py` validates the
 payload (FR2) and returns the transition and the two halves' actions, writing
-nothing; `_checkpoint_plan.py` resolves each half to a plan, the legacy
-migration included, and applies the plans; `_checkpoint_lib.py` holds what the
+nothing; `_checkpoint_plan.py` resolves each half to a plan and applies
+the plans; `_checkpoint_lib.py` holds what the
 others import and the emptiness rule's CLI.

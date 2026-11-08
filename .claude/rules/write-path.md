@@ -15,8 +15,7 @@ Behaviour lives in `docs/design/the-write-path.md` and
   scripts only rewrite the sentinel's state line (`handoff_drive_arm`) or
   remove it, and `write-guard.sh` denies an agent `Write`/`Edit` to it. Add no
   other composer.
-- No git work (NFR1). A git line the agent needs, such as the legacy unstage,
-  is printed, never run.
+- No git work (NFR1). A git line the agent needs is printed, never run.
 - Every schema or write-time error exits through `lib.err` in
   `_checkpoint_lib.py`: it names the field and exits 2.
 - `_checkpoint_payload.py` reads the payload only. What reads the environment

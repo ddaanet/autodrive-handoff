@@ -142,12 +142,10 @@ would have collided as numbers. `FR6`, `FR7` and `FR-H` are retired.
 - **FR5** — The todo payload supports incremental update:
   `{"action": "edit", "old_string": …, "new_string": …}` as well as content
   written whole. The task file is authored whole, so it has no edit action
-  and the schema refuses one. An `edit` applies to the effective content: the
-  root file when it has a body, else the file left at the legacy path.
+  and the schema refuses one. An `edit` applies to the file's current content.
 - **FR6** — *Retired.* It had the checkpoint remove a file whose body was
   empty. A content string is written as given and only `clear` removes the
-  root file (the legacy file beside it is a different matter, see [the write
-  path](design/the-write-path.md)); the emptiness rule is the loader's, which
+  root file; the emptiness rule is the loader's, which
   does not inject a file with no body.
 - **FR7** — *Retired.* It staged everything the checkpoint wrote, through a
   manifest and a `PostToolUse(Bash)` hook. Neither file is gitignored, so
@@ -156,7 +154,7 @@ would have collided as numbers. `FR6`, `FR7` and `FR-H` are retired.
   fields: a kind, a `continue` flag and one argument, a title or a focus.
 - **FR9** — Everything the agent does after the checkpoint call is printed
   by the checkpoint, in a fixed order, each part present only under its own
-  condition: what the call did to a legacy file, the memory directive, the
+  condition: the memory directive, the
   todo boundary (`handoff`) or the SDD ledger nudge (`precompact`), the
   commit act, then either the arming instruction or the closing line. The
   skill's last step is to follow it in order. See
@@ -183,8 +181,7 @@ would have collided as numbers. `FR6`, `FR7` and `FR-H` are retired.
   `git add` can stage successfully while stranding `.git/index.lock`, which
   fails the *next* command — in the routine wrap-up, the user's `/commit` —
   naming a git process that does not exist. This is a constraint, not a
-  preference. Moving or removing a legacy file is a filesystem act; what git
-  is owed for it is printed, never run.
+  preference.
 - **NFR2** — The `PreToolUse(Bash)` hook fires on every Bash call in every
   session with the plugin installed, and the `PreToolUse(Write|Edit)` guard on
   every write. The negative case of each is one jq parse plus one substring
@@ -246,7 +243,6 @@ The standing calls, each argued in
 - **Both files are plain files; only the sentinel is guarded.**
 - **Both files are tracked, and for the same reason.**
 - **The task is bounded, and the bound is set from the residual.**
-- **The old paths are read and moved, and the bridge retires by a condition.**
 - **The compact boundary carries no task.**
 - **Commit/push status never appears in either file.**
 - **The frame carries no transcript.**
@@ -297,9 +293,7 @@ Ruled out, each argued in
 - **Accepting SDD's pre-6.2.0 flat ledger path for back-compatibility**
 - **Letting the plan's tasks live in both files**
 - **A cap fitted to how often task files exceed it**
-- **A fallback for the old paths that retires by version, by tripwire or by
-  nothing**, **protecting a foreign `TODO.md`**, **a bare relative path or
-  `git -C` in the printed `git rm --cached` line**
+- **Protecting a foreign `TODO.md`**
 - **A parallel pipeline per transition**, **omitting `/clear` from the
   sentinel body**, **naming the skills `compact` and `clear`**,
   **`autocompact`/`autoclear` as skill names**

@@ -86,7 +86,7 @@ handoff_drive_read() {
     # at it is refused too. Every caller takes its malformed path, whose
     # `rm -f` removes the link and not what it names. The bound is the last
     # component: a symlinked `.claude/` is read and written where it points,
-    # as the root and legacy files are, and one shared between roots is
+    # as the root files are, and one shared between roots is
     # unsupported (docs/design/sessions-sharing-a-root.md).
     local read_status=""
     {

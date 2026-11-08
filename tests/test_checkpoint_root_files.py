@@ -5,8 +5,7 @@ A symlink or a directory at either name is refused naming the field, exit 2,
 nothing written; so is a root file that cannot be read or decoded where the call
 has to read it. A write goes through a sibling temporary file and `os.replace`,
 which swaps a link at the name rather than writing through it, and keeps an
-existing file's mode. The legacy-path counterparts are in
-tests/test_checkpoint_legacy.py; the shared helpers in tests/conftest.py.
+existing file's mode. The shared helpers are in tests/conftest.py.
 """
 
 import os
@@ -108,15 +107,15 @@ def test_a_dangling_symlinked_root_file_is_refused_and_creates_nothing(
     assert_refused(result, rel[:4].lower(), "symbolic link")
 
 
-# --- a directory at a root name, no legacy file anywhere ---
+# --- a directory at a root name ---
 
 
 @pytest.mark.parametrize("case", list(REACHING))
 def test_a_directory_at_the_root_name_is_refused_naming_the_field(
     tmp_path: Path, case: str
 ) -> None:
-    """With no legacy file the plan used to reach the write or the unlink, which
-    raised on the directory.
+    """The plan used to reach the write or the unlink, which raised on the
+    directory.
 
     Its positive is the same calls over a regular file.
     """

@@ -10,10 +10,8 @@ also reachable from bash through the --has-body CLI.
 from __future__ import annotations
 
 import re
-import shlex
 import subprocess
 import sys
-from collections.abc import Sequence
 from pathlib import Path
 from typing import NoReturn
 
@@ -104,17 +102,13 @@ def memory_directive(root: str) -> str:
     )
 
 
-def commit_directive(
-    root: str = "", legacy_paths: Sequence[str] = (), *, memory: bool = False
-) -> str:
+def commit_directive(*, memory: bool = False) -> str:
     """Return the commit act, printed under "with-commit".
 
     Names no git verb for the commit itself: the request may call for an amend
     or a fresh commit, and the checkpoint does not know which. Names the two
     files because nothing has staged what this call did to them. With `memory`
     owed, the act also names the memory gitlink that `gitlore:commit` staged.
-    Legacy paths this call moved or removed lead it, as
-    `legacy_unstage_directive`, which needs the root they are relative to.
     """
     if memory:
         sentence = (
@@ -127,40 +121,7 @@ def commit_directive(
             "Once everything above is done, make the commit the request called for, "
             "including any change to `TASK.md` and `TODO.md`."
         )
-    commit = _printf_lines(sentence)
-    unstage = legacy_unstage_directive(root, legacy_paths)
-    return f"{unstage}\n{commit}" if unstage else commit
-
-
-def legacy_unstage_directive(root: str, paths: Sequence[str]) -> str:
-    """Return the act that stages legacy paths as deleted, or "" for none.
-
-    One line, the paths on it: the legacy files this call moved or removed,
-    never one it left in place. The line does not ask which are tracked. Each
-    path is relative to the root, which `-C` names, so the line runs from any
-    directory, and the root's own name, whatever characters it holds, is a
-    directory change and never a pathspec. The paths are the fixed names
-    `.claude/handoff-task.md` and `.claude/handoff-todo.md`, which hold no glob
-    or magic character, so nothing needs git told to read them literally. Every
-    argument is shell-quoted. A root holding a backtick or a character that is
-    not printable (a control character, a Unicode line or paragraph separator, a
-    bidirectional override) cannot sit in a code span on one line, so the act is
-    replaced by one sentence that carries no part of the root and names the same
-    command with the fixed relative paths, to run where they resolve.
-    """
-    if not paths:
-        return ""
-    if "`" in root or not root.isprintable():
-        relative = " ".join(shlex.quote(path) for path in paths)
-        return _printf_lines(
-            "The project path holds a character that cannot be printed safely. "
-            "From the directory that holds the project's `.claude/` directory, "
-            f"run `git rm --cached --ignore-unmatch -q -- {relative}`."
-        )
-    words = ["git", "-C", root]
-    words += ["rm", "--cached", "--ignore-unmatch", "-q", "--", *paths]
-    command = " ".join(shlex.quote(word) for word in words)
-    return _printf_lines(f"Before committing, run `{command}`.")
+    return _printf_lines(sentence)
 
 
 def arming_directive() -> str:

@@ -86,24 +86,6 @@ assert_msg_matches() {
 
 loaded_re='loaded — ([0-9]+ B|[0-9]+\.[0-9] KiB), saved (just now|[0-9]+[mhd] ago)'
 
-# The legacy-path notes, one pair per half and per case. `_ctx` is the line the
-# agent reads in additionalContext, `_msg` the fragment the user reads in the
-# systemMessage. Both loaders say the same thing on each channel; the checkpoint
-# repeats the move on its own stdout.
-#   from-legacy: the half was loaded from the old path. The next checkpoint
-#                moves a todo, and removes a task: `task` is required content
-#                or `clear` under handoff and removed under precompact, so a
-#                legacy task is never carried.
-#   shadowed:    the root file has a body, so the old file is ignored.
-legacy_task_ctx='Task loaded from legacy .claude/handoff-task.md; the next checkpoint removes it, and the task a handoff checkpoint is given goes to TASK.md.'
-legacy_todo_ctx='Todo loaded from legacy .claude/handoff-todo.md; edit it there until the next checkpoint moves it to TODO.md.'
-legacy_task_msg='task from .claude/handoff-task.md, next checkpoint removes it'
-legacy_todo_msg='todo from .claude/handoff-todo.md, next checkpoint moves it'
-shadowed_task_ctx='Legacy .claude/handoff-task.md is ignored: TASK.md has a body.'
-shadowed_todo_ctx='Legacy .claude/handoff-todo.md is ignored: TODO.md has a body.'
-shadowed_task_msg='.claude/handoff-task.md ignored, TASK.md wins'
-shadowed_todo_msg='.claude/handoff-todo.md ignored, TODO.md wins'
-
 # <name> — a linked worktree of $tmp whose path ends in a newline; echoes it
 # with an X appended, which the caller strips (the capture would eat the newline).
 make_worktree_nl_end() {

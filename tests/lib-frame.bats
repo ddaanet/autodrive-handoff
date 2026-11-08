@@ -166,38 +166,6 @@ require_read_denied() {
     [ "${FRAME_TODO:-unset}" = "0" ]
 }
 
-@test "handoff_frame (unreadable root files beside legacy bodies): the legacy files are loaded, not shadowing" {
-    fr="$BATS_TEST_TMPDIR/frame-unreadable-leg"; mkdir -p "$fr"
-    printf '## Current task\n\nroot task body\n' > "$fr/task.md"
-    printf '## Remaining\n\n- root item\n' > "$fr/todo.md"
-    printf '## Current task\n\nlegacy task body\n' > "$fr/legacy-task.md"
-    printf '## Remaining\n\n- legacy item\n' > "$fr/legacy-todo.md"
-    chmod 000 "$fr/task.md" "$fr/todo.md"
-    require_read_denied "$fr/task.md"
-    rc=0; handoff_frame "$fr/task.md" "$fr/todo.md" "$fr/legacy-task.md" "$fr/legacy-todo.md" || rc=$?
-    [ "$rc" -eq 0 ]
-    assert_framed "${FRAME-}" $'\n\n## Current task\n\nlegacy task body\n\n## Remaining\n\n- legacy item'
-    [ "${FRAME_TASK_LEGACY:-unset}" = "1" ]
-    [ "${FRAME_TODO_LEGACY:-unset}" = "1" ]
-    [ "${FRAME_TASK_SHADOWED:-unset}" = "0" ]
-    [ "${FRAME_TODO_SHADOWED:-unset}" = "0" ]
-}
-
-@test "handoff_frame (unreadable legacy files, no root files): not a body — rc 1, FRAME empty, legacy flags 0" {
-    fr="$BATS_TEST_TMPDIR/frame-leg-unreadable"; mkdir -p "$fr"
-    printf '## Current task\n\nlegacy task body\n' > "$fr/legacy-task.md"
-    printf '## Remaining\n\n- legacy item\n' > "$fr/legacy-todo.md"
-    chmod 000 "$fr/legacy-task.md" "$fr/legacy-todo.md"
-    require_read_denied "$fr/legacy-task.md"
-    rc=0; handoff_frame "$fr/task.md" "$fr/todo.md" "$fr/legacy-task.md" "$fr/legacy-todo.md" || rc=$?
-    [ "$rc" -eq 1 ]
-    [ "${FRAME-unset}" = "" ]
-    [ "${FRAME_TASK:-unset}" = "0" ]
-    [ "${FRAME_TODO:-unset}" = "0" ]
-    [ "${FRAME_TASK_LEGACY:-unset}" = "0" ]
-    [ "${FRAME_TODO_LEGACY:-unset}" = "0" ]
-}
-
 # The library is found beside the sourced _lib.sh, so a copy of _lib.sh and its
 # parts in a directory of its own, sourced over the setup's, reads the stub
 # placed beside it. Nothing in production changes for the test.

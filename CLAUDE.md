@@ -47,9 +47,7 @@ restates. It includes a directive to the `gitlore:commit` skill when the
 `gitlore-memory` submodule is dirty (so the plugin needs a gitlore that ships
 that skill) and the commit act under `with-commit`, and ends with the
 `handoff-approved` instruction or the closing line. Parts and order:
-`docs/design/the-checkpoint-directive.md`. `.claude/handoff-task.md` and
-`.claude/handoff-todo.md` are legacy files, read as a fallback while the
-bridge lasts (`.claude/rules/legacy.md`). The mod needs Claude Code >= 2.1.287
+`docs/design/the-checkpoint-directive.md`. The mod needs Claude Code >= 2.1.287
 and does not load under `--safe-mode`, on an older Claude Code or under
 managed settings that omit the plugin; the sweep's note says so. The FR and
 NFR labels: `docs/design.md#requirements`.
@@ -83,7 +81,7 @@ One line each, with the node under `docs/design/` that holds its behaviour.
 - `scripts/_lib.sh` — the one sourced helper: constants, root resolver, lock,
   owner liveness; sources the next three → scoping.md,
   sessions-sharing-a-root.md
-- `scripts/_lib_frame.sh` — `handoff_frame` and its notes → the-write-path.md
+- `scripts/_lib_frame.sh` — `handoff_frame` → the-write-path.md
 - `scripts/_lib_drive.sh` — the sentinel's grammar → the-sentinel.md
 - `scripts/_lib_files.sh` — no-follow reads, replacing writes → scoping.md
 - `scripts/drive-take.sh` — takes this session's `armed` sentinel, prints the

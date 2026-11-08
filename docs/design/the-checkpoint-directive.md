@@ -15,41 +15,26 @@ the procedure for the one cell of that cross product the call is in, and the
 skill bodies state none of it. The parts, each present only under its own
 condition:
 
-1. what the call did to a half's legacy file, one line each: moved to the root
-   name, removed, or ignored because the root file has a body. They are facts
-   about a change already made, so they come first and carry no act;
-2. the memory directive, when the `gitlore-memory` submodule is registered
+1. the memory directive, when the `gitlore-memory` submodule is registered
    and dirty: the dirty listing and one sentence sending the agent to the
    `gitlore:commit` skill, the same text under both commit modes;
-3. the todo boundary (`handoff`) or the SDD ledger nudge (`precompact`),
+2. the todo boundary (`handoff`) or the SDD ledger nudge (`precompact`),
    when a live ledger exists;
-4. the commit act, under `with-commit` — make the commit the request called
+3. the commit act, under `with-commit` — make the commit the request called
    for, including any change to `TASK.md` and `TODO.md`. It names no git verb
    for the commit: the request may be an amend or a fresh commit, and the
    checkpoint cannot tell which. It names the two files because nothing has
    staged them, and, when the memory directive was emitted, the memory gitlink
-   `gitlore:commit` staged, so the commit carries the pointer too. When the
-   call moved or removed a legacy file it leads with the
-   one git line the checkpoint does name, `git -C <root> rm --cached
-   --ignore-unmatch -q -- <path> …`, over those paths alone and
-   never an ignored one, so git records a rename once the files are added.
-   Each path is relative to the root, which `-C` names, so the line runs from
-   any directory. A root holding a backtick or a control character (newline,
-   carriage return, escape, DEL) would end the code span or split the line, so
-   the line gives way to one plain sentence that echoes none of the path and
-   asks for the unstaging by hand with `git rm --cached` from the project
-   root; every other root prints byte for byte as before;
-5. the arming instruction, when the sentinel is held — run
+   `gitlore:commit` staged, so the commit carries the pointer too;
+4. the arming instruction, when the sentinel is held — run
    `handoff-approved`;
-6. the closing line, when it is not — an instruction to end the reply on one
+5. the closing line, when it is not — an instruction to end the reply on one
    quoted line: `Ready to /clear` or `Ready to /compact` when prepared, the
    transition armed and running when the turn ends when driven.
 
 The commit sentence, the arming instruction and the closing line each open
 "Once everything above is done", so none of them lands in a reply that is
-still asking for the memory approval. The git line that may lead the commit act
-opens "Before committing" instead, since it is an act owed whenever the commit
-comes. The closing line is the one where this is not already implied by the
+still asking for the memory approval. The closing line is the one where this is not already implied by the
 hold: an untyped precompact with dirty memory runs nothing, so it is armed
 rather than held, and its closing line follows the approval question
 directly. Ordering the commit before the
