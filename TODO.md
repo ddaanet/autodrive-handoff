@@ -1,3 +1,8 @@
+## Open decisions
+
+- Whether to commit the `TASK.md` rename staged in `/Users/david/code/Archive/2026/raspberrypi` (its legacy `.claude/handoff-task.md`, migrated with `git mv`). It is another repo, so it waits on my human partner's say. Default: commit it there as `docs: move the task file to the root`.
+- Whether to release `dev` now: it carries the legacy-fallback removal since 0.21.2 and has had per-commit review only, not the release review.
+
 ## Remaining
 
 - gitlore 0.11.0 shipped D70 on 2026-10-31, so the `gitlore:commit` skill the memory directive names exists. At the next wrap-up over dirty memory, check that the agent reaches the skill and commits through it, and that the memory commit carries no zero-byte sandbox mask (`git -C memory show --stat HEAD`, unsandboxed).

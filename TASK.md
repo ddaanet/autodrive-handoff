@@ -1,3 +1,5 @@
 ## Current task
 
-None open. The plugin directory refused `dist` at 0.21.2 (submitted 2026-11-06, status "Needs changes") on four blocking `LOCAL_CODE_*` rules: the directory refuses command hooks, mods, `bin/` files and any non-Markdown/text/JSON/YAML/image file from non-Verified organizations, and the portal says there is no way to ask to become one. Removing them removes the plugin, so it stays on the `claude-plugins` marketplace. The submission is left in the portal as is, and the review's text is in `plans/2026-10-15-directory-submission/portal-review-2026-11-06.raw.txt`. The 11 policy holds are only warnings there and no longer worth clearing.
+No implementation task in flight. The plugin directory refused 0.21.2 for a non-Verified organization, so the plugin stays on the `claude-plugins` marketplace; the legacy-path fallback is removed on `dev` and its medium review loop is closed (one doc-drift fix landed; the lows were declined). `dev` has had no release review since 0.21.2.
+
+Next action: put the open decisions in `TODO.md` to my human partner, starting with whether to release `dev` now.
