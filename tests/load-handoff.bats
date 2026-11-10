@@ -214,3 +214,66 @@ ASMTASK
     [ "$(head -n1 "$tmp/.claude/autodrive")" = "armed $SESSION_ID" ]
     echo "$output" | jq -e '.systemMessage | test("pick up") | not' >/dev/null
 }
+
+# A root TASK.md or TODO.md that is a symlink is no body: a repository can
+# commit `TASK.md -> /any/readable/file`, and following it would inject that
+# file at SessionStart. The checkpoint already refuses a root symlink.
+
+# <root name> <link target> — the root file replaced by a link to the target.
+link_root() {
+    rm -f "$tmp/$1"
+    ln -s "$2" "$tmp/$1"
+}
+
+@test "load-handoff (TASK.md is a symlink to a body): not injected" {
+    printf '## Current task\n\nlinked task body\n' > "$other/task.md"
+    link_root TASK.md "$other/task.md"
+    run_load_handoff "$tmp" startup
+    [ "$status" -eq 0 ]
+    split_output "$output"
+    [ "$MSG" = "handoff: No task frame or todo." ]
+    [[ "$CTX" != *"linked task body"* ]]
+}
+
+@test "load-handoff (TODO.md is a symlink to a body): not injected" {
+    rm -f "$tmp/TASK.md"
+    printf '## Remaining\n\n- linked item\n' > "$other/todo.md"
+    link_root TODO.md "$other/todo.md"
+    run_load_handoff "$tmp" startup
+    [ "$status" -eq 0 ]
+    split_output "$output"
+    [ "$MSG" = "handoff: No task frame or todo." ]
+    [[ "$CTX" != *"linked item"* ]]
+}
+
+@test "load-handoff (TASK.md and TODO.md are dangling symlinks): the neither state" {
+    link_root TASK.md "$other/nowhere-task.md"
+    link_root TODO.md "$other/nowhere-todo.md"
+    run_load_handoff "$tmp" startup
+    [ "$status" -eq 0 ]
+    split_output "$output"
+    [ "$MSG" = "handoff: No task frame or todo." ]
+}
+
+# The todo is two days old with a body; the task was written just now but holds
+# only headings. The age is the newest file that counts, so the fresh headings
+# do not make the frame read as just saved.
+@test "load-handoff (age): taken from the files that count, not from a headings-only one" {
+    printf '## Remaining\n\n- old item\n' > "$tmp/TODO.md"
+    touch -d '2 days ago' "$tmp/TODO.md"
+    printf '## Current task\n\n## Open decisions\n' > "$tmp/TASK.md"
+    run_load_handoff "$tmp" clear
+    [ "$status" -eq 0 ]
+    split_output "$output"
+    assert_msg_matches "loaded — [0-9]+ B, saved 2d ago; No task frame"
+    assert_framed "$CTX" $'\n\n## Remaining\n\n- old item\n\nNo task frame.\n'
+}
+
+@test "load-handoff (size formatting: KiB threshold)" {
+    # ~2048 bytes of content so the frame crosses the KiB threshold.
+    python3 -c "print('x' * 2048)" > "$tmp/TASK.md"
+    run_load_handoff "$tmp" clear
+    [ "$status" -eq 0 ]
+    split_output "$output"
+    assert_msg_matches 'loaded — [0-9]+\.[0-9] KiB, saved.*'
+}

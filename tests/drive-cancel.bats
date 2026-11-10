@@ -139,3 +139,36 @@ assert_cancelled() {
     release_drive_lock
     assert_untouched
 }
+
+# The cancel judges the file it finds once the lock is free (sentinel-lock.md).
+# The pending file passes the first test, another actor holds the lock, and the
+# file changes under it: an unlocked read has already seen `pending` and would
+# remove what is there now.
+# <seed lines...> — the replacement written while the cancel waits; none removes
+# the file, as a loader consuming it would.
+cancel_while_file_changes() {
+    seed "pending" "clear continue" "A Title"
+    hold_drive_lock "$tmp"
+    HANDOFF_LOCK_WAIT_SECS=30 bash scripts/drive-cancel.sh "$tmp" sess-hook-test clear \
+        > "$BATS_TEST_TMPDIR/cancel.out" 2>&1 3>&- &
+    cancel_pid=$!
+    wait_until_blocked
+    if (( $# )); then seed "$@"; else rm -f "$tmp/.claude/autodrive"; fi
+    release_drive_lock
+    wait "$cancel_pid"
+}
+
+@test "drive-cancel (a checkpoint replaced the pending file while the cancel waited: the new file is left alone)" {
+    cancel_while_file_changes "armed sess-hook-test" "clear continue" "New Title"
+    [ ! -s "$BATS_TEST_TMPDIR/cancel.out" ]
+    [ "$(head -n1 "$tmp/.claude/autodrive")" = "armed sess-hook-test" ]
+    [ "$(sed -n 3p "$tmp/.claude/autodrive")" = "New Title" ]
+    [ ! -e "$tmp/.claude/autodrive.swept" ]
+}
+
+@test "drive-cancel (a loader removed the pending file while the cancel waited: nothing printed, nothing recorded)" {
+    cancel_while_file_changes
+    [ ! -s "$BATS_TEST_TMPDIR/cancel.out" ]
+    [ ! -e "$tmp/.claude/autodrive" ]
+    [ ! -e "$tmp/.claude/autodrive.swept" ]
+}

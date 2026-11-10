@@ -161,6 +161,36 @@ def test_a_todo_that_cannot_be_read_is_refused_on_edit_naming_the_field(
     assert (repo / "TODO.md").read_text() == TODO_WRITTEN
 
 
+# --- a root file the call does not read stays unread ---
+
+
+@NOT_ROOT
+@pytest.mark.parametrize("todo_action", ["keep", "clear"])
+def test_root_files_that_cannot_be_read_stay_unread_by_keep_and_clear(
+    tmp_path: Path, todo_action: str
+) -> None:
+    """`keep` does not read the list and `clear` only unlinks, so a mode 000
+    file is no reason to fail either (FR4)."""
+    repo = make_repo(tmp_path)
+    (repo / "TASK.md").write_text(TASK_WRITTEN)
+    (repo / "TODO.md").write_text(TODO_WRITTEN)
+    then = 1_700_000_000_000_000_000
+    os.utime(repo / "TODO.md", ns=(then, then))
+    (repo / "TASK.md").chmod(0o000)
+    (repo / "TODO.md").chmod(0o000)
+    todo = todo_keep() if todo_action == "keep" else todo_clear()
+    result = run_checkpoint(repo, frame_payload(task_clear(), todo))
+    assert result.returncode == 0, result.stderr
+    assert not (repo / "TASK.md").exists()
+    if todo_action == "clear":
+        assert not (repo / "TODO.md").exists()
+    else:
+        assert (repo / "TODO.md").stat().st_mode & 0o777 == 0
+        assert (repo / "TODO.md").stat().st_mtime_ns == then
+        (repo / "TODO.md").chmod(0o644)
+        assert (repo / "TODO.md").read_text() == TODO_WRITTEN
+
+
 # --- the write keeps the file's mode ---
 
 
