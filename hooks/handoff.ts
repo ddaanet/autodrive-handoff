@@ -85,16 +85,14 @@ export function register(on: any) {
 // printed nothing. Started by the first caller, synchronously, so the second
 // awaits the same spawn.
 function take($: any, w: Window): Promise<any | null> {
-  if (w.plan === null) w.plan = runTake($, w.cwd, w.session)
+  w.plan ??= (async () => {
+    // A worktree or subdir cwd falls through: the script owns root resolution.
+    if (w.cwd === (await $.session.root()) && !(await $.fs.exists(`${w.cwd}/.claude/autodrive`))) return null
+    const out = await $.process.run(['bash', `${$.plugin.root}/scripts/drive-take.sh`, w.cwd, w.session])
+    if (out.stdout.trim() === '') return null
+    return JSON.parse(out.stdout)
+  })()
   return w.plan
-}
-
-async function runTake($: any, cwd: string, session: string): Promise<any | null> {
-  // A worktree or subdir cwd falls through: the script owns root resolution.
-  if (cwd === (await $.session.root()) && !(await $.fs.exists(`${cwd}/.claude/autodrive`))) return null
-  const out = await $.process.run(['bash', `${$.plugin.root}/scripts/drive-take.sh`, cwd, session])
-  if (out.stdout.trim() === '') return null
-  return JSON.parse(out.stdout)
 }
 
 // The cancel {kind, message, note} of the window's own take, made only when

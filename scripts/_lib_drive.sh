@@ -219,16 +219,6 @@ handoff_drive_lines() {
     fi
 }
 
-# Kinds whose transition is confirmed by a SessionStart. `rename` is not one:
-# no loader consumes it, so drive-take.sh deletes its sentinel outright instead
-# of leaving it pending for nobody to clear.
-handoff_drive_has_source() {
-    case "$1" in
-        compact|clear|prepare) return 0 ;;
-        *) return 1 ;;
-    esac
-}
-
 # Rewrite the sentinel ($1) with $2 as its line 1 — the state, and the owner
 # when the state takes one — preserving every line below the first. Line 1 is
 # the only line any transition changes, so one helper serves them all and none

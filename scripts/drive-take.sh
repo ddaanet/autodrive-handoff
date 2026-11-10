@@ -96,11 +96,10 @@ fi
 [[ "$DRIVE_OWNER" == "$session_id" ]] || exit 0
 
 # `rename` has no confirming SessionStart, so a pending file would never clear.
-if handoff_drive_has_source "$DRIVE_KIND"; then
-    handoff_drive_arm "$drive" pending
-else
-    rm -f "$drive"
-fi
+case "$DRIVE_KIND" in
+    rename) rm -f "$drive" ;;
+    *) handoff_drive_arm "$drive" pending ;;
+esac
 
 # FR-G: nothing to run. The pending state alone is the loader's signal that the
 # frame belongs in this compaction.
