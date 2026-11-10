@@ -8,8 +8,8 @@ call, the whole wrap-up as a schema-validated JSON payload on stdin.
 plain tracked files that nothing stages, and composes the sentinel,
 `.claude/autodrive`; it does no git work (NFR1). As the turn ends, the mod
 (`hooks/handoff.ts`) records the cwd and session id in `classic.Stop`; in
-`turn.complete`, `scripts/drive-take.sh` takes the sentinel this session owns
-and prints the plan, data only (`{kind, arg, continue, failFile, message}`),
+`turn.complete` or at a prompt in the window, `scripts/drive-take.sh` takes
+the sentinel this session owns and prints the plan, data only (`{kind, arg, continue, failFile, message}`),
 and the mod maps the kind to its own literal `$.command.run` calls and, when
 `continue` is true, submits its one literal prompt with `$.prompt.submit`. The
 transition's own

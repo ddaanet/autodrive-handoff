@@ -219,7 +219,7 @@ marker that carries the id and the bounds are in
 ## The sentinel's lock
 
 The sweep and the take can interleave: the host does not order a new prompt's
-`UserPromptSubmit` against the mod's `turn.complete`, which runs the take, so
+`UserPromptSubmit` against the mod's take, which runs at `turn.complete` or at a prompt in the window, so
 a sweep that read `armed` could delete the `pending` file the take had just
 armed. Every actor of the sentinel, the checkpoint, `handoff-approved`,
 `drive-take.sh`, `drive-cancel.sh`, the sweep and the two loaders, holds an advisory lock

@@ -118,8 +118,7 @@ call, and its output is one part, naming the line to end on.
 - Running `/compact` directly, or telling the user to run it under a driven
   transition. The request settled both.
 - Printing the `/compact` line, or the continuation prompt, as something for
-  the user to run. When the drive does not run, the plugin
-  prints the lines itself.
+  the user to run.
 - `"continue": true` for a prepared compaction. Nothing submits it, and the
   checkpoint rejects it.
 - A `rename` field in the checkpoint payload. A rename is

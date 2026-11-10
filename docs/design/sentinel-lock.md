@@ -101,7 +101,10 @@ hooks have a `timeout` of 10 s, the default wait plus 5 s for the hook's own
 work, which `tests/test_drive_lock.py` asserts against the default read from
 `_drive_lock.py`. The mod's `$.process.run` of `drive-take.sh` has the host's
 default timeout of 30 s (the mods API's `ProcessRunInit.timeoutMs`), which
-already covers the wait and the take.
+already covers the wait and the take at `turn.complete`. The take a prompt in
+the window runs from the `prompt.submit` handler shares the host's 10 s
+`prompt.submit` budget with `drive-cancel.sh`
+([Bounds](queued-prompts.md)).
 
 The lock file is created 0600 and never followed through a link
 (`O_NOFOLLOW`); a link put there in the instant between the create and bash's
