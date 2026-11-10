@@ -1,10 +1,10 @@
 #!/usr/bin/env bats
-# Contract rows for scripts/drive-cancel.sh: the mod's answer to a prompt sent
-# after the arming turn's Stop (docs/design/queued-prompts.md). Each row seeds a
-# real .claude/autodrive and runs the real script. A cancel prints the fixture
-# JSON under tests/mod/fixtures/ (@ROOT@ unused: the plan carries no path);
-# every other case prints nothing and leaves the sentinel byte for byte as it
-# was.
+# Contract rows for scripts/drive-cancel.sh: the mod's cancel, for a prompt sent
+# after the arming turn's Stop, of the clear or compact the window's own take
+# left `pending` (docs/design/queued-prompts.md). Each row seeds a real
+# .claude/autodrive and runs the real script. A cancel prints the fixture JSON
+# under tests/mod/fixtures/ (@ROOT@ unused: the plan carries no path); every
+# other case prints nothing and leaves the sentinel byte for byte as it was.
 #
 # Usage: bats tests/drive-cancel.bats   (run from plugin root)
 
@@ -17,19 +17,16 @@ setup() {
     mkdir -p "$tmp/.claude"
     export CLAUDE_PROJECT_DIR="$tmp"
     load lock-helpers
-    load shared-helpers
-
-    CONTINUATION="$(continuation_line)"
-    [ -n "$CONTINUATION" ]
 }
 
 seed() {
     printf '%s\n' "$@" > "$tmp/.claude/autodrive"
 }
 
-# $1 is the session whose prompt arrived, as the mod passes it.
+# $1 is the kind the window's take returned, $2 the session whose prompt
+# arrived, as the mod passes them.
 cancel() {
-    run bash scripts/drive-cancel.sh "$tmp" "${1-sess-hook-test}"
+    run bash scripts/drive-cancel.sh "$tmp" "${2-sess-hook-test}" "${1-clear}"
 }
 
 # A case that cancels nothing: exit 0, empty stdout, sentinel unchanged.
@@ -61,114 +58,67 @@ assert_cancelled() {
     [ ! -e "$tmp/.claude/autodrive.swept" ]
 }
 
-@test "drive-cancel (an owned armed clear: cancelled, recorded as armed)" {
-    seed "armed sess-hook-test" "clear continue" "A Title"
-    cancel
-    assert_cancelled cancel-clear.json armed clear
-    [[ "$(cat "$tmp/.claude/autodrive.swept")" == *$'\towner=sess-hook-test\t'* ]]
-}
-
-@test "drive-cancel (an owned armed compact: cancelled, recorded as armed)" {
-    seed "armed sess-hook-test" "compact continue" "keep the parser work"
-    cancel
-    assert_cancelled cancel-compact.json armed compact
-}
-
 # pending is ownerless: the mod's window is what says it is this session's.
 @test "drive-cancel (a pending clear: cancelled, recorded as pending)" {
     seed "pending" "clear continue" "A Title"
-    cancel
+    cancel clear
     assert_cancelled cancel-clear.json pending clear
+    [[ "$(cat "$tmp/.claude/autodrive.swept")" == *$'\towner=-\t'* ]]
 }
 
 @test "drive-cancel (a pending compact: cancelled, recorded as pending)" {
     seed "pending" "compact continue" "keep the parser work"
-    cancel
+    cancel compact
     assert_cancelled cancel-compact.json pending compact
 }
 
-# A rename is not cancelled: the prompt's turn runs it. The window may have
-# the sweep read the file first, so the script takes it as the take would and
-# prints the take's plan; nothing is recorded, as nothing was cancelled.
-@test "drive-cancel (an owned armed rename: taken, the take's plan printed, no record)" {
-    seed "armed sess-hook-test" rename "Driven Transitions"
-    cancel
-    [ "$status" -eq 0 ]
-    [ "$output" = "$(sed "s|@ROOT@|$tmp|g" "$fixtures/armed-rename.json")" ]
-    [ ! -e "$tmp/.claude/autodrive" ]
-    [ ! -e "$tmp/.claude/autodrive.swept" ]
-}
-
-@test "drive-cancel (another session's armed rename: nothing printed, file untouched)" {
-    seed_and_keep "armed sess-other" rename "Driven Transitions"
-    cancel
+# The take left nothing armed to cancel: an armed file is not this window's.
+@test "drive-cancel (an armed clear, even this session's: nothing printed, file untouched)" {
+    seed_and_keep "armed sess-hook-test" "clear continue" "A Title"
+    cancel clear
     assert_untouched
 }
 
-# The take would move it to pending and print the prepare plan; the
-# window's prompt does the same move and prints nothing, so the sweep that
-# follows leaves the FR-G marker for the hand-typed /compact.
-@test "drive-cancel (FR-G, an owned armed prepare marker: moved to pending, nothing printed)" {
-    seed "armed sess-hook-test" prepare
-    cancel
-    [ "$status" -eq 0 ]
-    [ "$output" = "" ]
-    [ "$(cat "$tmp/.claude/autodrive")" = "pending"$'\n'"prepare" ]
-    [ ! -e "$tmp/.claude/autodrive.swept" ]
-}
-
-@test "drive-cancel (FR-G, a prepare marker moved to pending survives the sweep that follows)" {
-    seed "armed sess-hook-test" prepare
-    cancel
-    export HANDOFF_POINTER_DIR="$BATS_TEST_TMPDIR/pointer"
-    run bash -c 'jq -nc --arg cwd "$1" "{cwd:\$cwd, session_id:\"sess-hook-test\", prompt:\"anything\", prompt_id:\"fresh-prompt\"}" \
-        | bash scripts/report-drive-failure.sh' _ "$tmp"
-    [ "$status" -eq 0 ]
-    [ "$output" = "" ]
-    [ "$(cat "$tmp/.claude/autodrive")" = "pending"$'\n'"prepare" ]
-    [ ! -e "$tmp/.claude/autodrive.swept" ]
-}
-
-@test "drive-cancel (FR-G, another session's armed prepare marker: nothing printed, file untouched)" {
-    seed_and_keep "armed sess-other" prepare
-    cancel
+@test "drive-cancel (a pending file of another kind than the take's: nothing printed, file untouched)" {
+    seed_and_keep "pending" "compact continue" "keep the parser work"
+    cancel clear
     assert_untouched
 }
 
-@test "drive-cancel (FR-G, a prepare marker, pending: nothing printed, file untouched)" {
+@test "drive-cancel (FR-G, a pending prepare marker: nothing printed, file untouched)" {
     seed_and_keep "pending" prepare
-    cancel
+    cancel compact
+    assert_untouched
+}
+
+@test "drive-cancel (a kind other than clear or compact: nothing printed, file untouched)" {
+    seed_and_keep "pending" prepare
+    cancel prepare
     assert_untouched
 }
 
 @test "drive-cancel (held: nothing printed, file untouched)" {
     seed_and_keep "held sess-hook-test" "clear continue" "A Title"
-    cancel
-    assert_untouched
-}
-
-@test "drive-cancel (another session's armed file: nothing printed, file untouched)" {
-    seed_and_keep "armed sess-other" "clear continue" "A Title"
-    cancel
+    cancel clear
     assert_untouched
 }
 
 @test "drive-cancel (an empty session id: nothing printed, file untouched)" {
-    seed_and_keep "armed sess-hook-test" "clear continue" "A Title"
-    cancel ""
+    seed_and_keep "pending" "clear continue" "A Title"
+    cancel clear ""
     assert_untouched
 }
 
 @test "drive-cancel (a malformed file: nothing printed, file untouched)" {
-    seed_and_keep "armed sess-hook-test" bogus-kind
-    cancel
+    seed_and_keep "pending" bogus-kind
+    cancel clear
     assert_untouched
 }
 
 @test "drive-cancel (a link at the sentinel: nothing printed, left for the sweep)" {
     : > "$BATS_TEST_TMPDIR/elsewhere"
     ln -s "$BATS_TEST_TMPDIR/elsewhere" "$tmp/.claude/autodrive"
-    cancel
+    cancel clear
     [ "$status" -eq 0 ]
     [ "$output" = "" ]
     [ -L "$tmp/.claude/autodrive" ]
@@ -176,33 +126,16 @@ assert_cancelled() {
 }
 
 @test "drive-cancel (an unresolved root: nothing printed)" {
-    run bash scripts/drive-cancel.sh "" sess-hook-test
+    run bash scripts/drive-cancel.sh "" sess-hook-test clear
     [ "$status" -eq 0 ]
     [ "$output" = "" ]
 }
 
 # Fails closed, as the take does: a lock held past the wait cancels nothing.
 @test "drive-cancel (the lock is held past the wait: nothing printed, file untouched)" {
-    seed_and_keep "armed sess-hook-test" "clear continue" "A Title"
+    seed_and_keep "pending" "clear continue" "A Title"
     hold_drive_lock "$tmp"
-    HANDOFF_LOCK_WAIT_SECS=0.05 cancel
+    HANDOFF_LOCK_WAIT_SECS=0.05 cancel clear
     release_drive_lock
     assert_untouched
-}
-
-# The take and the cancel serialise on the lock: the cancel that waited sees the
-# file the take left behind.
-@test "drive-cancel (the take moved the file to pending while the cancel waited: it cancels the pending file)" {
-    seed "armed sess-hook-test" "clear continue" "A Title"
-    hold_drive_lock "$tmp"
-    HANDOFF_LOCK_WAIT_SECS=30 bash scripts/drive-cancel.sh "$tmp" sess-hook-test \
-        > "$BATS_TEST_TMPDIR/cancel.out" 2>&1 3>&- &
-    cancel_pid=$!
-    wait_until_blocked
-    sed -i.bak '1s/.*/pending/' "$tmp/.claude/autodrive"
-    release_drive_lock
-    wait "$cancel_pid"
-    [ "$(cat "$BATS_TEST_TMPDIR/cancel.out")" = "$(cat "$fixtures/cancel-clear.json")" ]
-    [ ! -e "$tmp/.claude/autodrive" ]
-    [[ "$(cat "$tmp/.claude/autodrive.swept")" == *$'\tstate=pending\t'* ]]
 }

@@ -107,39 +107,50 @@ continuation usually arrives after the window has closed. When a later `Stop`
 is still unconsumed as it arrives, the continuation opens that later window
 and is treated as a prompt in it, with no check on `e.origin`: skipping it
 would leave the later turn's armed file to the `UserPromptSubmit` sweep, which
-discards it with a false "mod did not load" note. A `rename` there is taken
-and run by that later window's drive; a `clear` or `compact` is cancelled with
-the note, and the agent re-runs the skill. Each window keeps its own state, so
-the outer drive ending clears nothing of the later one.
+discards it with a false "mod did not load" note. The continuation then takes
+the later window's file: a `rename` is run by that window's drive; a `clear`
+or `compact` is cancelled with the note, and the agent re-runs the skill. Each
+window keeps its own state, so the outer drive ending clears nothing of the
+later one.
 
-**The handler.** The first prompt in a window runs `scripts/drive-cancel.sh
-<cwd> <session-id>` and stores the answer as one promise; a later prompt in the
-same window spawns nothing. The script takes the sentinel's lock and cancels
-an `armed` file the session owns, or a `pending` one, when the kind is `clear`
-or `compact`. It records the sweep in
-`.claude/autodrive.swept`, removes the file and prints `{kind, message, note}`;
-the cancel texts are the sweep's own (`_lib_drive.sh`). The handler toasts the
-message and appends the note to the prompt's context. An `armed` `rename` the
-session owns is not cancelled but taken, as `drive-take.sh` would: the script
-removes the file, records nothing and prints the take's plan, with no `note`.
-Left in place it would be swept, because the sweep reads `armed` at the prompt,
-ahead of the take. The prompt passes unchanged and the drive runs that plan
-after the prompt's turn. An `armed` `prepare` the session owns
-(FR-G) is moved to `pending` under the lock, as the take does, and nothing is
-printed: the sweep that follows then spares the marker and a hand-typed
-`/compact` still re-injects the todo. Anything else (a `pending` `prepare`, `held`, another session's file, an unreadable one) prints nothing, the
-file stays and the prompt passes unchanged.
+**The take, once per window.** Whichever comes first in the window, the
+`turn.complete` that starts the drive or the first prompt the handler sees,
+runs `drive-take.sh` and stores the promise of its plan on the window; the
+other awaits the same promise. The fast path (no sentinel at the session root)
+applies to both callers. The take is the one actor that judges the file's
+state, owner and kind: an `armed` `clear` or `compact` this session owns goes
+to `pending`, a `rename` is removed and returned as the plan, a `prepare`
+marker goes to `pending`, and anything else is taken by no one.
 
-**The drive awaits the answer.** The drive awaits that promise straight after the
-take returns, and again before each command the plan's kind runs, and stops
-when it cancelled. The fast path (no sentinel at the session root) skips the
-take, not the answer: the script may just have removed the file. When the
-answer is a rename's plan the drive runs it in place of the take's stdout,
-which is empty if the script won the lock. The promise is set before the handler awaits anything, so a
-prompt that arrives while the take or a `/rename` is in flight is waited for.
-The take may run first and leave `pending`; the cancel then removes it, which
-is why `pending` is cancelled at all. The continuation needs no check: it is
-submitted only if the loop got past the last command.
+**The handler.** The first prompt in a window stores the promise of its cancel
+on the window, before it awaits anything, and a later prompt in the same window
+spawns nothing. The cancel awaits the window's plan and runs
+`scripts/drive-cancel.sh <cwd> <session-id> <kind>` only when that plan's kind
+is `clear` or `compact`, the kinds that left a `pending` file. The script takes
+the sentinel's lock and removes the file only when it is `pending` with that
+kind. It records the sweep in `.claude/autodrive.swept`, removes the file and
+prints `{kind, message, note}`; the cancel texts are the sweep's own
+(`_lib_drive.sh`). The handler toasts the message and appends the note to the
+prompt's context. Every other plan passes the prompt unchanged:
+
+- A `rename` is not cancelled. The take removed it and returned the plan, so
+  the sweep that follows finds nothing, and the drive runs it after the
+  prompt's turn.
+- A `prepare` marker (FR-G) is not cancelled either. The take moved it to
+  `pending`, which the sweep spares, so a hand-typed `/compact` still
+  re-injects the todo.
+- A take that found `pending` (another drive's), `held`, another session's
+  file or nothing took nothing, and the prompt passes.
+- A take that could not take the file (the lock busy, the reader failed) left
+  it `armed` and returned a `kind: null` message. The `UserPromptSubmit` sweep
+  then removes the file as stale; the drive toasts the take's message.
+
+**The drive checks the cancel.** The drive awaits the window's plan, then the
+cancel promise, if a prompt set one, and again before each command the plan's
+kind runs, and stops when it cancelled; a cancelled plan shows no toast. The
+promise is set before the handler awaits anything, so a prompt that arrives
+while the take or a `/rename` is in flight is waited for. The continuation
+needs no check: it is submitted only if the loop got past the last command.
 
 **Why the mod and not a `Stop` record.** A file the sweep reads at
 `UserPromptSubmit` cannot stop a plan the mod already holds in memory, and a
@@ -160,13 +171,17 @@ cancelled.
 - A `Stop` another plugin's hook blocks fires with no `turn.complete` after it,
   so the window stays open through the continued turn, and a prompt there is
   handled as in the window. A `clear` or `compact` is cancelled, as a queued
-  prompt's is. An `armed` `rename` is taken, and the turn's next `Stop` opens a
-  new window that does not hold the plan, so the title is lost with no message
-  (observed once on 2.1.316). This is left as it is: it takes a blocking `Stop`
+  prompt's is. An `armed` `rename` is taken at the prompt, and the turn's next
+  `Stop` opens a new window that does not hold the plan, so the title is lost
+  with no message (observed once on 2.1.316). This is left as it is: it takes a blocking `Stop`
   hook, a rename-only sentinel and a prompt in that turn, and it costs one title.
 - `pending` has no owner ([Sessions sharing a root](sessions-sharing-a-root.md)),
-  so `drive-cancel.sh` cannot tell whose it is. The cancel relies on the mod
-  calling it only inside its own window, in which the file is the session's.
+  so `drive-cancel.sh` cannot tell whose it is. It removes only a `pending`
+  file of the kind its own window's take returned, which that take made. A
+  prompt in a later window, while an earlier drive is still running, cancels
+  nothing: that window's take finds the earlier file `pending` and takes
+  nothing. The prompt is then answered in a context the earlier `/clear`
+  discards, with no toast or record claiming a cancel.
 - Unverified: a prompt reaching `prompt.submit` between the command being
   issued and the host starting it. 0.08 s after the command was too late to hit
   it in the probe.

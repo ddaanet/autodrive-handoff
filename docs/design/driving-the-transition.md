@@ -92,9 +92,9 @@ tests also consume:
 
 The mod skips the spawn on the every-turn path: when the recorded cwd is the
 session's project root and `.claude/autodrive` does not exist, it skips the
-take, though not the answer of a [prompt in the window](queued-prompts.md#a-prompt-after-stop),
-which may be a rename to run. A worktree or subdirectory cwd falls through,
-because the script owns root resolution.
+take, whether the take runs at `turn.complete` or at a [prompt in the
+window](queued-prompts.md#a-prompt-after-stop). A worktree or subdirectory cwd
+falls through, because the script owns root resolution.
 
 ## Running the plan
 

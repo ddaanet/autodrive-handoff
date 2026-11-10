@@ -10,10 +10,11 @@
 # commands and the prompt (docs/design/driving-the-transition.md).
 #
 # The mod never touches the sentinel: this script takes it, through the same
-# parser every other reader uses, so there is no second copy to drift (a prompt
-# in the window reaches drive-cancel.sh, which leaves `armed` under the same
-# lock). Leaving `armed` happens BEFORE the plan is printed, so a later turn
-# cannot take the same transition twice.
+# parser every other reader uses, so there is no second copy to drift. The mod
+# runs it once per window, at turn.complete or at a prompt in the window,
+# whichever comes first; drive-cancel.sh then only removes the `pending` file
+# this take left. Leaving `armed` happens BEFORE the plan is printed, so a later
+# turn cannot take the same transition twice.
 set -euo pipefail
 
 # shellcheck source-path=SCRIPTDIR source=_lib.sh

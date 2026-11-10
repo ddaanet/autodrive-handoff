@@ -7,8 +7,9 @@ The dated records named here are in the `changelog-archive` tag's
 `docs/changelog/`.
 
 The sentinel has six actors that nothing orders: the checkpoint and
-`handoff-approved` write it, `drive-take.sh` takes it at a turn's end,
-`drive-cancel.sh` cancels or takes it for a prompt after `Stop`, the
+`handoff-approved` write it, `drive-take.sh` takes it at a turn's end or at a
+prompt after `Stop`, `drive-cancel.sh` removes the `pending` file that take
+left when the prompt cancels it, the
 prompt-time sweep discards it, and the two `SessionStart` loaders consume
 `pending`. The host does not serialise a new prompt's
 `UserPromptSubmit` hook against the mod's `turn.complete` handler, which runs
@@ -79,8 +80,9 @@ exactly as it was in every case:
   names the lock (`tests/mod/fixtures/lock-busy.json`, `failFile` empty as for
   an unread sentinel); the mod toasts it and runs nothing, and the file stays
   `armed` for the next prompt's sweep.
-- `drive-cancel.sh` prints nothing: the prompt passes, the file stays, and the
-  sweep that follows deals with it.
+- `drive-cancel.sh` prints nothing: the prompt passes and the file stays
+  `pending`, which the sweep spares, so the drive runs the transition the
+  prompt arrived before.
 - The sweep judges nothing (its state `locked`, as `unread` is for a reader that
   could not run): the file is neither read nor removed, no line is
   offered, and both channels say it was not judged because of the lock
@@ -111,8 +113,9 @@ already ignores it. The loaders take it too: the checkpoint replaces whatever
 sentinel is there, `pending` included, so a loader that read `pending` and then
 removed it could remove a checkpoint's new file unread. The lock orders the
 actors; it does not order a person's prompt against them. A prompt sent after
-the arming turn's `Stop` is ordered by the mod instead, which asks
-`drive-cancel.sh`, an actor that takes this lock like the others
+the arming turn's `Stop` is ordered by the mod instead, which runs the take
+at the prompt and asks `drive-cancel.sh`, an actor that takes this lock like
+the others
 ([A prompt after `Stop`](queued-prompts.md#a-prompt-after-stop)).
 Rows, none of which sleeps or polls. An ordering row holds the lock from a
 background process (`tests/lock_holder.py`, which takes it through

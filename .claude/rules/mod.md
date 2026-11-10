@@ -22,8 +22,10 @@ Behaviour lives in `docs/design/driving-the-transition.md`; read it first.
 - A hooks module may pass `$` only to top-level functions (a static check at
   load).
 - The mod reads neither the sentinel nor the prompt box: it runs
-  `drive-take.sh` and executes the plan on its stdout, and a prompt in the
-  window after `Stop` runs `drive-cancel.sh` once.
+  `drive-take.sh` once per window, at `turn.complete` or at a prompt in the
+  window after `Stop`, whichever comes first, and executes the plan on its
+  stdout; the first such prompt runs `drive-cancel.sh` once, only for a
+  `clear` or `compact` plan.
 - The plan is data: `{kind, arg, continue, failFile, message}`. Every command
   name and the one prompt are literals in `hooks/handoff.ts` (`commandsFor`,
   `CONTINUATION`); a plan field is an argument, never a command or text to
@@ -53,7 +55,9 @@ Behaviour lives in `docs/design/driving-the-transition.md`; read it first.
   rejection, dropping the consume-once reset, skipping the fast path, the
   cancel check before each command, closing the window before the last
   command, a drive clearing only its own window at its end and at the last
-  command, the window's answer living on the window, an unknown kind running
+  command, the window's cancel living on the window, the take shared between
+  the prompt and the drive, the cancel gated on the window's own take (a prompt
+  in a later window cancelling nothing), an unknown kind running
   nothing, `continue` false submitting nothing) are mutation-checked, not
   observed passing. A new load-bearing row is too.
 - Run `just mod-smoke` whenever the mod, a loader or the sentinel's shape

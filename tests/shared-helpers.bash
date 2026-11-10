@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2154   # $tmp, $prompt_marker and $repo_root are set by the file that sources or loads this
-# Helpers shared by bats files whose setup is not common: drive-take.bats and
-# drive-cancel.bats (`load shared-helpers` in their setup),
+# Helpers shared by bats files whose setup is not common: drive-take.bats
+# (`load shared-helpers` in its setup),
 # inject-checkpoint-root.bats and hook-helpers.bash (each `source`s this at its
 # top, under a `# shellcheck source-path=SCRIPTDIR source=shared-helpers.bash`
 # line).

@@ -336,7 +336,7 @@ _handoff_drive_plan_json() {
 }
 
 # handoff_drive_plan <failFile>: print the plan of a taken transition
-# (drive-take.sh's, and drive-cancel.sh's for a rename) as one line of JSON
+# (drive-take.sh's) as one line of JSON
 # {kind, arg, continue, failFile, message}: data only, with `kind`, `arg` and
 # `continue` read from DRIVE_KIND, DRIVE_ARG and DRIVE_CONTINUE
 # (`continue` a JSON boolean). The mod maps `kind` to its own commands; the

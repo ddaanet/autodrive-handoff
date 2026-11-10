@@ -90,8 +90,8 @@ One line each, with the node under `docs/design/` that holds its behaviour.
   driving-the-transition.md
 - `scripts/load-compact.sh` — `SessionStart(compact)` loader →
   driving-the-transition.md
-- `scripts/drive-cancel.sh` — the mod's `prompt.submit` cancel of a clear or
-  compact, and take of a rename → queued-prompts.md
+- `scripts/drive-cancel.sh` — the mod's `prompt.submit` cancel of the clear
+  or compact its window's take left `pending` → queued-prompts.md
 - `scripts/report-drive-failure.sh` — `UserPromptSubmit`: failure report,
   sweep, drift note → driving-the-transition.md, queued-prompts.md,
   sessions-sharing-a-root.md
