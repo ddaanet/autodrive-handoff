@@ -188,7 +188,13 @@ cancelled.
   issued and the host starting it. 0.08 s after the command was too late to hit
   it in the probe.
 - The handler failing (the spawn rejecting, output that is not JSON) falls back
-  to the racy outcomes above.
+  to the racy outcomes above. So does a handler that runs past the host's 10 s
+  `prompt.submit` budget, which skips the hook (observed on 2.1.322,
+  [the live run](../../plans/reports/2026-11-10-cancel-from-the-take-live-run.md)).
+  The handler waits on the take's lock, then on the cancel's. The take releases
+  the lock when it exits, and the cancel runs only after a take that got it, so
+  the two waits add up only if another actor takes the lock between them and
+  holds it for seconds.
 - The `prompt.submit` hook was probed on 2.1.316 and the oldest version
   installed here is 2.1.310; a Claude Code older than that is unprobed, while
   the stated minimum is 2.1.287.

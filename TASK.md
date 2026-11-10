@@ -1,5 +1,5 @@
 ## Current task
 
-No implementation task in flight. The plugin directory refused 0.21.2 for a non-Verified organization, so the plugin stays on the `claude-plugins` marketplace; the legacy-path fallback is removed on `dev` and its medium review loop is closed (one doc-drift fix landed; the lows were declined). `dev` has had no release review since 0.21.2.
+No implementation task in flight. The prompt-after-Stop cancel rework (plans/2026-11-10-cancel-from-the-take.md) landed on dev with its medium review closed and a live tmux run passing for clear and rename (plans/reports/2026-11-10-cancel-from-the-take-live-run.md). dev has had no release review since 0.21.2.
 
-Next action: put the open decisions in `TODO.md` to my human partner, starting with whether to release `dev` now.
+Next action: put the release decision in TODO.md to my human partner, defaulting to running /release-ritual.
