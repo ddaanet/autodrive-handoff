@@ -173,8 +173,7 @@ stderr — fix the payload and retry.
 - Asking whether to clear, or telling the user to run `/clear`, under a
   driven transition. The request settled both.
 - Printing the `/clear` line, or the continuation prompt, as something for
-  the user to run. When the drive does not run, the
-  plugin prints the lines itself.
+  the user to run.
 
 ## Additional resources
 

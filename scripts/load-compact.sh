@@ -82,9 +82,7 @@ fi
 # SessionStart(startup|clear). The checkpoint removes the task file at this
 # boundary, so one with a body was written by hand since, and is injected too.
 # The message is about the todo either way.
-handoff_frame "$cwd/$HANDOFF_REL_TASK" "$cwd/$HANDOFF_REL_TODO" \
-    "$cwd/$HANDOFF_LEGACY_REL_TASK" "$cwd/$HANDOFF_LEGACY_REL_TODO" || true
-handoff_frame_notes
+handoff_frame "$cwd/$HANDOFF_REL_TASK" "$cwd/$HANDOFF_REL_TODO" || true
 
 if (( FRAME_TODO )); then
     msg="handoff: compacted — todo re-injected"
@@ -92,15 +90,7 @@ else
     msg="handoff: compacted — No todo"
 fi
 
-# A half read from a legacy path, or a legacy file left unread beside a root
-# one, is named on both channels, the same notes as load-handoff.sh.
 context="$FRAME"
-for note in ${FRAME_NOTES_CTX[@]+"${FRAME_NOTES_CTX[@]}"}; do
-    context+=$'\n\n'"$note"
-done
-for note in ${FRAME_NOTES_MSG[@]+"${FRAME_NOTES_MSG[@]}"}; do
-    msg+="; $note"
-done
 # A sentinel left because its lock could not be taken is named on both channels.
 if (( lock_rc != 0 )); then
     lock_ctx="The transition state ($HANDOFF_REL_DRIVE) was left in place, not consumed: $HANDOFF_LOCK_MSG."

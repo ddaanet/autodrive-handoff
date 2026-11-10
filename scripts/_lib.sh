@@ -22,15 +22,6 @@ HANDOFF_REL_TASK="TASK.md"
 # shellcheck disable=SC2034
 HANDOFF_REL_TODO="TODO.md"
 
-# The paths the task and todo files lived at before they moved to the project
-# root. The loaders read them as a fallback and the checkpoint moves a file off
-# them, and this pair is the one marker for that fallback: `grep -rni legacy`
-# over scripts/ and tests/ lists all of it. It goes once no sibling repository
-# still has a `.claude/handoff-*.md`.
-# shellcheck disable=SC2034
-HANDOFF_LEGACY_REL_TASK=".claude/handoff-task.md"
-# shellcheck disable=SC2034
-HANDOFF_LEGACY_REL_TODO=".claude/handoff-todo.md"
 # The transition. One session, at most one transition in flight —
 # so one file, whose *body* names both the transition and where it has got to.
 # Line 1 is the state (armed -> pending -> gone), line 2 the kind. See

@@ -17,9 +17,10 @@
 //
 // A prompt a person sends after the Stop and before the transition command is
 // issued would be answered in a context the transition then discards. The
+// window takes once, at the first of turn.complete or such a prompt; the
 // prompt.submit handler asks scripts/drive-cancel.sh, once per window, to cancel
-// a clear or compact, and takes a rename; the drive checks the answer before each command it issues
-// (docs/design/queued-prompts.md).
+// the clear or compact that take left pending, and the drive checks the cancel
+// before each command it issues (docs/design/queued-prompts.md).
 
 // The one prompt this mod submits, after a driven transition whose plan says
 // continue. tests/test_mod_fixtures.py pins it to HANDOFF_CONTINUATION in
@@ -29,20 +30,27 @@ const CONTINUATION = 'Continue where the previous context stopped.'
 // One window per Stop: it opens at classic.Stop (`stopped`), turn.complete moves
 // it to `driving` and hands it to drive(), and it closes when the transition
 // command is issued or the drive ends. A prompt typed while it is open would be
-// answered in a context the transition then discards. `asked` is the window's
-// one drive-cancel answer, parsed, or null when the script printed nothing or
-// failed; with a `note` it cancelled the transition, without it is the plan of
-// a rename it took (docs/design/queued-prompts.md). A later turn's Stop can
-// open the next window before this drive ends, so a drive touches only its own.
+// answered in a context the transition then discards. `plan` is the window's one
+// take, made by whichever of turn.complete or a prompt in the window comes
+// first; `cancelled` is its one drive-cancel answer, made only for a clear or
+// compact that take moved to pending, null when nothing was cancelled
+// (docs/design/queued-prompts.md). A later turn's Stop can open the next window
+// before this drive ends, so a drive touches only its own, and a later window's
+// take finds this one's file pending and takes nothing.
 // A Stop another plugin's hook blocked leaves the window open while the turn
 // goes on, and the next Stop replaces it (a bound, in the same node).
-type Window = { cwd: string; session: string; asked: Promise<any | null> | null }
+type Window = {
+  cwd: string
+  session: string
+  plan: Promise<any | null> | null
+  cancelled: Promise<any | null> | null
+}
 let stopped: Window | null = null
 let driving: Window | null = null
 
 export function register(on: any) {
   on('classic.Stop', async ($: any, e: any, next: any) => {
-    stopped = { cwd: e.cwd, session: e.session_id ?? '', asked: null }
+    stopped = { cwd: e.cwd, session: e.session_id ?? '', plan: null, cancelled: null }
     return next(e)
   })
 
@@ -64,20 +72,38 @@ export function register(on: any) {
     const w = stopped ?? driving
     if (w === null || e.command || e.isMeta) return next(e)
     // Set before anything is awaited, so the drive loop waits for this answer.
-    const first = w.asked === null
-    if (first) w.asked = askCancel($, w.cwd, w.session)
-    const answer = await w.asked
+    const first = w.cancelled === null
+    if (first) w.cancelled = cancelTaken($, w)
+    const answer = await w.cancelled
     if (!first || !answer?.note) return next(e)
     $.ui.toast(answer.message)
     return next({ ...e, context: [...(e.context ?? []), answer.note] })
   })
 }
 
-// The cancel plan {kind, message, note}, or null when drive-cancel.sh printed
-// nothing or anything failed: the sweep and the drive then behave as without it.
-async function askCancel($: any, cwd: string, session: string): Promise<any | null> {
+// The window's one take: the promise of drive-take.sh's plan, or null when it
+// printed nothing. Started by the first caller, synchronously, so the second
+// awaits the same spawn.
+function take($: any, w: Window): Promise<any | null> {
+  w.plan ??= (async () => {
+    // A worktree or subdir cwd falls through: the script owns root resolution.
+    if (w.cwd === (await $.session.root()) && !(await $.fs.exists(`${w.cwd}/.claude/autodrive`))) return null
+    const out = await $.process.run(['bash', `${$.plugin.root}/scripts/drive-take.sh`, w.cwd, w.session])
+    if (out.stdout.trim() === '') return null
+    return JSON.parse(out.stdout)
+  })()
+  return w.plan
+}
+
+// The cancel {kind, message, note} of the window's own take, made only when
+// that take left a clear or compact pending; null when it took anything else,
+// or drive-cancel.sh printed nothing, or anything failed: the sweep and the
+// drive then behave as without it.
+async function cancelTaken($: any, w: Window): Promise<any | null> {
   try {
-    const out = await $.process.run(['bash', `${$.plugin.root}/scripts/drive-cancel.sh`, cwd, session])
+    const plan = await take($, w)
+    if (plan?.kind !== 'clear' && plan?.kind !== 'compact') return null
+    const out = await $.process.run(['bash', `${$.plugin.root}/scripts/drive-cancel.sh`, w.cwd, w.session, plan.kind])
     if (out.stdout.trim() === '') return null
     return JSON.parse(out.stdout)
   } catch {
@@ -86,23 +112,10 @@ async function askCancel($: any, cwd: string, session: string): Promise<any | nu
 }
 
 async function drive($: any, w: Window) {
-  const { cwd, session } = w
-  const sentinel = `${cwd}/.claude/autodrive`
-  // A worktree or subdir cwd falls through: the script owns root resolution.
-  const fast = cwd === (await $.session.root()) && !(await $.fs.exists(sentinel))
-
-  let stdout = ''
-  if (!fast) stdout = (await $.process.run(['bash', `${$.plugin.root}/scripts/drive-take.sh`, cwd, session])).stdout
-  // The fast path does not skip this: drive-cancel.sh may just have removed the
-  // file, or won the lock and left the take nothing. Its answer is a rename's
-  // plan unless it cancelled.
-  const answer = await w.asked
-  if (answer?.note) return
-  let plan = answer
-  if (plan === null) {
-    if (stdout.trim() === '') return
-    plan = JSON.parse(stdout)
-  }
+  const plan = await take($, w)
+  if (plan === null) return
+  if (w.cancelled !== null && (await w.cancelled)?.note) return
+  const { session } = w
   $.ui.toast(plan.message)
   // A Stop with no session id: drive-take.sh took nothing and said so. Recorded
   // like a rejected command, so the next prompt reports it rather than it passing
@@ -117,7 +130,7 @@ async function drive($: any, w: Window) {
     const { command, args } = steps[i]
     // Read before any yield: with no prompt yet, nothing is awaited between
     // this read and issuing the command.
-    if (w.asked !== null && (await w.asked)?.note) return
+    if (w.cancelled !== null && (await w.cancelled)?.note) return
     // The window closes as the last command is issued: a prompt after it is
     // held by the host and answered in the new context, and the sentinel must
     // stay pending for the loader.

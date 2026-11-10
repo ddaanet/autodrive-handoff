@@ -86,7 +86,7 @@ handoff_drive_read() {
     # at it is refused too. Every caller takes its malformed path, whose
     # `rm -f` removes the link and not what it names. The bound is the last
     # component: a symlinked `.claude/` is read and written where it points,
-    # as the root and legacy files are, and one shared between roots is
+    # as the root files are, and one shared between roots is
     # unsupported (docs/design/sessions-sharing-a-root.md).
     local read_status=""
     {
@@ -219,16 +219,6 @@ handoff_drive_lines() {
     fi
 }
 
-# Kinds whose transition is confirmed by a SessionStart. `rename` is not one:
-# no loader consumes it, so drive-take.sh deletes its sentinel outright instead
-# of leaving it pending for nobody to clear.
-handoff_drive_has_source() {
-    case "$1" in
-        compact|clear|prepare) return 0 ;;
-        *) return 1 ;;
-    esac
-}
-
 # Rewrite the sentinel ($1) with $2 as its line 1 — the state, and the owner
 # when the state takes one — preserving every line below the first. Line 1 is
 # the only line any transition changes, so one helper serves them all and none
@@ -336,7 +326,7 @@ _handoff_drive_plan_json() {
 }
 
 # handoff_drive_plan <failFile>: print the plan of a taken transition
-# (drive-take.sh's, and drive-cancel.sh's for a rename) as one line of JSON
+# (drive-take.sh's) as one line of JSON
 # {kind, arg, continue, failFile, message}: data only, with `kind`, `arg` and
 # `continue` read from DRIVE_KIND, DRIVE_ARG and DRIVE_CONTINUE
 # (`continue` a JSON boolean). The mod maps `kind` to its own commands; the

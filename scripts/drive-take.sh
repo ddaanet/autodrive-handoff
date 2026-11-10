@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # drive-take.sh <cwd> <session-id>: take this session's armed transition and
-# print the plan the mod runs. Called by the mod at turn.complete after
+# print the plan the mod runs. Called by the mod, once per window, after
 # a Stop, with the Stop event's cwd and session id. Exit 0 always; empty stdout
 # means nothing was armed for this session (no file, `pending`, `held`, or
 # `armed` by another session); an `armed` file with no session id given is a
@@ -10,10 +10,11 @@
 # commands and the prompt (docs/design/driving-the-transition.md).
 #
 # The mod never touches the sentinel: this script takes it, through the same
-# parser every other reader uses, so there is no second copy to drift (a prompt
-# in the window reaches drive-cancel.sh, which leaves `armed` under the same
-# lock). Leaving `armed` happens BEFORE the plan is printed, so a later turn
-# cannot take the same transition twice.
+# parser every other reader uses, so there is no second copy to drift. The mod
+# runs it once per window, at turn.complete or at a prompt in the window,
+# whichever comes first; drive-cancel.sh then only removes the `pending` file
+# this take left. Leaving `armed` happens BEFORE the plan is printed, so a later
+# turn cannot take the same transition twice.
 set -euo pipefail
 
 # shellcheck source-path=SCRIPTDIR source=_lib.sh
@@ -95,11 +96,10 @@ fi
 [[ "$DRIVE_OWNER" == "$session_id" ]] || exit 0
 
 # `rename` has no confirming SessionStart, so a pending file would never clear.
-if handoff_drive_has_source "$DRIVE_KIND"; then
-    handoff_drive_arm "$drive" pending
-else
-    rm -f "$drive"
-fi
+case "$DRIVE_KIND" in
+    rename) rm -f "$drive" ;;
+    *) handoff_drive_arm "$drive" pending ;;
+esac
 
 # FR-G: nothing to run. The pending state alone is the loader's signal that the
 # frame belongs in this compaction.

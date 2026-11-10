@@ -129,7 +129,7 @@ plugin's own `scripts/` and `bin/`, plus coreutils and read-only `git`.
 | `UserPromptSubmit` hook | `bash scripts/report-drive-failure.sh` | report a failed or stale transition, cancel one a prompt arrived before, note session-root drift |
 | `PreToolUse(Write\|Edit)` hook | `bash scripts/write-guard.sh` | deny writes to `.claude/autodrive` |
 | `PreToolUse(Bash)` hook | `bash scripts/inject-checkpoint-root.sh` | see below |
-| Mod, at a prompt after your turn ended | `bash <plugin>/scripts/drive-cancel.sh <cwd> <session-id>` | cancel a `/clear` or `/compact` your prompt arrived before (a `/rename` is taken and still runs) |
+| Mod, at a prompt after your turn ended | `bash <plugin>/scripts/drive-take.sh <cwd> <session-id>`, then `bash <plugin>/scripts/drive-cancel.sh <cwd> <session-id> <kind>` | take the armed transition, then cancel a `/clear` or `/compact` your prompt arrived before (a `/rename` still runs) |
 | Mod, at turn end | `bash <plugin>/scripts/drive-take.sh <cwd> <session-id>` | take the armed transition |
 | Agent's Bash tool | `handoff-checkpoint`, `handoff-approved` | write the files; release a held transition |
 
@@ -210,7 +210,6 @@ run is denied). To run the checkpoint without a prompt, allow all three in
 | `.claude/autodrive.lock` | an empty lock file, mode 0600, held while the plugin reads or changes `.claude/autodrive`; never deleted |
 | `.claude/autodrive.failed` | written by the mod when a command is rejected; consumed at your next prompt |
 | `.claude/autodrive.swept` | one line per stale or cancelled transition file removed; last 50 kept |
-| `.claude/handoff-todo.md`, `.claude/handoff-task.md` | files from an earlier version of the plugin; `handoff-checkpoint` moves the todo to `TODO.md` or removes either, and nothing else touches them |
 | `/tmp/claude/handoff-drift-<session id>` | marker so a session-root drift note appears once; `/tmp/claude` is created mode 0700 and markers older than 7 days are deleted |
 | `/tmp/claude/handoff-prompt-<session id>` | the id of the turn that last ran `handoff-checkpoint` or `handoff-approved`; written by the `PreToolUse(Bash)` hook, read by the prompt hook, deleted after 7 days |
 

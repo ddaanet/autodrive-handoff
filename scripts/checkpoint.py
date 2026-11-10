@@ -8,14 +8,11 @@ tagged union — content, or an object naming an action (FR5) — to `TASK.md` a
 output (FR9). Only `handoff` carries a `task`; `precompact` forbids the key and
 removes any task file on disk. The sentinel and the directive composition live
 here; validating the payload lives in _checkpoint_payload.py, and resolving the
-two halves to file plans, the legacy migration included, and applying them in
-_checkpoint_plan.py.
+two halves to file plans and applying them in _checkpoint_plan.py.
 
 NFR1: nothing here mutates git state — this is the agent's sandboxed Bash, and
-both files are plain tracked files whichever commit comes next picks up. A file
-left at a legacy path is renamed or removed on the filesystem, and what the next
-commit owes git for it is printed, not run. At turn end the sentinel is taken by
-scripts/drive-take.sh and run by the drive mod.
+both files are plain tracked files whichever commit comes next picks up. At turn
+end the sentinel is taken by scripts/drive-take.sh and run by the drive mod.
 
 Port of checkpoint.sh. The composer reads its own sentinel back through
 handoff_drive_read, which stays the single bash implementation of the sentinel
@@ -110,8 +107,7 @@ def main() -> int:
             root, transition, continuation=continuation, owner=owner, held=held
         )
     ending = Ending(held=held, typed=transition.typed)
-    boundary = Boundary(skill, root, commit_mode)
-    parts = compose_directives(boundary, memory, ending, plans)
+    parts = compose_directives(skill, root, commit_mode, memory, ending)
     print_output(parts)
     return 0
 
@@ -332,48 +328,31 @@ class Ending(NamedTuple):
     typed: bool
 
 
-class Boundary(NamedTuple):
-    """The boundary this call serves: its skill, root and commit mode."""
-
-    skill: str
-    root: Path
-    commit_mode: str
-
-
 def compose_directives(
-    boundary: Boundary,
+    skill: str,
+    root: Path,
+    commit_mode: str,
     memory: str,
     ending: Ending,
-    plans: list[planning.FilePlan],
 ) -> list[str]:
     """Return the ordered, non-empty directive parts for this boundary.
 
-    Print order: the legacy reports, then the memory directive (`memory`, "" when
-    nothing is owed), then the todo boundary/SDD nudge, then the commit act
-    (present only under "with-commit", naming the memory gitlink when memory is
-    owed), then either the arming instruction (held) or the closing line (not
-    held) — always last, and mutually exclusive. [] under autoname. The act that
-    stages the legacy paths and the reports both name them relative to the root.
+    Print order: the memory directive (`memory`, "" when nothing is owed), then
+    the todo boundary/SDD nudge, then the commit act (present only under
+    "with-commit", naming the memory gitlink when memory is owed), then either
+    the arming instruction (held) or the closing line (not held) — always last,
+    and mutually exclusive. [] under autoname.
     """
-    skill, root, commit_mode = boundary
     if skill not in ("handoff", "precompact"):
         return []
-    reports = planning.legacy_reports(plans)
-    gone = [
-        plan.legacy.rel
-        for plan in plans
-        if plan.legacy is not None and plan.legacy.fate != "ignored"
-    ]
     with_commit = commit_mode == "with-commit"
     root_s = str(root)
     if skill == "handoff":
         second = lib.todo_boundary(root_s)
     else:
         second = lib.sdd_directive(root_s)
-    commit = (
-        lib.commit_directive(root_s, gone, memory=bool(memory)) if with_commit else ""
-    )
-    parts = [part for part in (reports, memory, second, commit) if part]
+    commit = lib.commit_directive(memory=bool(memory)) if with_commit else ""
+    parts = [part for part in (memory, second, commit) if part]
     if ending.held:
         parts.append(lib.arming_directive())
     else:
