@@ -102,6 +102,11 @@ What this fixes and removes:
    behaviour too, not a regression. The difference is that the take now
    returns a `kind: null` message, which the drive toasts. Default: leave it
    as it is.
+
+   > **Corrected at review, 2026-11-10.** "The `UserPromptSubmit` sweep then
+   > removes it as stale" holds only when the sweep can read the file.
+   > `report-drive-failure.sh` leaves a file it cannot lock (`locked`) or read
+   > (`unread`) in place for a later prompt. The default still stands.
 3. **The blocked-`Stop` bound.** A rename taken in a window that the next
    `Stop` replaces still loses its title, as today. Default: unchanged.
 

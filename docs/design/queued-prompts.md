@@ -142,8 +142,10 @@ prompt's context. Every other plan passes the prompt unchanged:
 - A take that found `pending` (another drive's), `held`, another session's
   file or nothing took nothing, and the prompt passes.
 - A take that could not take the file (the lock busy, the reader failed) left
-  it `armed` and returned a `kind: null` message. The `UserPromptSubmit` sweep
-  then removes the file as stale; the drive toasts the take's message.
+  it `armed` and returned a `kind: null` message, which the drive toasts. The
+  `UserPromptSubmit` sweep then judges the file as any `armed` one: a lock it
+  cannot take or a reader that fails leaves it in place for a later prompt,
+  and a file it reads is swept as stale.
 
 **The drive checks the cancel.** The drive awaits the window's plan, then the
 cancel promise, if a prompt set one, and again before each command the plan's
