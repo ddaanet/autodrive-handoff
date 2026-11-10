@@ -12,8 +12,8 @@ prompt after `Stop`, `drive-cancel.sh` removes the `pending` file that take
 left when the prompt cancels it, the
 prompt-time sweep discards it, and the two `SessionStart` loaders consume
 `pending`. The host does not serialise a new prompt's
-`UserPromptSubmit` hook against the mod's `turn.complete` handler, which runs
-the take (observed: [the queued-prompt
+`UserPromptSubmit` hook against the mod's take, which runs at `turn.complete`
+or at a prompt in the window (observed: [the queued-prompt
 report](../../plans/reports/2026-10-16-queued-prompt-with-clear-compact.md),
 variant 2, the next turn starting while the take runs). The sweep read `armed`
 once and later removed the file with no second look, so this interleaving was

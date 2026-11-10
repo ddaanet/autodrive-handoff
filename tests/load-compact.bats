@@ -158,6 +158,7 @@ link_root() {
     seed_pending "$tmp" "compact continue"
     run_load_compact "$tmp"
     [ "$status" -eq 0 ]
+    [ ! -e "$tmp/.claude/autodrive" ]
     split_output "$output"
     [ "$MSG" = "handoff: compacted — No todo." ]
     [ "$CTX" = "" ]
@@ -169,6 +170,7 @@ link_root() {
     seed_pending "$tmp" "compact continue"
     run_load_compact "$tmp"
     [ "$status" -eq 0 ]
+    [ ! -e "$tmp/.claude/autodrive" ]
     split_output "$output"
     [ "$MSG" = "handoff: compacted — No todo." ]
     [ "$CTX" = "" ]

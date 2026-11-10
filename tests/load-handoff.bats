@@ -260,7 +260,7 @@ link_root() {
 # do not make the frame read as just saved.
 @test "load-handoff (age): taken from the files that count, not from a headings-only one" {
     printf '## Remaining\n\n- old item\n' > "$tmp/TODO.md"
-    touch -d '2 days ago' "$tmp/TODO.md"
+    python3 -I -c 'import os,sys,time; t=time.time()-2*86400; os.utime(sys.argv[1],(t,t))' "$tmp/TODO.md"
     printf '## Current task\n\n## Open decisions\n' > "$tmp/TASK.md"
     run_load_handoff "$tmp" clear
     [ "$status" -eq 0 ]
