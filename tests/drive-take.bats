@@ -75,13 +75,12 @@ take() {
     cmp "$BATS_TEST_TMPDIR/sentinel.before" "$tmp/.claude/autodrive"
 }
 
-# A lock that cannot be set up (a link at its name) is told apart from a busy
+# A lock that cannot be set up (the helper fails) is told apart from a busy
 # one, and fails closed the same way.
-@test "drive-take (a link at the lock: nothing taken, file untouched, the plan says the lock could not be set up)" {
+@test "drive-take (the lock helper fails: nothing taken, file untouched, the plan says the lock could not be set up)" {
     seed "$tmp" "armed sess-hook-test" "compact continue" "keep the parser work"
     cp "$tmp/.claude/autodrive" "$BATS_TEST_TMPDIR/sentinel.before"
-    : > "$BATS_TEST_TMPDIR/elsewhere"
-    ln -s "$BATS_TEST_TMPDIR/elsewhere" "$tmp/.claude/autodrive.lock"
+    fail_lock_helper
     take "$tmp"
     [ "$status" -eq 0 ]
     echo "$output" | jq -e '(.kind == null and .arg == "" and .continue == false) and .failFile == ""

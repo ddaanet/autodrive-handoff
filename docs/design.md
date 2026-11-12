@@ -311,6 +311,7 @@ Ruled out, each argued in
 - **A reviewer agent for the handoff task, or for memory destinations, for now**
 - **An agent-authored continuation prompt**
 - **A shared reference file both boundary skills read on every call**
+- **Deleting the lock file with the sentinel**, **a lock outside the tree**
 
 ## Non-goals
 

@@ -31,10 +31,10 @@ HANDOFF_REL_TODO="TODO.md"
 HANDOFF_REL_DRIVE=".claude/autodrive"
 # The advisory lock the sentinel's actors hold across a read-decide-write
 # (_drive_lock.py; docs/design/driving-the-transition.md, "The sentinel's lock").
-# Beside the sentinel, under the `.claude/autodrive*` ignore, and never removed.
-# Mirrored in checkpoint.py.
+# It is taken on the `.claude/` directory itself, which holds the sentinel, so no
+# lock file exists. Mirrored in checkpoint.py.
 # shellcheck disable=SC2034
-HANDOFF_REL_DRIVE_LOCK=".claude/autodrive.lock"
+HANDOFF_REL_DRIVE_LOCK_DIR=".claude"
 # Where the drive mod records a line it could not run (written from
 # the mod at the failing line). A mod's rejection goes nowhere on its
 # own, so this is the only path back to the agent; consumed and reported by
@@ -84,33 +84,28 @@ handoff_owner_live() {
 # closes, and says why with HANDOFF_LOCK_MSG, which this sets on every failure.
 # Two returns tell the causes apart: 1 is `busy`, the wait bound passed with
 # another actor still holding the lock (HANDOFF_LOCK_WAIT_SECS, default 5); 2 is
-# `unavailable`, a lock that could not be set up at all (no `.claude/`, a link
-# or a non-file at the name, python3 or the helper failing, a file system with
+# `unavailable`, a lock that could not be set up at all (no `.claude/`, a
+# non-directory at its name, python3 or the helper failing, a file system with
 # no flock). Callers under `set -e` write `lock_rc=0; handoff_lock_take … ||
 # lock_rc=$?`. Call it directly, never in a `$(...)`: the message and the lock
 # itself are the caller's shell's.
 #
 # fd 9 is the lock's, and a script that calls this must not use it. A lock lives
 # on an open file description, which a child shares with the descriptor its
-# parent opened, so bash opens fd 9 on the file, `_drive_lock.py wait` takes
-# the lock on it from a child, and the lock stays with the shell's descriptor
-# after that child is gone. `create` makes the file first, 0600 and
-# O_NOFOLLOW, which bash's own redirection could not promise, and is skipped
-# once a regular file is there (the lock file is never deleted, so after the
-# first take that is the usual case: one spawn instead of two). `wait` checks
-# that fd 9 is still the regular file the path names, which is the whole of the
-# safety `create` adds for a file already there. Read-write so that opening a
-# FIFO put there in the meantime cannot block. `wait` exits 75 for busy and
-# anything else for unavailable (a crashed or missing python3 included).
+# parent opened, so bash opens fd 9 read-only on the directory (a link to a
+# directory is followed), `_drive_lock.py wait` takes the lock on it from a
+# child, and the lock stays with the shell's descriptor after that child is
+# gone. The `-d` test keeps bash from opening anything else, a FIFO say, which
+# could block. `wait` checks that fd 9 is the directory the path names. `wait`
+# exits 75 for busy and anything else for unavailable (a crashed or missing
+# python3 included).
 # shellcheck disable=SC2034  # HANDOFF_LOCK_MSG is read by the sourcing scripts
 handoff_lock_take() {
     local lock="$1" helper wait_rc=0
     HANDOFF_LOCK_MSG="the sentinel's lock could not be set up"
     helper="$HANDOFF_LIB_DIR/_drive_lock.py"
-    if [[ ! -f "$lock" || -L "$lock" ]]; then
-        python3 -I "$helper" create "$lock" 2>/dev/null || return 2
-    fi
-    { exec 9<>"$lock"; } 2>/dev/null || return 2
+    [[ -d "$lock" ]] || return 2
+    { exec 9<"$lock"; } 2>/dev/null || return 2
     python3 -I "$helper" wait 9 "$lock" 2>/dev/null || wait_rc=$?
     if (( wait_rc == 0 )); then
         return 0

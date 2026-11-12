@@ -259,8 +259,5 @@ def test_a_dangling_symlinked_sentinel_creates_nothing_through_it(
     assert not target.exists()
     assert result.returncode == 0, result.stderr
     assert not (repo / SENTINEL_REL).is_symlink()
-    # The lock file is the one other thing a sentinel write leaves.
-    assert sorted(p.name for p in (repo / ".claude").iterdir()) == [
-        "autodrive",
-        "autodrive.lock",
-    ]
+    # The lock is on the directory: a sentinel write leaves no other entry.
+    assert sorted(p.name for p in (repo / ".claude").iterdir()) == ["autodrive"]

@@ -17,9 +17,10 @@ A row changes the sentinel only after that, so the actor cannot have read it
 yet; an actor with no lock call never writes, and the row fails when its bound
 passes, whatever the speed of the box.
 
-Run as `lock_holder.py <lockfile>`: takes the lock, prints `held`, waits for a
-signal (SIGALRM after a minute, so a row that forgets to release does not leave
-it for ever), exits 1 when it could not take it.
+Run as `lock_holder.py <directory>`, the `.claude/` directory the lock is taken
+on: takes the lock, prints `held`, waits for a signal (SIGALRM after a minute,
+so a row that forgets to release does not leave it for ever), exits 1 when it
+could not take it.
 """
 
 from __future__ import annotations
@@ -40,7 +41,7 @@ LOCK_LIFETIME_SECS = 60
 
 @contextmanager
 def held_elsewhere(lock: Path) -> Iterator[Callable[[], None]]:
-    """Hold the lock from another process for the body.
+    """Hold the lock on the directory `lock` from another process for the body.
 
     Yields `release`, which ends the holder (so the lock is free) before the
     body is done; the body's end releases it too.

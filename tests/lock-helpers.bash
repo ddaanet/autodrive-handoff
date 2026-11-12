@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Shared by the bats files that test the sentinel's lock (docs/design/
 # sentinel-lock.md): a stand-in for another actor that holds
-# `.claude/autodrive.lock` while a row mutates the sentinel the way a writer or
+# `.claude/` (the lock is on the directory) while a row mutates the sentinel the way a writer or
 # a taker would, and then lets go. The holder is tests/lock_holder.py, which
 # takes the lock through the code under test's own `_drive_lock.locked`.
 #
@@ -32,7 +32,7 @@ hold_drive_lock() {
     rm -f "$held" "$HANDOFF_LOCK_BLOCKED_FILE"
     mkfifo "$held" "$HANDOFF_LOCK_BLOCKED_FILE"
     exec 7<>"$HANDOFF_LOCK_BLOCKED_FILE" 8<>"$held"
-    python3 -I "$holder" "$root/.claude/autodrive.lock" >"$held" 2>&1 3>&- 7>&- 8>&- &
+    python3 -I "$holder" "$root/.claude" >"$held" 2>&1 3>&- 7>&- 8>&- &
     LOCK_HOLDER=$!
     read -r -t 30 -u 8 line || true
     exec 8>&-
@@ -53,4 +53,24 @@ release_drive_lock() {
     kill "$LOCK_HOLDER" 2>/dev/null || true
     wait "$LOCK_HOLDER" 2>/dev/null || true
     exec 7>&-
+}
+
+# fail_lock_helper — make the lock's helper fail, for an `unavailable` row. The
+# seam is a `python3` ahead on PATH that exits 1 when it is asked to run
+# `_drive_lock.py` and runs the real interpreter for anything else, so the rest
+# of the actor under test (its sentinel reads, its jq-free paths) is untouched.
+# A bash actor locks only with a sentinel on disk, so `.claude/` is a directory
+# and a failing helper is the unavailable cause that can still occur there.
+# Exported for the rest of the row.
+fail_lock_helper() {
+    local stub="$BATS_TEST_TMPDIR/failing-helper-bin" real
+    real="$(command -v python3)"
+    mkdir -p "$stub"
+    {
+        printf '%s\n' '#!/bin/sh'
+        printf 'case "$*" in *_drive_lock.py*) exit 1 ;; esac\n'
+        printf 'exec "%s" "$@"\n' "$real"
+    } > "$stub/python3"
+    chmod +x "$stub/python3"
+    export PATH="$stub:$PATH"
 }

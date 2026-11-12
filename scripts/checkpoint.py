@@ -237,26 +237,26 @@ def hold_sentinel_lock(stack: contextlib.ExitStack, root: Path) -> None:
     """Take the sentinel's lock for `stack`'s body, or exit 2 naming the lock.
 
     Fails closed: a lock busy past the wait (HANDOFF_LOCK_WAIT_SECS) and one that
-    could not be set up (a link at its name, no flock) both end the call before
-    anything is written, in their own words. `.claude/` is created first, as the
-    lock file lives in it.
+    could not be set up (a non-directory at its name, no flock) both end the call before
+    anything is written, in their own words. `.claude/` is created first, as it
+    is the lock.
     """
     try:
         (root / HANDOFF_REL_DRIVE).parent.mkdir(exist_ok=True)
     except OSError as e:
         _cannot_write(e)
     try:
-        stack.enter_context(drive_lock.locked(root / HANDOFF_REL_DRIVE_LOCK))
+        stack.enter_context(drive_lock.locked(root / HANDOFF_REL_DRIVE_LOCK_DIR))
     except drive_lock.LockBusyError:
         lib.err(
             "lock",
-            f"the sentinel's lock ({HANDOFF_REL_DRIVE_LOCK}) was busy past the wait"
+            "the sentinel's lock (.claude/) was busy past the wait"
             " (HANDOFF_LOCK_WAIT_SECS), so nothing was written; run the call again",
         )
     except drive_lock.LockUnavailableError as e:
         lib.err(
             "lock",
-            f"the sentinel's lock ({HANDOFF_REL_DRIVE_LOCK}) could not be set up"
+            "the sentinel's lock (.claude/) could not be set up"
             f" ({e}), so nothing was written",
         )
 
@@ -267,9 +267,9 @@ def _cannot_write(error: OSError) -> NoReturn:
     )
 
 
-# Mirrors _lib.sh's HANDOFF_REL_DRIVE_LOCK, the lock every actor holds across
-# its own read-decide-write of the sentinel (_drive_lock.py).
-HANDOFF_REL_DRIVE_LOCK = ".claude/autodrive.lock"
+# Mirrors _lib.sh's HANDOFF_REL_DRIVE_LOCK_DIR, the directory every actor locks
+# across its own read-decide-write of the sentinel (_drive_lock.py).
+HANDOFF_REL_DRIVE_LOCK_DIR = ".claude"
 
 
 def check_sentinel_target(root: Path) -> None:

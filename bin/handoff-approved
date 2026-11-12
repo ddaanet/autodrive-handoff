@@ -51,7 +51,7 @@ drive="$root/$HANDOFF_REL_DRIVE"
 # file is left as it is and the approval is asked for again. The second test is
 # for a file removed while this waited.
 lock_rc=0
-handoff_lock_take "$root/$HANDOFF_REL_DRIVE_LOCK" || lock_rc=$?
+handoff_lock_take "$root/$HANDOFF_REL_DRIVE_LOCK_DIR" || lock_rc=$?
 (( lock_rc == 0 )) \
     || err "$HANDOFF_LOCK_MSG, so $HANDOFF_REL_DRIVE was left untouched and nothing was armed; run handoff-approved again"
 [ -f "$drive" ] || err "no transition to arm: $HANDOFF_REL_DRIVE does not exist"

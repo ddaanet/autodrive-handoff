@@ -23,8 +23,8 @@ runs anyway, and the user is told the mod did not run it and is offered the
 lines, so may type `/clear` twice. Either clean order is consistent; only the
 interleaving is wrong.
 
-Each actor holds an advisory lock, `.claude/autodrive.lock`, across its own
-read-decide-write, so the decision and the write are one step
+Each actor holds an advisory lock, taken on the directory `.claude/` that holds
+the sentinel, across its own read-decide-write, so the decision and the write are one step
 (`scripts/_drive_lock.py`, `flock(2)` through `fcntl`, which Linux and macOS
 share). The checkpoint holds it over its whole read-plan-write: the read of
 `TASK.md` and `TODO.md` that resolves each half, the application of the plans and
@@ -36,12 +36,15 @@ from its read of `pending` to its removal of it, letting go before it assembles
 the frame. Python takes
 it with a context manager. Bash holds it across many steps because a lock lives
 on an open file description a child shares with its parent's descriptor: the
-shell opens fd 9 on the file (`handoff_lock_take` in `_lib.sh`), a child takes
-the lock on it, and the shell keeps it until it exits or closes fd 9 (the loaders close it once the
+shell tests that `.claude` is a directory and opens fd 9 on it read-only
+(`handoff_lock_take` in `_lib.sh`), a child takes the lock on it, and the shell
+keeps it until it exits or closes fd 9 (the loaders close it once the
 sentinel is consumed). The sweep, the take and
 the loaders lock only when a sentinel is on disk, so an ordinary prompt forks
-nothing, and the file is created by a first spawn only when it is not there
-yet.
+nothing, the directory is there, and the lock costs one helper spawn. The
+checkpoint creates `.claude/` before it locks. A `.claude` that is a link to a
+directory is followed, as the sentinel's own writes follow it, so every actor
+locks the same inode.
 
 Bounds. The wait is bounded (`HANDOFF_LOCK_WAIT_SECS`, 5 s by default), and a
 lock that cannot be taken **fails closed**: the actor does not act on the
@@ -50,9 +53,9 @@ hook that waits for ever is worse than a refused one. Two causes are told
 apart, in the code (`LockBusyError` and `LockUnavailableError`; `handoff_lock_take`
 returns 1 and 2) and in what the user reads. *Busy*: the wait passed with
 another actor still holding the lock. *Unavailable*: it could not be set up at
-all (no `.claude/`, a link or a non-file at the name, a failing `python3` or
-helper, a file system with no `flock`). Both fail closed, so a link planted at
-the lock's name or a file system with no `flock` stops every actor until it is
+all (a `.claude` that is absent or not a directory, a failing `python3` or
+helper, a file system with no `flock`). Both fail closed, so a `.claude` that is
+not a directory or a file system with no `flock` stops every actor until it is
 fixed, and says why each time; that is chosen over running unlocked there,
 because the sentinel's other readers stop on a failing `python3` anyway and a
 second, silent mode that runs without the lock is the fail-open that reopens
@@ -71,7 +74,7 @@ exactly as it was in every case:
   environment (validation, `HANDOFF_ROOT`, `CLAUDE_CODE_SESSION_ID`), the memory
   directive's read of the gitlore submodule, which no actor of the sentinel
   writes, and `check_sentinel_target`, which has to refuse a `.claude` that is a
-  file before the lock's own `mkdir` meets it. The only thing a refused call may
+  file before the checkpoint's `mkdir` of it meets it. The only thing a refused call may
   leave is an empty `.claude/`. The lock does not guard `TODO.md` against direct
   edits: the agent's Edit tool takes no lock, and concurrent sessions in one
   root stay a [non-goal](../design.md#non-goals).
@@ -106,13 +109,16 @@ the window runs from the `prompt.submit` handler shares the host's 10 s
 `prompt.submit` budget with `drive-cancel.sh`
 ([Bounds](queued-prompts.md)).
 
-The lock file is created 0600 and never followed through a link
-(`O_NOFOLLOW`); a link put there in the instant between the create and bash's
-open is the residual: the lock call compares the descriptor with the path and
-refuses on a mismatch, but bash has by then opened what the link named,
-read-write. The file is never deleted
-(removing it would let a second actor lock a new inode) and `.claude/autodrive*`
-already ignores it. The loaders take it too: the checkpoint replaces whatever
+Nothing is left on disk: the lock is on the directory, so no file is created
+and none shows as untracked in a root where a checkpoint ran. An untracked lock
+file left in every such root is why the lock is not a file. The directory is
+safe to lock because nothing in the plugin removes `.claude/` while a sentinel
+is in it, so no actor can lock an inode another has replaced. `wait` still
+compares fd 9's device and inode with what the path names now, through a link,
+and refuses on a mismatch. Accepted with it: whoever can read `.claude/` can
+hold the lock, another account on the machine included, and while they do every
+actor fails closed as busy and says so; holding it gives no read or write of the
+sentinel. The loaders take the lock too: the checkpoint replaces whatever
 sentinel is there, `pending` included, so a loader that read `pending` and then
 removed it could remove a checkpoint's new file unread. The lock orders the
 actors; it does not order a person's prompt against them. A prompt sent after
@@ -134,7 +140,9 @@ the variable in use. A contention row needs no signal: the holder holds for the
 whole run, the actor runs with `HANDOFF_LOCK_WAIT_SECS` of 0.05 so its wait ends
 at once, and the row asserts the sentinel byte-identical, the actor's
 fail-closed report or exit and, for the loaders, the frame still injected; a
-second row per actor puts a link at the lock for the unavailable cause. They are
+second row per actor gives the unavailable cause: a failing helper for the bash
+actors (`fail_lock_helper` in `tests/lock-helpers.bash`, a `python3` shim that
+fails only the lock's helper), a refused `flock` for the checkpoint. They are
 in `tests/drive-take.bats`, `tests/sentinel-lock.bats`, `tests/bin-commands.bats`
 and `tests/test_checkpoint_readback.py`, and `tests/test_drive_lock.py` covers
 the lock itself.

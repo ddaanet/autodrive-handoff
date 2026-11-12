@@ -223,7 +223,7 @@ The sweep and the take can interleave: the host does not order a new prompt's
 a sweep that read `armed` could delete the `pending` file the take had just
 armed. Every actor of the sentinel, the checkpoint, `handoff-approved`,
 `drive-take.sh`, `drive-cancel.sh`, the sweep and the two loaders, holds an advisory lock
-(`.claude/autodrive.lock`) across its read-decide-write, with a bounded wait
+(on `.claude/` itself) across its read-decide-write, with a bounded wait
 that fails closed: an actor that cannot take it leaves the sentinel as it is
 and says so. The mechanism, its bounds and what each actor does are in [The
 sentinel's lock](sentinel-lock.md).

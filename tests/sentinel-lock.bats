@@ -5,7 +5,7 @@ load lock-helpers
 
 # --- the sentinel's lock: the sweep and a writer or the take ---
 #
-# Another actor holds .claude/autodrive.lock, a sweep starts and has to wait,
+# Another actor holds the lock on .claude/, a sweep starts and has to wait,
 # and the sentinel becomes `pending` under the lock, as the take leaves it. The
 # sweep must then find `pending` and say nothing: a sweep that has already read
 # `armed` removes the file the take armed, and tells the user the mod did not
@@ -94,11 +94,10 @@ assert_sweep_left_pending() {
     [[ "$output" == *"not judged"* ]]
 }
 
-@test "report-drive-failure (a link at the lock: the sweep judges nothing and says the lock could not be set up)" {
+@test "report-drive-failure (the lock helper fails: the sweep judges nothing and says the lock could not be set up)" {
     seed_armed_kind clear
     cp "$tmp/.claude/autodrive" "$BATS_TEST_TMPDIR/sentinel.before"
-    : > "$BATS_TEST_TMPDIR/elsewhere"
-    ln -s "$BATS_TEST_TMPDIR/elsewhere" "$tmp/.claude/autodrive.lock"
+    fail_lock_helper
     PROMPT_ID=idle-prompt run_report_failure "$tmp"
     [ "$status" -eq 0 ]
     cmp "$BATS_TEST_TMPDIR/sentinel.before" "$tmp/.claude/autodrive"
@@ -219,11 +218,10 @@ become_armed() {
     [[ "$CTX" == *"was left in place, not consumed"* ]]
 }
 
-@test "load-handoff (a link at the lock: the pending file is left and the note says the lock could not be set up)" {
+@test "load-handoff (the lock helper fails: the pending file is left and the note says the lock could not be set up)" {
     seed_pending "$tmp" "clear continue" "A Title"
     cp "$tmp/.claude/autodrive" "$BATS_TEST_TMPDIR/sentinel.before"
-    : > "$BATS_TEST_TMPDIR/elsewhere"
-    ln -s "$BATS_TEST_TMPDIR/elsewhere" "$tmp/.claude/autodrive.lock"
+    fail_lock_helper
     run_load_handoff "$tmp" clear
     cmp "$BATS_TEST_TMPDIR/sentinel.before" "$tmp/.claude/autodrive"
     split_output "$output"
@@ -231,12 +229,11 @@ become_armed() {
     [[ "$CTX" == *"hook smoke test"* ]]
 }
 
-@test "load-compact (a link at the lock: the pending file is left and the note says the lock could not be set up)" {
+@test "load-compact (the lock helper fails: the pending file is left and the note says the lock could not be set up)" {
     printf '## Remaining\n\n- finish the parser\n' > "$tmp/TODO.md"
     seed_pending "$tmp" "compact continue"
     cp "$tmp/.claude/autodrive" "$BATS_TEST_TMPDIR/sentinel.before"
-    : > "$BATS_TEST_TMPDIR/elsewhere"
-    ln -s "$BATS_TEST_TMPDIR/elsewhere" "$tmp/.claude/autodrive.lock"
+    fail_lock_helper
     run_load_compact "$tmp"
     cmp "$BATS_TEST_TMPDIR/sentinel.before" "$tmp/.claude/autodrive"
     split_output "$output"

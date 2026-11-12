@@ -51,7 +51,7 @@ fail_file="$root/$HANDOFF_REL_DRIVE_FAILED"
 # unresolved root. The second test is for a file the sweep removed while this
 # waited.
 lock_rc=0
-handoff_lock_take "$root/$HANDOFF_REL_DRIVE_LOCK" || lock_rc=$?
+handoff_lock_take "$root/$HANDOFF_REL_DRIVE_LOCK_DIR" || lock_rc=$?
 if (( lock_rc != 0 )); then
     _handoff_drive_plan_json null "" false "" \
         "handoff: $HANDOFF_LOCK_MSG; .claude/autodrive left untouched, nothing taken."

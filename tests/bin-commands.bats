@@ -110,13 +110,12 @@ A Title" ]
     cmp "$BATS_TEST_TMPDIR/sentinel.before" "$repo/.claude/autodrive"
 }
 
-@test "handoff-approved: a link at the lock -> exit 2 saying it could not be set up, the held file untouched" {
+@test "handoff-approved: the lock helper fails -> exit 2 saying it could not be set up, the held file untouched" {
     repo="$(make_repo)"
     printf '%s\n' "held $CLAUDE_CODE_SESSION_ID" clear "A Title" \
         > "$repo/.claude/autodrive"
     cp "$repo/.claude/autodrive" "$BATS_TEST_TMPDIR/sentinel.before"
-    : > "$BATS_TEST_TMPDIR/elsewhere"
-    ln -s "$BATS_TEST_TMPDIR/elsewhere" "$repo/.claude/autodrive.lock"
+    fail_lock_helper
     run_approved "$repo"
     [ "$status" -eq 2 ]
     [[ "$stderr" == *"the sentinel's lock could not be set up"* ]]

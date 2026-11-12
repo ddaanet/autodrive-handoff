@@ -1,4 +1,4 @@
-"""The advisory lock around the sentinel, `.claude/autodrive.lock`.
+"""The advisory lock around the sentinel, taken on the `.claude/` directory.
 
 The sentinel is read, judged and rewritten or removed by several actors that
 nothing serialises: the checkpoint and `handoff-approved` write it, the mod's
@@ -7,29 +7,25 @@ drive-failure.sh`) discards it. Each holds this lock across its own read-decide-
 write, so the decision it made and the write it makes are one step.
 
 `flock(2)` through `fcntl`, which Linux and macOS share (`flock(1)` is not on
-macOS). The lock file is never deleted: removing it would let a second actor
-lock a new inode while the first still holds the old one.
+macOS). The lock is on the directory, opened read-only; no file is created for
+it, and a link to a directory is followed.
 
 Two ways in. Python (`checkpoint.py`) uses `locked`, which raises when the lock
-is not taken. Bash holds a lock across several steps through two calls of this
-file's command line, because a lock lives on an open file description and a
-child shares the description of a file descriptor its parent opened: bash opens
-fd 9 on the lock file, `wait` takes the lock on it, and the lock then lasts
-until the shell closes fd 9 or exits (`handoff_lock_take` in _lib.sh, which
-holds the sequence).
+is not taken. Bash holds a lock across several steps through this file's `wait`
+command, because a lock lives on an open file description and a child shares the
+description of a file descriptor its parent opened: bash opens fd 9 on the
+directory, `wait` takes the lock on it, and the lock then lasts until the shell
+closes fd 9 or exits (`handoff_lock_take` in _lib.sh, which holds the sequence).
 
 Bounds. The wait is bounded (`HANDOFF_LOCK_WAIT_SECS`, default 5 seconds), and a
 lock that cannot be taken fails closed: the caller does not act on the sentinel,
 because acting unlocked reopens the race the lock closes. Two causes are told
 apart. `LockBusyError` (bash: rc 75) is the bound passing with another actor
 still holding it; `LockUnavailableError` (bash: any other failure) is a lock
-that could not be set up at all: no `.claude/`, a link or a non-file at the
-name, a file system with no `flock`, a failing helper. A link at the lock file
-is never followed (`O_NOFOLLOW`, and a check of the open descriptor against the
-path), so a link there is unavailable, not no lock; the lock file is created
-0600. A link put at the name between the two bash calls is the residual: `wait`
-compares the descriptor with the path and refuses on a mismatch, but bash has
-already opened what the link named, read-write.
+that could not be set up at all: no `.claude/`, a non-directory at its name, a
+file system with no `flock`, a failing helper. `wait` refuses a descriptor that
+is not the directory the path now names (equal device and inode), so a directory
+swapped in between bash's open and `wait` is unavailable.
 
 `HANDOFF_LOCK_BLOCKED_FILE`, when set, names a file touched as soon as a wait
 finds the lock held. It exists for the tests (see `_signal_blocked`); nothing
@@ -71,11 +67,11 @@ def locked(lock_path: str | os.PathLike[str]) -> Iterator[None]:
     """Hold the lock for the body.
 
     Raises `LockBusyError` when the bound passes with the lock held elsewhere
-    and `LockUnavailableError` when it cannot be set up (a link or a non-file at
-    the name, an unwritable directory, no `.claude/`, no `flock`). Either is
-    raised on entry, so the body never runs unlocked.
+    and `LockUnavailableError` when it cannot be set up (a non-directory at the
+    name, no `.claude/`, no `flock`). Either is raised on entry, so the body
+    never runs unlocked.
     """
-    fd = _create(os.fspath(lock_path))
+    fd = _open_directory(os.fspath(lock_path))
     try:
         _flock_within_bound(fd)
     except LockError:
@@ -88,42 +84,28 @@ def locked(lock_path: str | os.PathLike[str]) -> Iterator[None]:
 
 
 def main(argv: list[str]) -> int:
-    """Run the `create` or `wait` command; any other use is rc 64."""
-    if len(argv) == 3 and argv[1] == "create":
-        return _command_create(argv[2])
+    """Run the `wait` command; any other use is rc 64."""
     if len(argv) == 4 and argv[1] == "wait":
         return _command_wait(argv[2], argv[3])
-    print(
-        "usage: _drive_lock.py create <lockfile> | wait <fd> <lockfile>",
-        file=sys.stderr,
-    )
+    print("usage: _drive_lock.py wait <fd> <directory>", file=sys.stderr)
     return EXIT_USAGE
 
 
-def _command_create(path: str) -> int:
-    """`create <lockfile>`: make sure a regular lock file is there."""
-    try:
-        os.close(_create(path))
-    except LockUnavailableError as e:
-        print(e, file=sys.stderr)
-        return EXIT_UNAVAILABLE
-    return 0
-
-
 def _command_wait(fd_text: str, path: str) -> int:
-    """Lock the descriptor the parent opened (`wait <fd> <lockfile>`).
+    """Lock the descriptor the parent opened (`wait <fd> <directory>`).
 
-    Refused as unavailable when the descriptor is not the regular file the path
-    now names (a link, or another file swapped in), so bash's open cannot have
-    been led elsewhere unnoticed. rc 0 held, `EXIT_BUSY` for the bound passing.
+    Refused as unavailable when the descriptor is not a directory or is not the
+    directory the path now names (equal device and inode), so bash's open cannot
+    have been led elsewhere unnoticed. rc 0 held, `EXIT_BUSY` for the bound
+    passing.
     """
     try:
         fd = int(fd_text)
         held = os.fstat(fd)
-        named = os.lstat(path)
+        named = os.stat(path)  # noqa: PTH116 - beside fstat on the bare fd
     except (ValueError, OSError):
         return EXIT_UNAVAILABLE
-    if not stat.S_ISREG(held.st_mode) or not stat.S_ISREG(named.st_mode):
+    if not stat.S_ISDIR(held.st_mode) or not stat.S_ISDIR(named.st_mode):
         return EXIT_UNAVAILABLE
     if (held.st_dev, held.st_ino) != (named.st_dev, named.st_ino):
         return EXIT_UNAVAILABLE
@@ -137,17 +119,12 @@ def _command_wait(fd_text: str, path: str) -> int:
     return 0
 
 
-def _create(path: str) -> int:
-    """Open (creating, 0600) the lock file without following a link."""
-    flags = os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK
+def _open_directory(path: str) -> int:
+    """Open the directory read-only, following a link to a directory."""
     try:
-        fd = os.open(path, flags, 0o600)
+        return os.open(path, os.O_RDONLY | os.O_DIRECTORY)
     except OSError as e:
         raise LockUnavailableError(path, e) from e
-    if not stat.S_ISREG(os.fstat(fd).st_mode):
-        os.close(fd)
-        raise LockUnavailableError(path, "not a regular file")
-    return fd
 
 
 def _flock_within_bound(fd: int) -> None:

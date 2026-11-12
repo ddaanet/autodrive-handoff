@@ -241,3 +241,13 @@ task and todo templates in `references/`, read before drafting, so each
 read on every invocation costs its bytes on every invocation, as the body
 would, and it adds a tool call to the normal path of both skills, ahead of the
 checkpoint. The templates are inline instead, the todo part in both skills.
+
+**Deleting the lock file with the sentinel, or a lock outside the tree** — two
+ways to leave no lock file in the root. Deleting it makes every acquirer
+re-check the inode after locking and retry, since a second actor could
+otherwise lock a new inode while the first holds the old one, and the file
+still shows while a sentinel is armed. A lock outside the tree, under the temporary directory the hooks' markers
+already use, moves the leftover instead of removing it: one file per root, named
+by a mapping from the root that every actor has to agree on. The lock is on
+`.claude/` itself instead.
+[The sentinel's lock](sentinel-lock.md)

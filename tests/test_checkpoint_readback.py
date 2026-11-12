@@ -9,6 +9,7 @@ tests/conftest.py.
 
 import shutil
 import subprocess
+import sys
 import threading
 from pathlib import Path
 
@@ -16,7 +17,7 @@ import _checkpoint_payload as validation
 import _drive_lock as drive_lock
 import checkpoint
 import pytest
-from conftest import handoff_payload, make_repo, run_checkpoint, todo_edit
+from conftest import CHECKPOINT, handoff_payload, make_repo, run_checkpoint, todo_edit
 from lock_holder import blocked_signal, held_elsewhere
 
 pytestmark = pytest.mark.usefixtures("_session_id")
@@ -39,7 +40,7 @@ def test_sentinel_write_waits_on_the_lock(
     once, under the other actor.
     """
     repo = make_repo(tmp_path)
-    lock = repo / ".claude" / "autodrive.lock"
+    lock = repo / ".claude"
     blocked = tmp_path / "blocked"
     monkeypatch.setenv("HANDOFF_LOCK_WAIT_SECS", "30")
     monkeypatch.setenv(drive_lock.BLOCKED_ENV, str(blocked))
@@ -74,7 +75,7 @@ def test_an_edit_is_planned_after_the_wait_not_before_it(
     repo = make_repo(tmp_path)
     todo = repo / "TODO.md"
     todo.write_text("## Remaining\n\n- target item\n- other item\n")
-    lock = repo / ".claude" / "autodrive.lock"
+    lock = repo / ".claude"
     blocked = tmp_path / "blocked"
     monkeypatch.setenv("HANDOFF_LOCK_WAIT_SECS", "30")
     monkeypatch.setenv(drive_lock.BLOCKED_ENV, str(blocked))
@@ -104,13 +105,11 @@ def _writing_payload() -> dict[str, object]:
 
 
 def _tree(repo: Path) -> dict[str, bytes]:
-    """Every file under the root outside .git and the lock file, by path."""
+    """Every file under the root outside .git, by path."""
     return {
         str(path.relative_to(repo)): path.read_bytes()
         for path in sorted(repo.rglob("*"))
-        if path.is_file()
-        and ".git" not in path.relative_to(repo).parts
-        and path.name != "autodrive.lock"
+        if path.is_file() and ".git" not in path.relative_to(repo).parts
     }
 
 
@@ -130,7 +129,7 @@ def test_a_lock_held_past_the_wait_fails_closed_and_writes_nothing(
     (repo / ".claude" / "autodrive").write_text("armed sess-other\nrename\nX\n")
     before = _tree(repo)
     monkeypatch.setenv("HANDOFF_LOCK_WAIT_SECS", "0.05")
-    with held_elsewhere(repo / ".claude" / "autodrive.lock"):
+    with held_elsewhere(repo / ".claude"):
         result = run_checkpoint(repo, _writing_payload())
     assert result.returncode == 2
     assert result.stderr.startswith("handoff-checkpoint: lock: ")
@@ -142,21 +141,36 @@ def test_a_lock_held_past_the_wait_fails_closed_and_writes_nothing(
 def test_a_lock_that_cannot_be_set_up_fails_closed_and_writes_nothing(
     tmp_path: Path,
 ) -> None:
-    """A link at the lock's name is `unavailable`, told apart from busy, and
-    fails closed the same way; nothing is written through it."""
+    """A refused `flock` (a file system with no locks) is `unavailable`, told
+    apart from busy, and fails closed the same way.
+
+    The seam: the checkpoint runs under a wrapper that makes `fcntl.flock`
+    raise ENOLCK and then runs checkpoint.py as `__main__`. The cause is one
+    that still occurs under the directory lock, where a link at a lock file's
+    name no longer can.
+    """
     repo = make_repo(tmp_path)
-    elsewhere = tmp_path / "elsewhere"
-    elsewhere.write_text("kept")
-    (repo / ".claude").mkdir(exist_ok=True)
-    (repo / ".claude" / "autodrive.lock").symlink_to(elsewhere)
+    (repo / "TODO.md").write_text("## Remaining\n\n- old item\n")
+    wrapper = tmp_path / "no_flock.py"
+    wrapper.write_text(
+        "import errno, fcntl, os, runpy, sys\n"
+        f"sys.path.insert(0, {str(CHECKPOINT.parent)!r})\n"
+        "def refuse(*args, **kwargs):\n"
+        "    raise OSError(errno.ENOLCK, os.strerror(errno.ENOLCK))\n"
+        "fcntl.flock = refuse\n"
+        f"sys.argv = [{str(CHECKPOINT)!r}]\n"
+        f"runpy.run_path({str(CHECKPOINT)!r}, run_name='__main__')\n"
+    )
     before = _tree(repo)
-    result = run_checkpoint(repo, _writing_payload())
+    result = run_checkpoint(
+        repo, _writing_payload(), command=(sys.executable, str(wrapper))
+    )
     assert result.returncode == 2
     assert result.stderr.startswith("handoff-checkpoint: lock: ")
     assert "could not be set up" in result.stderr
     assert "busy" not in result.stderr
-    assert elsewhere.read_text() == "kept"
     assert _tree(repo) == before
+    assert list((repo / ".claude").iterdir()) == []
 
 
 def test_a_read_back_that_cannot_run_removes_the_sentinel_and_says_so(
