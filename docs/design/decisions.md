@@ -165,8 +165,10 @@ one. [A prompt queued into the arming turn](queued-prompts.md),
 does not order a prompt's sweep against the mod's take, and a sweep that read
 `armed` could delete the `pending` file the take had armed meanwhile, then tell
 the user the mod never ran a transition that runs. An advisory `flock` makes
-each actor's decision and write one step, with a bounded wait that fails open,
-since a hook that waits for ever is worse than the race. The lock orders the
+each actor's decision and write one step, with a bounded wait that fails
+closed: an actor that cannot take the lock does not act on the sentinel, since
+acting unlocked reopens the race and a hook that waits for ever is worse than
+a refused one. The lock orders the
 actors and not the arrival of a prompt: a prompt after the arming turn's
 `Stop` is ordered by the mod's window
 ([queued-prompts.md](queued-prompts.md#a-prompt-after-stop)). [The sentinel's lock](sentinel-lock.md),
