@@ -38,7 +38,10 @@ Behaviour lives in `docs/design/driving-the-transition.md`; read it first.
   (`stdout` for the take, `cancelStdout` for the cancel, logged `process.run
   cancel`) and can hold an answer open (`hold`, `holdLine`). The kit rejects an unstubbed call, `process.run`,
   `fs.*` and the clock included, so a new call needs a stub and its place in
-  each expected log. No expected log holds a prompt-box read and the rig stubs
+  each expected log. The exception is the clock in the rows of
+  `tests/mod/window.test.ts` that register `mock.clock(on)` to wait with its
+  `settle()`: there a `$.clock` call is answered, and the other rows reject
+  it. No expected log holds a prompt-box read and the rig stubs
   none, so a restored one fails as an unstubbed call.
 - `tests/mod/fixtures/*.json` are the plans `drive-take.sh` prints and the
   `cancel-*` plans `drive-cancel.sh` prints; `tests/drive-take.bats` and
