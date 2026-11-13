@@ -3,7 +3,7 @@
 // scripts/drive-take.sh (tests/mod/fixtures), with @ROOT@ substituted.
 import { expect, test } from 'claude-code/testing'
 import { CONTINUATION } from './fixtures'
-import { endTurn, fixture, rig, ROOT } from './rig'
+import { answered, defined, endTurn, fixture, rig, ROOT, stop } from './rig'
 
 const CWD = ROOT
 const SENTINEL = `${CWD}/.claude/autodrive`
@@ -13,14 +13,14 @@ const FAIL_FILE = `${CWD}/.claude/autodrive.failed`
 
 test('classic.Stop records the cwd and drives nothing', async ($, on) => {
   const r = rig(on, { sentinelExists: true, stdout: fixture('armed-clear', CWD) })
-  await $.classic.Stop({ cwd: CWD, session_id: 's1' })
+  await $.classic.Stop(stop(CWD))
   expect(r.log).toEqual([])
   expect(r.existsPaths).toEqual([])
 })
 
 test('turn.complete with no Stop before it (aborted turn) drives nothing', async ($, on) => {
   const r = rig(on, { sentinelExists: true, stdout: fixture('armed-clear', CWD) })
-  await $.turn.complete({ turnId: 't1', answer: '', durationMs: 1, isAborted: true, usage: null })
+  await $.turn.complete({ turnId: 't1', answer: '', durationMs: 1, isAborted: true, reason: 'aborted' })
   expect(r.log).toEqual([])
   expect(r.existsPaths).toEqual([])
 })
@@ -28,7 +28,7 @@ test('turn.complete with no Stop before it (aborted turn) drives nothing', async
 test('a recorded cwd is consumed once', async ($, on) => {
   const r = rig(on, { sentinelExists: true, stdout: fixture('prepare', CWD) })
   await endTurn($)
-  await $.turn.complete({ turnId: 't2', answer: 'ok', durationMs: 1, isAborted: false, usage: null })
+  await $.turn.complete(answered('t2'))
   expect(r.log).toEqual(['process.run'])
 })
 
@@ -48,9 +48,9 @@ test('a sentinel makes it run drive-take.sh with the cwd and the Stop session id
   await endTurn($)
   expect(r.log).toEqual(['process.run'])
   expect(r.processArgv.length).toBe(1)
-  const [bash, script, cwd, session, ...rest] = r.processArgv[0]
+  const [bash, script, cwd, session, ...rest] = defined(r.processArgv[0])
   expect(bash).toBe('bash')
-  expect(script.endsWith('/scripts/drive-take.sh')).toBe(true)
+  expect(script).toEndWith('/scripts/drive-take.sh')
   expect(cwd).toBe(CWD)
   expect(session).toBe('s1')
   expect(rest).toEqual([])
@@ -61,7 +61,7 @@ test('a worktree or subdir cwd runs the script even without a sentinel there', a
   const r = rig(on, { sentinelExists: false, stdout: '' })
   await endTurn($, wt)
   expect(r.log).toEqual(['process.run'])
-  expect(r.processArgv[0][2]).toBe(wt)
+  expect(defined(r.processArgv[0])[2]).toBe(wt)
 })
 
 test('empty stdout is a no-op', async ($, on) => {
@@ -217,10 +217,10 @@ test('first rejected command ends the sequence and writes failFile', async ($, o
     `fs.write ${FAIL_FILE}`,
   ])
   expect(r.writes.length).toBe(1)
-  expect(r.writes[0].path).toBe(FAIL_FILE)
+  expect(defined(r.writes[0]).path).toBe(FAIL_FILE)
   // the reason names the line that failed (the stub's own message is not carried
   // through a rejected event-backed call)
-  expect(r.writes[0].text).toContain('/rename A Title')
+  expect(defined(r.writes[0]).text).toContain('/rename A Title')
   expect(r.toasts.length).toBe(2)
   expect(r.toasts[1]).toContain('/rename A Title')
 })
@@ -238,19 +238,19 @@ test('a rejected continuation prompt is recorded the same way', async ($, on) =>
     `prompt.submit ${CONTINUATION} asUser=true`,
     `fs.write ${FAIL_FILE}`,
   ])
-  expect(r.writes[0].text).toContain(CONTINUATION)
+  expect(defined(r.writes[0]).text).toContain(CONTINUATION)
 })
 
 // A Stop with no session id drives nothing (drive-take.sh cannot tell whose
 // file it is), but says so on the rejected-command path: failFile written, toast.
 test('a Stop with no session id writes failFile and toasts', async ($, on) => {
   const r = rig(on, { sentinelExists: true, stdout: fixture('no-session', CWD) })
-  await $.classic.Stop({ cwd: CWD, session_id: undefined })
-  await $.turn.complete({ turnId: 't1', answer: 'ok', durationMs: 1, isAborted: false, usage: null })
-  expect(r.processArgv[0][3]).toBe('')
+  await $.classic.Stop({ ...stop(CWD), session_id: undefined })
+  await $.turn.complete(answered('t1'))
+  expect(defined(r.processArgv[0])[3]).toBe('')
   expect(r.log).toEqual(['process.run', `fs.write ${FAIL_FILE}`])
-  expect(r.writes[0].text).toContain('no session id')
-  expect(r.toasts).toEqual([r.writes[0].text.trimEnd()])
+  expect(defined(r.writes[0]).text).toContain('no session id')
+  expect(r.toasts).toEqual([defined(r.writes[0]).text.trimEnd()])
 })
 
 // A link at the failure record, dangling or not, is not written through: the

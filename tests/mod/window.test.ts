@@ -1,9 +1,10 @@
 // Mod tests for a prompt after the arming turn's Stop (hooks/handoff.ts,
 // docs/design/queued-prompts.md). The stubs and the call log live in rig.ts;
 // the rest of the mod's rows are in handoff.test.ts.
-import { expect, test } from 'claude-code/testing'
+import { expect, mock, test } from 'claude-code/testing'
+import type { MockClock } from 'claude-code/testing'
 import { CONTINUATION } from './fixtures'
-import { endTurn, fixture, rig, ROOT } from './rig'
+import { defined, endTurn, fixture, rig, ROOT, stop, typed } from './rig'
 
 const CWD = ROOT
 
@@ -15,34 +16,29 @@ const CWD = ROOT
 // `PROMPT` is what a person typed; the rig's prompt.submit stub beneath the
 // mod records what reached it (r.submitted).
 
-const PROMPT = { text: 'say banana' }
+const PROMPT = typed('say banana')
 const CANCEL_CLEAR = (c: string) => fixture('cancel-clear', c)
 const { note: CANCEL_NOTE, message: CANCEL_MSG } = JSON.parse(CANCEL_CLEAR(CWD))
 const SAY = 'prompt.submit say banana asUser=undefined'
 
-// Lets the mod's pending awaits run until `done`, yielding to the event loop
-// (the kit's dispatch is not microtask-only); no fixed delay is waited.
-async function until(done: () => boolean) {
-  for (let i = 0; i < 1000 && !done(); i++) await new Promise((res) => setTimeout(res, 0))
+// Lets the mod's pending awaits run as far as they can, the clock unmoved,
+// then checks that they reached `done`; no fixed delay is waited.
+async function until(clock: MockClock, done: () => boolean) {
+  await clock.settle()
   expect(done()).toBe(true)
-}
-
-// Lets pending handlers run where they log nothing to wait on.
-async function settle() {
-  for (let i = 0; i < 20; i++) await new Promise((res) => setTimeout(res, 0))
 }
 
 test('a prompt after Stop, before turn.complete, with a cancel: the prompt takes, the drive reuses the take and runs no line, the prompt carries the note', async ($, on) => {
   const r = rig(on, { sentinelExists: true, stdout: fixture('armed-clear', CWD), cancelStdout: CANCEL_CLEAR(CWD) })
-  await $.classic.Stop({ cwd: CWD, session_id: 's1' })
+  await $.classic.Stop(stop(CWD))
   await $.prompt.submit(PROMPT)
   await endTurn($, null)
   expect(r.log).toEqual(['process.run', 'process.run cancel', SAY])
   expect(r.processArgv.length).toBe(1)
   expect(r.cancelArgv.length).toBe(1)
-  const [bash, script, cwd, session, ...rest] = r.cancelArgv[0]
+  const [bash, script, cwd, session, ...rest] = defined(r.cancelArgv[0])
   expect(bash).toBe('bash')
-  expect(script.endsWith('/scripts/drive-cancel.sh')).toBe(true)
+  expect(script).toEndWith('/scripts/drive-cancel.sh')
   expect([cwd, session, rest]).toEqual([CWD, 's1', ['clear']])
   expect(r.submitted).toEqual([{ text: 'say banana', context: [CANCEL_NOTE] }])
   expect(r.toasts).toEqual([CANCEL_MSG])
@@ -50,6 +46,7 @@ test('a prompt after Stop, before turn.complete, with a cancel: the prompt takes
 })
 
 test('a prompt during the take, held open, with a cancel: no line runs', async ($, on) => {
+  const clock = mock.clock(on)
   const r = rig(on, {
     sentinelExists: true,
     stdout: fixture('armed-clear', CWD),
@@ -57,21 +54,22 @@ test('a prompt during the take, held open, with a cancel: no line runs', async (
     hold: { take: true },
   })
   const done = endTurn($)
-  await until(() => r.log.includes('process.run'))
+  await until(clock, () => r.log.includes('process.run'))
   // The prompt waits on the same held take, so it is not awaited before the
   // release; nothing is logged while it waits, so the loop is let run first.
   const said = $.prompt.submit(PROMPT)
-  await settle()
+  await clock.settle()
   r.release.take()
   await said
   await done
   expect(r.processArgv.length).toBe(1)
   expect(r.log).toEqual(['process.run', 'process.run cancel', SAY])
-  expect(r.submitted[0].context).toEqual([CANCEL_NOTE])
+  expect(defined(r.submitted[0]).context).toEqual([CANCEL_NOTE])
   expect(r.toasts).toEqual([CANCEL_MSG])
 })
 
 test('a prompt answered after the take returned, before the first line: no line runs', async ($, on) => {
+  const clock = mock.clock(on)
   const r = rig(on, {
     sentinelExists: true,
     stdout: fixture('armed-clear', CWD),
@@ -80,7 +78,7 @@ test('a prompt answered after the take returned, before the first line: no line 
   })
   const done = endTurn($)
   const said = $.prompt.submit(PROMPT)
-  await until(() => r.log.includes('process.run cancel') && r.log.includes('process.run'))
+  await until(clock, () => r.log.includes('process.run cancel') && r.log.includes('process.run'))
   r.release.cancel()
   await said
   await done
@@ -90,6 +88,7 @@ test('a prompt answered after the take returned, before the first line: no line 
 })
 
 test('a prompt while /rename is in flight under clear: /clear and the continuation do not run', async ($, on) => {
+  const clock = mock.clock(on)
   const r = rig(on, {
     sentinelExists: true,
     stdout: fixture('armed-clear', CWD),
@@ -97,15 +96,16 @@ test('a prompt while /rename is in flight under clear: /clear and the continuati
     holdLine: '/rename A Title',
   })
   const done = endTurn($)
-  await until(() => r.log.includes('command.run rename [A Title]'))
+  await until(clock, () => r.log.includes('command.run rename [A Title]'))
   await $.prompt.submit(PROMPT)
   r.release.line()
   await done
   expect(r.log).toEqual(['process.run', 'command.run rename [A Title]', 'process.run cancel', SAY])
-  expect(r.submitted[0].context).toEqual([CANCEL_NOTE])
+  expect(defined(r.submitted[0]).context).toEqual([CANCEL_NOTE])
 })
 
 test('a prompt after the last command is issued: no drive-cancel spawn, the continuation still runs', async ($, on) => {
+  const clock = mock.clock(on)
   const r = rig(on, {
     sentinelExists: true,
     stdout: fixture('armed-clear', CWD),
@@ -113,7 +113,7 @@ test('a prompt after the last command is issued: no drive-cancel spawn, the cont
     holdLine: '/clear',
   })
   const done = endTurn($)
-  await until(() => r.log.includes('command.run clear []'))
+  await until(clock, () => r.log.includes('command.run clear []'))
   await $.prompt.submit(PROMPT)
   r.release.line()
   await done
@@ -139,7 +139,7 @@ test('a prompt after a turn ended and its drive finished: no spawn', async ($, o
 
 test('drive-cancel prints nothing: the plan runs in full and the prompt passes unchanged', async ($, on) => {
   const r = rig(on, { sentinelExists: true, stdout: fixture('armed-clear', CWD), cancelStdout: '' })
-  await $.classic.Stop({ cwd: CWD, session_id: 's1' })
+  await $.classic.Stop(stop(CWD))
   await $.prompt.submit(PROMPT)
   await endTurn($, null)
   expect(r.log).toEqual([
@@ -156,7 +156,7 @@ test('drive-cancel prints nothing: the plan runs in full and the prompt passes u
 
 test('the drive-cancel spawn rejects: the plan runs in full and the prompt passes unchanged', async ($, on) => {
   const r = rig(on, { sentinelExists: true, stdout: fixture('armed-clear', CWD), cancelRejects: true })
-  await $.classic.Stop({ cwd: CWD, session_id: 's1' })
+  await $.classic.Stop(stop(CWD))
   await $.prompt.submit(PROMPT)
   await endTurn($, null)
   expect(r.log).toEqual([
@@ -172,12 +172,12 @@ test('the drive-cancel spawn rejects: the plan runs in full and the prompt passe
 
 test('drive-cancel prints bad JSON: the same as nothing', async ($, on) => {
   const r = rig(on, { sentinelExists: true, stdout: fixture('armed-compact', CWD), cancelStdout: 'not json' })
-  await $.classic.Stop({ cwd: CWD, session_id: 's1' })
+  await $.classic.Stop(stop(CWD))
   await $.prompt.submit(PROMPT)
   await endTurn($, null)
-  expect(r.cancelArgv[0].slice(4)).toEqual(['compact'])
+  expect(defined(r.cancelArgv[0]).slice(4)).toEqual(['compact'])
   expect(r.log).toContain('command.run compact [keep the parser work]')
-  expect(r.submitted[0].context).toEqual([])
+  expect(defined(r.submitted[0]).context).toEqual([])
 })
 
 test("the mod's own continuation never spawns drive-cancel", async ($, on) => {
@@ -189,14 +189,14 @@ test("the mod's own continuation never spawns drive-cancel", async ($, on) => {
 
 test('a second prompt in the window spawns drive-cancel once, and the window takes once', async ($, on) => {
   const r = rig(on, { sentinelExists: true, stdout: fixture('armed-clear', CWD), cancelStdout: CANCEL_CLEAR(CWD) })
-  await $.classic.Stop({ cwd: CWD, session_id: 's1' })
+  await $.classic.Stop(stop(CWD))
   await $.prompt.submit(PROMPT)
-  await $.prompt.submit({ text: 'and kiwi' })
+  await $.prompt.submit(typed('and kiwi'))
   await endTurn($, null)
   expect(r.processArgv.length).toBe(1)
   expect(r.cancelArgv.length).toBe(1)
-  expect(r.submitted[0].context).toEqual([CANCEL_NOTE])
-  expect(r.submitted[1].context).toEqual([])
+  expect(defined(r.submitted[0]).context).toEqual([CANCEL_NOTE])
+  expect(defined(r.submitted[1]).context).toEqual([])
 })
 
 // The cancel is gated on the take's kind: drive-cancel.sh would cancel here,
@@ -204,7 +204,7 @@ test('a second prompt in the window spawns drive-cancel once, and the window tak
 // drive runs it after the prompt's turn.
 test('a prompt in the window of a rename: drive-cancel is not spawned, the rename still runs', async ($, on) => {
   const r = rig(on, { sentinelExists: true, stdout: fixture('armed-rename', CWD), cancelStdout: CANCEL_CLEAR(CWD) })
-  await $.classic.Stop({ cwd: CWD, session_id: 's1' })
+  await $.classic.Stop(stop(CWD))
   await $.prompt.submit(PROMPT)
   await endTurn($, null)
   expect(r.log).toEqual(['process.run', SAY, 'command.run rename [Driven Transitions]'])
@@ -217,7 +217,7 @@ test('a prompt in the window of a rename: drive-cancel is not spawned, the renam
 // it and a hand-typed /compact still finds it.
 test('a prompt in the window of a prepare marker: drive-cancel is not spawned, the prepare toast shows', async ($, on) => {
   const r = rig(on, { sentinelExists: true, stdout: fixture('prepare', CWD), cancelStdout: CANCEL_CLEAR(CWD) })
-  await $.classic.Stop({ cwd: CWD, session_id: 's1' })
+  await $.classic.Stop(stop(CWD))
   await $.prompt.submit(PROMPT)
   await endTurn($, null)
   expect(r.log).toEqual(['process.run', SAY])
@@ -229,7 +229,7 @@ test('a prompt in the window of a prepare marker: drive-cancel is not spawned, t
 // spawns nothing.
 test('a prompt in the window with no sentinel at the root: nothing is spawned, the prompt passes unchanged', async ($, on) => {
   const r = rig(on, { sentinelExists: false, stdout: fixture('armed-clear', CWD), cancelStdout: CANCEL_CLEAR(CWD) })
-  await $.classic.Stop({ cwd: CWD, session_id: 's1' })
+  await $.classic.Stop(stop(CWD))
   await $.prompt.submit(PROMPT)
   await endTurn($, null)
   expect(r.log).toEqual([SAY])
@@ -243,6 +243,7 @@ test('a prompt in the window with no sentinel at the root: nothing is spawned, t
 // later window's take runs at the continuation and its own drive runs the
 // rename, after the outer drive's finally has run, with no second take.
 test("a later Stop before the continuation: the continuation's window takes the rename and its drive runs it after the outer drive ends", async ($, on) => {
+  const clock = mock.clock(on)
   const r = rig(on, {
     sentinelExists: true,
     stdout: [fixture('armed-clear', CWD), fixture('armed-rename', CWD)],
@@ -250,8 +251,8 @@ test("a later Stop before the continuation: the continuation's window takes the 
     holdLine: '/clear',
   })
   const done = endTurn($)
-  await until(() => r.log.includes('command.run clear []'))
-  await $.classic.Stop({ cwd: CWD, session_id: 's1' })
+  await until(clock, () => r.log.includes('command.run clear []'))
+  await $.classic.Stop(stop(CWD))
   r.release.line()
   await done
   expect(r.log).toEqual([
@@ -264,13 +265,14 @@ test("a later Stop before the continuation: the continuation's window takes the 
   await endTurn($, null, 't2')
   expect(r.log.slice(5)).toEqual(['command.run rename [Driven Transitions]'])
   expect(r.cancelArgv).toEqual([])
-  expect(r.submitted[0].context).toEqual([])
+  expect(defined(r.submitted[0]).context).toEqual([])
 })
 
 // The outer drive's finally closes only its own window. Here the continuation
 // is in flight when the next turn ends and its drive starts; a person's prompt
 // after the outer drive ended still finds that drive's window open.
 test("the outer drive's end leaves the next drive's window open: a prompt after it still cancels", async ($, on) => {
+  const clock = mock.clock(on)
   const r = rig(on, {
     sentinelExists: true,
     stdout: [fixture('armed-compact', CWD), fixture('armed-clear', CWD)],
@@ -279,10 +281,10 @@ test("the outer drive's end leaves the next drive's window open: a prompt after 
     holdLine: '/rename A Title',
   })
   const done1 = endTurn($)
-  await until(() => r.log.includes(`prompt.submit ${CONTINUATION} asUser=true`))
-  await $.classic.Stop({ cwd: CWD, session_id: 's1' })
+  await until(clock, () => r.log.includes(`prompt.submit ${CONTINUATION} asUser=true`))
+  await $.classic.Stop(stop(CWD))
   const done2 = endTurn($, null, 't2')
-  await until(() => r.log.includes('command.run rename [A Title]'))
+  await until(clock, () => r.log.includes('command.run rename [A Title]'))
   r.release.submit()
   await done1
   await $.prompt.submit(PROMPT)
@@ -297,12 +299,13 @@ test("the outer drive's end leaves the next drive's window open: a prompt after 
     'process.run cancel',
     SAY,
   ])
-  expect(r.submitted[1].context).toEqual([CANCEL_NOTE])
+  expect(defined(r.submitted[1]).context).toEqual([CANCEL_NOTE])
 })
 
 // Likewise the outer drive closing its window at its last command: here the
 // next turn's drive is already in flight, and its window stays open.
 test("the outer drive's /clear being issued leaves the next drive's window open: a prompt after it still cancels", async ($, on) => {
+  const clock = mock.clock(on)
   const r = rig(on, {
     sentinelExists: true,
     stdout: [fixture('armed-clear', CWD), fixture('armed-clear', CWD)],
@@ -310,24 +313,25 @@ test("the outer drive's /clear being issued leaves the next drive's window open:
     holdLine: ['/rename A Title', '/rename A Title', '/clear'],
   })
   const done1 = endTurn($)
-  await until(() => r.log.includes('command.run rename [A Title]'))
-  await $.classic.Stop({ cwd: CWD, session_id: 's1' })
+  await until(clock, () => r.log.includes('command.run rename [A Title]'))
+  await $.classic.Stop(stop(CWD))
   const done2 = endTurn($, null, 't2')
-  await until(() => r.log.filter((l: string) => l === 'command.run rename [A Title]').length === 2)
+  await until(clock, () => r.log.filter((l: string) => l === 'command.run rename [A Title]').length === 2)
   r.release.line('/rename A Title')
-  await until(() => r.log.includes('command.run clear []'))
+  await until(clock, () => r.log.includes('command.run clear []'))
   await $.prompt.submit(PROMPT)
   r.release.line()
   await done1
   await done2
   expect(r.log.filter((l: string) => l === 'command.run clear []').length).toBe(1)
-  expect(r.submitted.find((s: any) => s.text === 'say banana').context).toEqual([CANCEL_NOTE])
+  expect(defined(r.submitted.find((s: any) => s.text === 'say banana')).context).toEqual([CANCEL_NOTE])
 })
 
 // The window's answer lives on the window. A later Stop opens a new window while
 // the earlier drive is still in flight; the earlier drive reads its own answer
 // before its next command, so a cancel it received still stops it.
 test("a later Stop opened while a drive is in flight leaves that drive's own cancel answer in force", async ($, on) => {
+  const clock = mock.clock(on)
   const r = rig(on, {
     sentinelExists: true,
     stdout: [fixture('armed-clear', CWD), ''],
@@ -335,9 +339,9 @@ test("a later Stop opened while a drive is in flight leaves that drive's own can
     holdLine: '/rename A Title',
   })
   const done = endTurn($)
-  await until(() => r.log.includes('command.run rename [A Title]'))
+  await until(clock, () => r.log.includes('command.run rename [A Title]'))
   await $.prompt.submit(PROMPT)
-  await $.classic.Stop({ cwd: CWD, session_id: 's1' })
+  await $.classic.Stop(stop(CWD))
   r.release.line()
   await done
   expect(r.log).toEqual(['process.run', 'command.run rename [A Title]', 'process.run cancel', SAY])
@@ -347,10 +351,10 @@ test("a later Stop opened while a drive is in flight leaves that drive's own can
 // earlier window's.
 test('a prompt in a later window spawns drive-cancel again', async ($, on) => {
   const r = rig(on, { sentinelExists: true, stdout: fixture('armed-clear', CWD), cancelStdout: CANCEL_CLEAR(CWD) })
-  await $.classic.Stop({ cwd: CWD, session_id: 's1' })
+  await $.classic.Stop(stop(CWD))
   await $.prompt.submit(PROMPT)
   await endTurn($, null)
-  await $.classic.Stop({ cwd: CWD, session_id: 's1' })
+  await $.classic.Stop(stop(CWD))
   await $.prompt.submit(PROMPT)
   expect(r.cancelArgv.length).toBe(2)
 })
@@ -361,6 +365,7 @@ test('a prompt in a later window spawns drive-cancel again', async ($, on) => {
 // pending file stays for its loader, no toast or note claims a cancel, and A's
 // /clear runs.
 test('a prompt in a later window cancels nothing: the earlier drive runs its /clear with its pending file intact', async ($, on) => {
+  const clock = mock.clock(on)
   const r = rig(on, {
     sentinelExists: true,
     stdout: [fixture('armed-clear', CWD), ''],
@@ -368,8 +373,8 @@ test('a prompt in a later window cancels nothing: the earlier drive runs its /cl
     holdLine: '/rename A Title',
   })
   const done = endTurn($)
-  await until(() => r.log.includes('command.run rename [A Title]'))
-  await $.classic.Stop({ cwd: CWD, session_id: 's1' })
+  await until(clock, () => r.log.includes('command.run rename [A Title]'))
+  await $.classic.Stop(stop(CWD))
   await $.prompt.submit(PROMPT)
   r.release.line()
   await done

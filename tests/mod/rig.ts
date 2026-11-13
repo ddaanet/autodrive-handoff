@@ -1,6 +1,8 @@
 // Stub rig for the mod tests (handoff.test.ts, window.test.ts): answers every mods API call the mod makes and
 // records them, in call order, into one log. Register before the test's first
 // call on `$` (the kit rejects `on` after that).
+import type { PromptSubmitInput, TurnCompleteInput } from 'claude-code'
+import type { ClassicFields } from 'claude-code/testing'
 import { FIXTURES } from './fixtures'
 
 export const ROOT = '/work/proj'
@@ -49,8 +51,30 @@ export type Rig = {
 
 // The turn ends: Stop records, then turn.complete drives (cwd null: no Stop).
 export async function endTurn($: any, cwd: string | null = ROOT, turnId = 't1') {
-  if (cwd !== null) await $.classic.Stop({ cwd, session_id: 's1' })
-  return $.turn.complete({ turnId, answer: 'ok', durationMs: 1, isAborted: false, usage: null })
+  if (cwd !== null) await $.classic.Stop(stop(cwd))
+  return $.turn.complete(answered(turnId))
+}
+
+// The end of a turn the model answered.
+export function answered(turnId: string): TurnCompleteInput {
+  return { turnId, answer: 'ok', durationMs: 1, isAborted: false, reason: 'answer' }
+}
+
+// The Stop of a turn's plain end in session s1: not one a Stop hook's block
+// continued (stop_hook_active).
+export function stop(cwd: string): ClassicFields<'Stop'> {
+  return { cwd, session_id: 's1', stop_hook_active: false }
+}
+
+// A prompt the person typed and sent with a plain Enter.
+export function typed(text: string): PromptSubmitInput {
+  return { text, wait: false, origin: { kind: 'composer' } }
+}
+
+// The element a row expects to be there; a missing one fails the row here.
+export function defined<T>(x: T | undefined): T {
+  if (x === undefined) throw new Error('expected a value, got undefined')
+  return x
 }
 
 export function fixture(name: keyof typeof FIXTURES, root: string): string {
