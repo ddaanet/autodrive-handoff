@@ -242,19 +242,32 @@ broken_python() {
     [ "$output" = "x y|z|" ]
 }
 
-@test "run_bounded: a command outlasting the bound is killed with status 124, leaving nothing behind" {
+@test "run_bounded: a command outlasting the bound is killed with status 124, its children with it" {
+    # the inner sleep is the command's child: left alive, it would hold run's
+    # stdout pipe open for the whole 30 seconds
     SECONDS=0
-    run run_bounded 1 sleep 30
+    run run_bounded 1 bash -c 'sleep 30; :'
     [ "$status" -eq 124 ]
     [ "$SECONDS" -lt 10 ]
 }
 
-@test "run_bounded: no watchdog outlives a command that finished first" {
-    # a leaked sleep would hold run's stdout pipe open for the whole 31 seconds
-    SECONDS=0
-    run run_bounded 31 true
-    [ "$status" -eq 0 ]
-    [ "$SECONDS" -lt 10 ]
+# <seconds> <executable> [<arg>...] — a time bound the suite owns, since macOS
+# ships no `timeout`. The command runs in a session of its own; when the bound
+# passes, that whole process group is killed and the status is 124, as with
+# coreutils' timeout. Otherwise its output and exit status pass through (a
+# signal death as 128+signal).
+run_bounded() {
+    python3 -I -c '
+import os, signal, subprocess, sys
+p = subprocess.Popen(sys.argv[2:], start_new_session=True)
+try:
+    rc = p.wait(timeout=float(sys.argv[1]))
+except subprocess.TimeoutExpired:
+    os.killpg(p.pid, signal.SIGKILL)
+    p.wait()
+    sys.exit(124)
+sys.exit(rc if rc >= 0 else 128 - rc)
+' "$@"
 }
 
 @test "handoff_read_regular (own, this user's file): ok" {
