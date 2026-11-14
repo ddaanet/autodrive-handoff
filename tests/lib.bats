@@ -229,8 +229,32 @@ broken_python() {
     [ "$output" = "other" ]
     mkfifo "$BATS_TEST_TMPDIR/p"
     # shellcheck disable=SC2016   # $1/$2 are the inner bash -c's own positional params
-    run timeout 5 bash -c 'source "$1"; handoff_read_regular "$2"' _ "$repo_root/scripts/_lib.sh" "$BATS_TEST_TMPDIR/p"
+    run run_bounded 5 bash -c 'source "$1"; handoff_read_regular "$2"' _ "$repo_root/scripts/_lib.sh" "$BATS_TEST_TMPDIR/p"
     [ "$output" = "other" ]
+}
+
+@test "run_bounded: stdout and exit status pass through when the command finishes in time" {
+    run run_bounded 5 bash -c 'printf "a b\n"; exit 3'
+    [ "$status" -eq 3 ]
+    [ "$output" = "a b" ]
+    run run_bounded 5 printf '%s|' "x y" z
+    [ "$status" -eq 0 ]
+    [ "$output" = "x y|z|" ]
+}
+
+@test "run_bounded: a command outlasting the bound is killed with status 124, leaving nothing behind" {
+    SECONDS=0
+    run run_bounded 1 sleep 30
+    [ "$status" -eq 124 ]
+    [ "$SECONDS" -lt 10 ]
+}
+
+@test "run_bounded: no watchdog outlives a command that finished first" {
+    # a leaked sleep would hold run's stdout pipe open for the whole 31 seconds
+    SECONDS=0
+    run run_bounded 31 true
+    [ "$status" -eq 0 ]
+    [ "$SECONDS" -lt 10 ]
 }
 
 @test "handoff_read_regular (own, this user's file): ok" {

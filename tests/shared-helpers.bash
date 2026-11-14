@@ -29,3 +29,29 @@ marker_holds() {
 continuation_line() {
     bash -c 'source "$1/scripts/_lib.sh" && printf "%s\n" "$HANDOFF_CONTINUATION"' _ "$repo_root"
 }
+
+# <seconds> <command> [<arg>...] — run the command with a time bound, the suite's
+# own, since macOS ships no `timeout`. Its stdout passes through and its status
+# is returned when it finishes in time; when the bound passes first it is killed
+# and the status is 124, as coreutils' timeout gives. The watchdog is reaped in
+# both outcomes, its sleep with it.
+run_bounded() {
+    local secs=$1 cmd dog st
+    shift
+    "$@" &
+    cmd=$!
+    (
+        trap 'kill "$(jobs -p)" 2>/dev/null; exit 0' TERM
+        sleep "$secs" &
+        wait
+        kill "$cmd" 2>/dev/null
+        exit 124
+    ) &
+    dog=$!
+    wait "$cmd"
+    st=$?
+    kill "$dog" 2>/dev/null
+    wait "$dog" 2>/dev/null
+    [ $? -eq 124 ] && return 124
+    return "$st"
+}

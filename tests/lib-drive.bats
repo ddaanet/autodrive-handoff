@@ -476,7 +476,7 @@ keep it" ]
 
 # A link to a directory put at the sentinel after it was read: mv would move
 # the temporary file into that directory. The rename replaces the link.
-# shellcheck disable=SC2317   # tail() below is called by handoff_drive_arm, in _lib.sh, which setup sources
+# shellcheck disable=SC2317,SC2329   # tail() below is called by handoff_drive_arm, in _lib.sh, which setup sources
 @test "handoff_drive_arm (the sentinel became a link to a directory: replaced, nothing moved into it)" {
     printf '%s\n' "armed sess-42" "compact" > "$BATS_TEST_TMPDIR/sentinel"
     mkdir -p "$other/dir"
