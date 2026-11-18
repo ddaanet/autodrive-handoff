@@ -31,10 +31,8 @@ HANDOFF_REL_TODO="TODO.md"
 HANDOFF_REL_DRIVE=".claude/autodrive"
 # The advisory lock the sentinel's actors hold across a read-decide-write
 # (_drive_lock.py; docs/design/driving-the-transition.md, "The sentinel's lock").
-# It is taken on the `.claude/` directory itself, which holds the sentinel, so no
-# lock file exists. Mirrored in checkpoint.py.
-# shellcheck disable=SC2034
-HANDOFF_REL_DRIVE_LOCK_DIR=".claude"
+# It is taken on the sentinel's parent directory (`${HANDOFF_REL_DRIVE%/*}`), so
+# no lock file exists.
 # Where the drive mod records a line it could not run (written from
 # the mod at the failing line). A mod's rejection goes nowhere on its
 # own, so this is the only path back to the agent; consumed and reported by

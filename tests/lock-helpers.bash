@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Shared by the bats files that test the sentinel's lock (docs/design/
-# sentinel-lock.md): a stand-in for another actor that holds
-# `.claude/` (the lock is on the directory) while a row mutates the sentinel the way a writer or
-# a taker would, and then lets go. The holder is tests/lock_holder.py, which
+# sentinel-lock.md): a stand-in for another actor that holds `.claude/` (the
+# lock is on the directory) while a row mutates the sentinel the way a writer
+# or a taker would, and then lets go. The holder is tests/lock_holder.py, which
 # takes the lock through the code under test's own `_drive_lock.locked`.
 #
 # Nothing here sleeps or polls: the holder reports through a FIFO the row reads

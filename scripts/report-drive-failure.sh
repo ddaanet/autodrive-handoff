@@ -121,7 +121,7 @@ drive_err=""
 # removed while this waited.
 lock_rc=0
 if [[ -L "$drive" || -f "$drive" ]]; then
-    handoff_lock_take "$cwd/$HANDOFF_REL_DRIVE_LOCK_DIR" || lock_rc=$?
+    handoff_lock_take "$cwd/${HANDOFF_REL_DRIVE%/*}" || lock_rc=$?
 fi
 if (( lock_rc != 0 )); then
     drive_state="locked"

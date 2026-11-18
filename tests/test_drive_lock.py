@@ -16,7 +16,6 @@ import threading
 from pathlib import Path
 
 import _drive_lock as drive_lock
-import checkpoint
 import pytest
 from lock_holder import blocked_signal, held_elsewhere
 
@@ -347,17 +346,6 @@ def test_bash_take_is_unavailable_when_the_helper_fails(tmp_path: Path) -> None:
     )
     assert result.stdout.split() == ["rc=2"]
     assert sorted(p.name for p in lock.iterdir()) == []
-
-
-def test_the_python_constant_mirrors_the_bash_one() -> None:
-    result = subprocess.run(
-        ["bash", "-c", f'source "{LIB}"; printf %s "$HANDOFF_REL_DRIVE_LOCK_DIR"'],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result.stdout == ".claude"
-    assert result.stdout == checkpoint.HANDOFF_REL_DRIVE_LOCK_DIR
 
 
 def test_a_wait_that_finds_the_lock_held_writes_to_the_blocked_file(

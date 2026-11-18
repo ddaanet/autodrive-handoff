@@ -41,6 +41,7 @@ import stat
 import sys
 import time
 from collections.abc import Iterator
+from pathlib import Path
 
 
 class LockError(Exception):
@@ -63,15 +64,15 @@ class LockUnavailableError(LockError):
 
 
 @contextlib.contextmanager
-def locked(lock_path: str | os.PathLike[str]) -> Iterator[None]:
-    """Hold the lock for the body.
+def locked(directory: str | os.PathLike[str]) -> Iterator[None]:
+    """Hold the lock on `directory` for the body.
 
     Raises `LockBusyError` when the bound passes with the lock held elsewhere
-    and `LockUnavailableError` when it cannot be set up (a non-directory at the
-    name, no `.claude/`, no `flock`). Either is raised on entry, so the body
-    never runs unlocked.
+    and `LockUnavailableError` when it cannot be set up (a non-directory at
+    `directory`, no such directory, no `flock`). Either is raised on entry, so
+    the body never runs unlocked.
     """
-    fd = _open_directory(os.fspath(lock_path))
+    fd = _open_directory(os.fspath(directory))
     try:
         _flock_within_bound(fd)
     except LockError:
@@ -102,7 +103,7 @@ def _command_wait(fd_text: str, path: str) -> int:
     try:
         fd = int(fd_text)
         held = os.fstat(fd)
-        named = os.stat(path)  # noqa: PTH116 - beside fstat on the bare fd
+        named = Path(path).stat()
     except (ValueError, OSError):
         return EXIT_UNAVAILABLE
     if not stat.S_ISDIR(held.st_mode) or not stat.S_ISDIR(named.st_mode):
