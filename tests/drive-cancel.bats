@@ -140,6 +140,15 @@ assert_cancelled() {
     assert_untouched
 }
 
+# The lock's other failure cause: the helper cannot run at all, so nothing is
+# held by anyone and the cancel still fails closed.
+@test "drive-cancel (the lock helper fails: nothing printed, file untouched)" {
+    seed_and_keep "pending" "clear continue" "A Title"
+    fail_lock_helper
+    cancel clear
+    assert_untouched
+}
+
 # The cancel judges the file it finds once the lock is free (sentinel-lock.md).
 # The pending file passes the first test, another actor holds the lock, and the
 # file changes under it: an unlocked read has already seen `pending` and would

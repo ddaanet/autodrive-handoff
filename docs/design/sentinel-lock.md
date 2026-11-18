@@ -143,8 +143,8 @@ fail-closed report or exit and, for the loaders, the frame still injected; a
 second row per actor gives the unavailable cause: a failing helper for the bash
 actors (`fail_lock_helper` in `tests/lock-helpers.bash`, a `python3` shim that
 fails only the lock's helper), a refused `flock` for the checkpoint. They are
-in `tests/drive-take.bats`, `tests/sentinel-lock.bats`, `tests/bin-commands.bats`
-and `tests/test_checkpoint_readback.py`, and `tests/test_drive_lock.py` covers
-the lock itself.
+in `tests/drive-take.bats`, `tests/drive-cancel.bats`, `tests/sentinel-lock.bats`,
+`tests/bin-commands.bats` and `tests/test_checkpoint_readback.py`, and
+`tests/test_drive_lock.py` covers the lock itself.
 2026-10-16 The sentinel takes a lock,
 2026-10-17 The lock fails closed
