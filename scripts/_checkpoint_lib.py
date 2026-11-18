@@ -265,7 +265,8 @@ class _Item:
         self.decision = decision
 
 
-# An item runs to the next `- ` line at column 0 or the next `##` heading.
+# An item runs to its last non-blank line before the next `- ` line at column 0
+# or the next `##` heading.
 _SECTION_HEADING = re.compile(r"##(?!#)(\s|$)")
 
 
@@ -280,14 +281,14 @@ def _todo_items(lines: list[str]) -> list[_Item]:
         elif line.startswith("- "):
             current = _Item(n, decision=decision)
             items.append(current)
-        elif current is not None:
+        elif current is not None and line.strip():
             current.end = n + 1
     return items
 
 
 def _without_items(head: str, lines: list[str], dropped: list[_Item]) -> str:
     gone = {n for i in dropped for n in range(i.start, i.end)}
-    kept = "\n".join(line for n, line in enumerate(lines) if n not in gone).rstrip()
+    kept = "\n".join(_kept_lines(lines, gone)).rstrip()
     decisions = sum(1 for i in dropped if i.decision)
     remaining = len(dropped) - decisions
     counts = []
@@ -300,6 +301,27 @@ def _without_items(head: str, lines: list[str], dropped: list[_Item]) -> str:
         "read it before acting on either list."
     )
     return head + ("\n\n" + kept if kept else "") + "\n\n" + pointer
+
+
+def _kept_lines(lines: list[str], gone: set[int]) -> list[str]:
+    """Return the lines not in `gone`, with no blank line doubled across a cut.
+
+    An item's range stops at its last non-blank line, so the blank lines that
+    separated it from what follows stay; where a cut leaves one blank run
+    against another, the second goes.
+    """
+    kept: list[str] = []
+    cut = False
+    for n, line in enumerate(lines):
+        if n in gone:
+            cut = True
+            continue
+        if cut and not line.strip() and kept and not kept[-1].strip():
+            continue
+        if line.strip():
+            cut = False
+        kept.append(line)
+    return kept
 
 
 def _cli(argv: list[str]) -> int:

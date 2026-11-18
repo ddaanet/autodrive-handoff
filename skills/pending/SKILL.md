@@ -15,10 +15,11 @@ the files on disk — except when the frame arrived cut (step 2).
 
 1. Find the most recent task frame already in context.
 2. If the frame sits inside a `<persisted-output>` block that says
-   `Output too large`, context holds only a preview of it: read `TODO.md` at
-   the root of the git worktree the session was launched in, and take the open decisions
-   and remaining items from it. Absent that block, the frame is complete
-   however short it looks.
+   `Output too large`, context holds only a preview of it; if it ends with a
+   line saying `TODO.md` holds more items than shown, the loader cut items to
+   fit. Either way, read `TODO.md` at the root of the git worktree the session
+   was launched in, and take the open decisions and remaining items from it.
+   Absent both, the frame is complete however short it looks.
 3. List its open decisions and remaining items, grouped as they appear
    ("Open decisions" / "Remaining"). Trim for brevity; do not re-derive
    or editorialize beyond that.

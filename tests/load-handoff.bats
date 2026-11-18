@@ -417,6 +417,15 @@ link_root() {
     [[ "$CTX" != *"- k"* && "$CTX" == *"TODO.md holds 2 more remaining items than"* ]]
 }
 
+@test "load-handoff (limit): a cut keeps the blank line before the next section's heading" {
+    seed_todo 2 4 3000 last
+    run_load_handoff "$tmp" clear
+    split_output "$output"
+    [[ "$CTX" == *"TODO.md holds"*"more remaining item"* ]]
+    [[ "$CTX" == *"x"$'\n\n'"## Open decisions"$'\n'* ]]
+    [[ "$CTX" != *$'\n\n\n'* ]]
+}
+
 @test "load-handoff (limit): with no remaining item, only the open decisions are counted in the pointer" {
     seed_todo 8 0 1500
     run_load_handoff "$tmp" clear
