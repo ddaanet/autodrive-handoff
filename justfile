@@ -33,8 +33,8 @@ _default:
     @just --list
 
 # Run the commit gate: the plugin and code checks, the link, size and frontmatter checks
-precommit: check-plugin check-code check-refs check-size check-frontmatter
-    @echo "precommit: check-plugin check-code check-refs check-size check-frontmatter passed"
+precommit: check-plugin check-code check-refs check-size check-frontmatter check-modes
+    @echo "precommit: check-plugin check-code check-refs check-size check-frontmatter check-modes passed"
 
 # Manifests, settings, plugin validation, mod tests, shellcheck; skipped while its inputs are unchanged
 check-plugin:
