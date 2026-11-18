@@ -14,10 +14,11 @@
 # Exit 0 prints one sign-off line on stdout. Exit 1 prints one stderr line per
 # problem, each prefixed `check-frontmatter: <path>: `, and nothing else.
 #
-# The YAML parse runs under the Python named by python3 on PATH, with PyYAML
-# importable. The file list reaches it NUL-delimited on stdin, so no path is
-# split. Interpreter remedy: pyyaml is in the dev group of pyproject.toml, `uv
-# sync` materializes .venv, and .envrc puts .venv/bin on PATH.
+# The YAML parse runs under the first of <top>/.venv/bin/python3 and python3 on
+# PATH that imports PyYAML, where <top> is the git top level, so a shell or hook
+# that does not load direnv still finds the venv. The file list reaches it
+# NUL-delimited on stdin, so no path is split. The remedy is pyyaml in the dev
+# group of pyproject.toml, then uv sync.
 
 set -euo pipefail
 export LC_ALL=C
@@ -39,10 +40,23 @@ main() {
         printf 'check-frontmatter ok (0 skills, 0 agents, 0 commands)\n'
         exit 0
     fi
-    if ! python3 -I -c 'import yaml' >/dev/null 2>&1; then
-        fail_run "python3 with PyYAML not found on PATH: add pyyaml to the dev group of pyproject.toml, run uv sync, and put .venv/bin on PATH from .envrc"
-    fi
-    printf '%s\0' "${files[@]}" | python3 -I -c "$program"
+    top="$(git rev-parse --show-toplevel)"
+    python="$(find_python "$top")" \
+        || fail_run "python3 with PyYAML not found in $top/.venv/bin/python3 (the venv must be at the repository top level) or on PATH: add pyyaml to the dev group of pyproject.toml and run uv sync"
+    printf '%s\0' "${files[@]}" | "$python" -I -c "$program"
+}
+
+# find_python <top>: print the first of <top>/.venv/bin/python3 and python3 on
+# PATH that imports PyYAML; return 1 when neither does.
+find_python() {
+    local candidate
+    for candidate in "$1/.venv/bin/python3" python3; do
+        if "$candidate" -I -c 'import yaml' >/dev/null 2>&1; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done
+    return 1
 }
 
 # is_checked <path>: the path is a file this check reads. In a case pattern `*`

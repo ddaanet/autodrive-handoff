@@ -59,12 +59,17 @@
 #
 # `check-size` refuses a file over the size cap, counted in bytes.
 # Like `check-refs`, no recipe here runs it: a plugin wires it into its own
-# gate, `precommit: check-refs check-size check-frontmatter`.
+# gate, `precommit: check-refs check-size check-frontmatter check-modes`.
 #
 # `check-frontmatter` refuses a skill, agent or command whose frontmatter is
 # missing, not YAML, or breaks the toolkit's field rules. Like `check-size`, no
 # recipe here runs it: a plugin wires it into its own gate, as above. It needs
-# PyYAML for the python3 on PATH.
+# PyYAML in the checked repo's .venv, or in the python3 on PATH.
+#
+# `check-modes` refuses a vendored script that starts with `#!` but lacks the
+# execute bit, a flip a consumer commit can make after vendoring. Like
+# `check-size`, no recipe here runs it: a plugin wires it into its own gate, as
+# above, and it checks the directory it was vendored into.
 #
 # Requirements: bash, jq, git, gh, rsync.
 
@@ -99,6 +104,10 @@ check-size:
 # Refuse a skill, agent or command whose frontmatter is missing, not YAML, or breaks the field rules.
 check-frontmatter:
     bash "{{toolkit_prefix}}/check-frontmatter.sh"
+
+# Refuse a vendored script that starts with #! but is not executable.
+check-modes:
+    bash "{{toolkit_prefix}}/check-modes.sh"
 
 # Pull the vendored toolkit up to a dist tag; no ref = newest on the remote.
 update-plugin-dev ref='':

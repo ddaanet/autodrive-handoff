@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Wraps `bats` to show only failures plus a pass/fail count. A full run's TAP
+# Wraps `bats` to show only failures plus a pass/fail/skip count. A full run's TAP
 # stream ("ok 1 ...", "ok 2 ...", ...) is hundreds of lines long -- too long to
 # eyeball, and piping it through `tail -N` risks cropping the one "not ok"
 # line that matters. The full stream goes to a log file, kept when the run
@@ -26,8 +26,14 @@ bats "$@" >"$log" 2>&1
 status=$?
 set -e
 
-pass=$(grep -c '^ok ' "$log" || true)
+# A skip is an `ok` line carrying TAP's `# skip` directive: counted apart, so a
+# run of nothing but skips reads as the run of no test it is.
+ok=$(grep -c '^ok ' "$log" || true)
+skip=$(grep -ciE '^ok .*# skip( |$)' "$log" || true)
+pass=$((ok - skip))
 fail=$(grep -c '^not ok ' "$log" || true)
+summary="$pass passed, $fail failed"
+[ "$skip" -eq 0 ] || summary="$summary, $skip skipped"
 
 if [ "$status" -eq 0 ] && [ "$pass" -eq 0 ] && [ "$fail" -eq 0 ]; then
     # A typo'd `--filter` or an empty .bats file exits 0 having checked nothing,
@@ -48,8 +54,8 @@ fi
 
 if [ "$status" -eq 0 ]; then
     rm -f "$log"
-    echo "bats: $pass passed, $fail failed"
+    echo "bats: $summary"
 else
-    echo "bats: $pass passed, $fail failed — full log: $log"
+    echo "bats: $summary — full log: $log"
 fi
 exit "$status"
