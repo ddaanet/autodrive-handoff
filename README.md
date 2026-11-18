@@ -37,7 +37,7 @@ Ask in plain words, or invoke a skill:
 | `/autodrive-handoff:handoff` | before a `/clear` |
 | `/autodrive-handoff:precompact` | before a `/compact` |
 | `/autodrive-handoff:autoname` | to name the session, and nothing else |
-| `/autodrive-handoff:pending` | to list the open decisions and remaining todos already loaded, with no tool calls |
+| `/autodrive-handoff:pending` | to list the open decisions and remaining todos already loaded, with no tool calls unless the loaded frame was cut short |
 
 Examples of what to say:
 

@@ -29,11 +29,15 @@ There is no restart skill: Claude Code's own `/restart` relaunches with
 `--resume`, which carries the conversation over whole, so there is no
 boundary for this plugin to cross and no frame to carry.
 
-`/autodrive-handoff:pending` has no design surface at all: it reports
+`/autodrive-handoff:pending` has almost no design surface: it reports
 the `## Open decisions` and `## Remaining` sections of the
-frame already injected into context, making no tool call and writing no file.
-It appears nowhere else in the design because there is nothing else to say
-about it.
+frame already injected into context, writing no file. It makes no tool call
+unless the frame arrived cut: Claude Code persists a large hook output to a
+file and shows only a 2KB preview in a `<persisted-output>` block, and then the
+skill reads `TODO.md`. `TASK.md` needs no read, since FR13's 1000-character cap
+keeps the header and the task inside the preview. The skill keys on the block
+alone, never on a frame that merely looks short. That the loader itself injects
+a cut frame into every session over the limit is a separate question.
 
 The judgment is per-boundary, not per-drive-mode: commit awareness, memory
 capture, the drafting rules and the seam between the files and the
