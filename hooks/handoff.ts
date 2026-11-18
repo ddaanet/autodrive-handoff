@@ -126,8 +126,7 @@ async function drive($: any, w: Window) {
   }
 
   const steps = commandsFor(plan.kind, typeof plan.arg === 'string' ? plan.arg : '')
-  for (let i = 0; i < steps.length; i++) {
-    const { command, args } = steps[i]
+  for (const [i, { command, args }] of steps.entries()) {
     // Read before any yield: with no prompt yet, nothing is awaited between
     // this read and issuing the command.
     if (w.cancelled !== null && (await w.cancelled)?.note) return

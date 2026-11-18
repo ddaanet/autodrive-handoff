@@ -42,7 +42,7 @@ drive="$cwd/$HANDOFF_REL_DRIVE"
 # missing from a driven compaction is the costlier error. The second test is for
 # a file removed while this waited.
 lock_rc=0
-handoff_lock_take "$cwd/$HANDOFF_REL_DRIVE_LOCK" || lock_rc=$?
+handoff_lock_take "$cwd/${HANDOFF_REL_DRIVE%/*}" || lock_rc=$?
 [[ -L "$drive" || -f "$drive" ]] || exit 0
 
 if (( lock_rc == 0 )); then

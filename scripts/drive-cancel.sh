@@ -36,7 +36,7 @@ drive="$root/$HANDOFF_REL_DRIVE"
 # closed: nothing printed, the file as it is. The second test is for a file the
 # sweep removed while this waited.
 lock_rc=0
-handoff_lock_take "$root/$HANDOFF_REL_DRIVE_LOCK" || lock_rc=$?
+handoff_lock_take "$root/${HANDOFF_REL_DRIVE%/*}" || lock_rc=$?
 (( lock_rc == 0 )) || exit 0
 [[ -L "$drive" || -f "$drive" ]] || exit 0
 

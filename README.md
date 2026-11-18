@@ -207,14 +207,16 @@ run is denied). To run the checkpoint without a prompt, allow all three in
 | `TASK.md`, `TODO.md` (project root) | the task frame; plain tracked files |
 | `.claude/` | created by `handoff-checkpoint` when absent |
 | `.claude/autodrive` | the transition to carry out; composed only by `handoff-checkpoint`; past that, the plugin's own scripts only rewrite its state line or remove it, and direct writes are denied by the `PreToolUse(Write\|Edit)` guard |
-| `.claude/autodrive.lock` | an empty lock file, mode 0600, held while the plugin reads or changes `.claude/autodrive`; never deleted |
 | `.claude/autodrive.failed` | written by the mod when a command is rejected; consumed at your next prompt |
 | `.claude/autodrive.swept` | one line per stale or cancelled transition file removed; last 50 kept |
 | `/tmp/claude/handoff-drift-<session id>` | marker so a session-root drift note appears once; `/tmp/claude` is created mode 0700 and markers older than 7 days are deleted |
 | `/tmp/claude/handoff-prompt-<session id>` | the id of the turn that last ran `handoff-checkpoint` or `handoff-approved`; written by the `PreToolUse(Bash)` hook, read by the prompt hook, deleted after 7 days |
 
 `TASK.md`, `TODO.md`, `.claude/autodrive` and `.claude/autodrive.swept` are
-each written through a temporary sibling file renamed over the name.
+each written through a temporary sibling file renamed over the name. While the
+plugin reads or changes `.claude/autodrive` it holds a lock on `.claude/`
+itself, which leaves no file. An `autodrive.lock` that an earlier version left
+there is unused and safe to delete.
 
 It also reads, never writes, the modification time of the owning session's
 transcript, to tell a live session from a dead one.

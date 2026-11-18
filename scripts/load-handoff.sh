@@ -53,7 +53,7 @@ drive="$cwd/$HANDOFF_REL_DRIVE"
 lock_ctx=""   # the agent's half of that note
 if [[ "$hook_source" == "clear" && ( -L "$drive" || -f "$drive" ) ]]; then
     lock_rc=0
-    handoff_lock_take "$cwd/$HANDOFF_REL_DRIVE_LOCK" || lock_rc=$?
+    handoff_lock_take "$cwd/${HANDOFF_REL_DRIVE%/*}" || lock_rc=$?
     if (( lock_rc != 0 )); then
         notes+=("autodrive left in place — $HANDOFF_LOCK_MSG")
         lock_ctx="The transition state ($HANDOFF_REL_DRIVE) was left in place, not consumed: $HANDOFF_LOCK_MSG."

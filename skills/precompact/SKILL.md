@@ -96,7 +96,7 @@ JSON
 every open item still listed. `{"action": "clear"}` removes the file — it says
 every item landed. When the call has nothing to say about the
 list, send `{"action": "keep"}`, which leaves it untouched: `keep` is the
-default and `clear` is a deliberate stand-down. `{"action": "edit", …}` replaces
+usual answer and `clear` a deliberate stand-down. `{"action": "edit", …}` replaces
 one exact occurrence of `old_string` with `new_string`, so an item is added or
 dropped without the whole list in context; it needs the file to exist and
 `old_string` to appear in it exactly once. `null` is an error, as is
@@ -108,7 +108,9 @@ omitting the key, or adding one inside an action object.
 each part in the order printed; each one waits for everything above it, and
 whatever you run may print the next part. The checkpoint owns the decision —
 do not re-derive or verify it. A non-zero exit names the offending field on
-stderr — fix the payload and retry.
+stderr: fix the payload and retry. A `lock` error means nothing was written:
+when it says to run the call again, do; otherwise stop and report the message
+to the user.
 
 The normal case — nothing durable, clean memory, no commit — is one checkpoint
 call, and its output is one part, naming the line to end on.
