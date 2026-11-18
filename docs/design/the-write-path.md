@@ -63,15 +63,16 @@ frame, the loader's own notes appended after it and the closing newline — to
 cut never depends on the hook's locale). A frame that fits is untouched. Over
 it, `handoff_frame_fit()` (`_lib_frame.sh`, through the `--fit-frame` CLI) cuts
 `TODO.md` at whole items: an item is a line starting `- ` at column 0 with the
-lines after it up to the next such line or `##` heading. Items go from the end
+lines after it up to its last non-blank line before the next such line or `##`
+heading, so a cut leaves the blank line before the next heading. Items go from the end
 of the file, those under `## Remaining` and any other section first and those
 under `## Open decisions` only when that is not enough; headings stay, and the
 header and the task are never cut. The frame then ends with one line saying how
 many remaining items and open decisions `TODO.md` holds beyond those shown and
 to read it before acting on either list, a zero count omitted and the line
 counted in the budget. With every item gone and the budget still exceeded, that
-minimal form is emitted anyway. `/autodrive-handoff:pending`'s read of
-`TODO.md` is the fallback for a frame cut by the host regardless.
+minimal form is emitted anyway. `/autodrive-handoff:pending` reads `TODO.md` when
+it sees that line, and when the host cut the frame regardless.
 
 ## One channel, one writer
 

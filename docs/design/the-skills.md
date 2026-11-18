@@ -38,7 +38,7 @@ file and shows only a 2KB preview in a `<persisted-output>` block (seen on
 limit not measured), and then the skill reads `TODO.md` at the worktree root.
 The loaders keep the frame under the limit themselves by cutting `TODO.md`
 items ([the frame's size](the-write-path.md#the-frames-size)), and a frame they
-cut ends with a line saying `TODO.md` holds more items than shown: the skill
+cut carries a line saying `TODO.md` holds more items than shown: the skill
 reads the file then too. `TASK.md` needs no read: it holds neither section the
 skill reports. The skill keys on the block or that line alone, never on a frame
 that merely looks short.
