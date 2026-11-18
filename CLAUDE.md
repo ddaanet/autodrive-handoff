@@ -178,7 +178,7 @@ pytest runs off a uv-managed venv that direnv activates (`.envrc` exports
   uncached checks that run every time: Markdown links, the toolkit's byte caps
   (20000, 10000 for a `SKILL.md`), that each `SKILL.md`'s frontmatter is YAML
   that obeys the toolkit's field rules (it reads PyYAML through the venv's
-  `python3`), and that every `#!` file is executable.
+  `python3`), and that every `#!` file under `plugin-dev/` is executable.
   A file kept over a cap is listed in the root `size.exempt`, with what ends
   its overage. `release` depends on `precommit` through `prerelease`.
 - The `justfile` lists each gate's inputs: a new component directory the
