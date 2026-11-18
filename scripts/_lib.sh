@@ -94,10 +94,11 @@ handoff_owner_live() {
 # directory is followed), `_drive_lock.py wait` takes the lock on it from a
 # child, and the lock stays with the shell's descriptor after that child is
 # gone. The `-d` test keeps bash from opening anything else, a FIFO say, which
-# could block; residual: a FIFO swapped in between the test and the open still
-# blocks it, until the caller's timeout. `wait` checks that fd 9 is the directory the path names. `wait`
-# exits 75 for busy and anything else for unavailable (a crashed or missing
-# python3 included).
+# could block. Residual: a FIFO swapped in between the test and the open still
+# blocks it, and no wait of the lock's bounds that open; only the hook's or the
+# Bash tool's own timeout ends it. `wait` checks that fd 9 is the directory the
+# path names. `wait` exits 75 for busy and anything else for unavailable (a
+# crashed or missing python3 included).
 # shellcheck disable=SC2034  # HANDOFF_LOCK_MSG is read by the sourcing scripts
 handoff_lock_take() {
     local lock="$1" helper wait_rc=0
