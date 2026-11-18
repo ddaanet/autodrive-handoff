@@ -96,7 +96,7 @@ What's reconstructible from state:
 What's irreducible:
 
 - **current_task** — a pointer to what was in progress
-- **open_decisions** — unmade choices still blocking progress
+- **open_decisions** — unmade choices some work still waits on
 
 Plus one that is reconstructible only by *model inference*, which is a
 different thing:
