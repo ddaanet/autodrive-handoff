@@ -32,7 +32,7 @@ export PLUGIN_DEV_GATE_TOOLS := "bats --version\nshellcheck --version\njq --vers
 _default:
     @just --list
 
-# Run the commit gate: the plugin and code checks, the link, size and frontmatter checks
+# Run the commit gate: the plugin and code checks, the link, size, frontmatter and mode checks
 precommit: check-plugin check-code check-refs check-size check-frontmatter check-modes
     @echo "precommit: check-plugin check-code check-refs check-size check-frontmatter check-modes passed"
 
