@@ -159,8 +159,9 @@ is omitting a key, or adding one inside an action object.
 each part in the order printed; each one waits for everything above it, and
 whatever you run may print the next part. The checkpoint owns the decision —
 do not re-derive or verify it. A non-zero exit names the offending field on
-stderr: fix the payload and retry, or for `lock`, which means nothing was
-written, do what the message says.
+stderr: fix the payload and retry. A `lock` error means nothing was written:
+when it says to run the call again, do; otherwise stop and report the message
+to the user.
 
 ## Anti-patterns
 
