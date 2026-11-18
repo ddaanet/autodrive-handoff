@@ -30,9 +30,9 @@ HANDOFF_REL_TODO="TODO.md"
 # shellcheck disable=SC2034
 HANDOFF_REL_DRIVE=".claude/autodrive"
 # The advisory lock the sentinel's actors hold across a read-decide-write
-# (_drive_lock.py; docs/design/driving-the-transition.md, "The sentinel's lock").
-# It is taken on the sentinel's parent directory (`${HANDOFF_REL_DRIVE%/*}`), so
-# no lock file exists.
+# (_drive_lock.py; docs/design/sentinel-lock.md) is taken on the sentinel's
+# parent directory, `${HANDOFF_REL_DRIVE%/*}`, so no lock file exists.
+
 # Where the drive mod records a line it could not run (written from
 # the mod at the failing line). A mod's rejection goes nowhere on its
 # own, so this is the only path back to the agent; consumed and reported by
@@ -75,7 +75,7 @@ handoff_owner_live() {
     (( now - mtime <= ${HANDOFF_OWNER_LIVE_SECS:-600} ))
 }
 
-# <lockfile>. Take the sentinel's lock, held until the shell exits (or closes
+# <directory>. Take the sentinel's lock, held until the shell exits (or closes
 # fd 9), so a script holds it across its whole read-decide-write by calling this
 # before the read. Returns 0 holding it. Not holding it fails closed: the caller
 # leaves the sentinel alone, since acting unlocked reopens the race the lock
@@ -94,7 +94,8 @@ handoff_owner_live() {
 # directory is followed), `_drive_lock.py wait` takes the lock on it from a
 # child, and the lock stays with the shell's descriptor after that child is
 # gone. The `-d` test keeps bash from opening anything else, a FIFO say, which
-# could block. `wait` checks that fd 9 is the directory the path names. `wait`
+# could block; residual: a FIFO swapped in between the test and the open still
+# blocks it, until the caller's timeout. `wait` checks that fd 9 is the directory the path names. `wait`
 # exits 75 for busy and anything else for unavailable (a crashed or missing
 # python3 included).
 # shellcheck disable=SC2034  # HANDOFF_LOCK_MSG is read by the sourcing scripts
