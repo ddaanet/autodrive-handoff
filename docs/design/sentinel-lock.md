@@ -70,7 +70,10 @@ exactly as it was in every case:
   that waited resolves against the body it finds once it has the lock, never
   against one read before the wait, and a refused call leaves all three
   untouched and the same call can be made again (an `edit` could not be, once
-  applied). What stays outside the lock is what reads only the payload or the
+  applied). The boundary skills act on the cause: for busy (the message says
+  to run the call again) they run it again; for unavailable, a lock that could
+  not be set up, they do not, and stop and report the message to the user.
+  What stays outside the lock is what reads only the payload or the
   environment (validation, `HANDOFF_ROOT`, `CLAUDE_CODE_SESSION_ID`), the memory
   directive's read of the gitlore submodule, which no actor of the sentinel
   writes, and `check_sentinel_target`, which has to refuse a `.claude` that is a
