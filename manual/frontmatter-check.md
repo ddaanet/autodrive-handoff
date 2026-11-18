@@ -80,9 +80,11 @@ no sentinel's inputs cover whole.
 
 ## Setup
 
-The YAML parse runs under the `python3` on PATH, which must import PyYAML. A
-plugin with no skill, agent or command needs no parser and signs off with zeros
-whatever `python3` is. Otherwise:
+The YAML parse runs under the first interpreter that imports PyYAML:
+`.venv/bin/python3` under the git top level of the checked root, then the
+`python3` on PATH. A shell or hook that does not load direnv therefore still
+runs the check. A plugin with no skill, agent or command needs no parser and
+signs off with zeros whatever `python3` is. Otherwise:
 
 1. Add `pyyaml` to the dev group of `pyproject.toml`:
 
@@ -91,16 +93,11 @@ whatever `python3` is. Otherwise:
     dev = ["pyyaml>=6"]
     ```
 
-2. Run `uv sync` once, which materializes `.venv`.
-3. Put `.venv/bin` on PATH from `.envrc`:
+2. Run `uv sync`, which materializes `.venv`.
 
-    ```sh
-    export VIRTUAL_ENV=$PWD/.venv
-    PATH_add .venv/bin
-    ```
-
-Without them the check exits 1 with one line naming these three steps. It needs
-`bash`, `git` and `mktemp` besides.
+Activating `.venv` from `.envrc` is not needed by this check. Without a
+PyYAML-capable interpreter in either place the check exits 1 with one line
+naming these two steps. It needs `bash`, `git` and `mktemp` besides.
 
 ## The report
 

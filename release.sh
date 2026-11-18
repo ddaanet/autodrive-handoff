@@ -16,6 +16,11 @@ set -euo pipefail
 # `^v[0-9]+\.[0-9]+\.[0-9]+$` exists yet, and the plugin's marketplace entry
 # plays no part in that decision.
 #
+# It runs from the default branch (main) or from dev, and never changes branch.
+# The tag's commit is pushed to main by refspec, so dev is never pushed and its
+# later commits stay local; local main is moved to the release commit by a
+# fast-forward, never a checkout.
+#
 # A plugin that carries dist.include (see dist.sh) also publishes its shipped
 # paths as the `dist` branch and a `dist-vX.Y.Z` tag, and its marketplace entry
 # follows that branch. Such a release needs `claude` on PATH for validation.
@@ -57,6 +62,9 @@ acted=0
 first_release=0
 # 1 when the commit being released carries dist.include (dist_opted_in).
 dist_on=0
+# The commit the tag names, in both modes: set once the tag exists, before
+# move_main and push_branch read it.
+release_commit=""
 
 # shellcheck source=release-preflight.sh
 source "$here/release-preflight.sh"
@@ -72,12 +80,16 @@ source "$here/release-marketplace.sh"
 common_preflight
 if [ "$mode" = "release" ]; then
     release_preflight
+    branch_preflight
     dist_preflight
     bump_commit_tag
+    release_commit=$(git rev-parse "$tag^{commit}")
 else
     resume_preflight
-    dist_opted_in "$tag^{commit}"
+    release_commit=$(git rev-parse "$tag^{commit}")
+    dist_opted_in "$release_commit"
 fi
+move_main
 push_branch
 push_tag
 if [ "$dist_on" = 1 ]; then

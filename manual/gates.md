@@ -239,8 +239,11 @@ no test. It runs bats into a log under `$TMPDIR`, prints only the `not ok`
 blocks (the whole log when bats failed without one, as when it died before a
 plan or a `teardown_file` crashed), then one line, and exits with bats' own
 status. A run that exits 0 having run no test, from a `--filter` that matches
-nothing or an empty `.bats` file, is a failure: it prints `bats: no tests ran`
-and the log, and exits 1. A green run is that line alone and leaves no log:
+nothing, an empty `.bats` file or a file whose every test calls `skip`, is a
+failure: it prints `bats: no tests ran` and the log, and exits 1. Skips are
+counted apart from passes, and the line names them when there are any
+(`bats: 411 passed, 0 failed, 1 skipped`). A green run is that line alone and
+leaves no log:
 
 ```text
 bats: 412 passed, 0 failed
