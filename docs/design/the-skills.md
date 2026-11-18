@@ -33,9 +33,10 @@ boundary for this plugin to cross and no frame to carry.
 the `## Open decisions` and `## Remaining` sections of the
 frame already injected into context, writing no file. It makes no tool call
 unless the frame arrived cut: Claude Code persists a large hook output to a
-file and shows only a 2KB preview in a `<persisted-output>` block, and then the
-skill reads `TODO.md`. `TASK.md` needs no read, since FR13's 1000-character cap
-keeps the header and the task inside the preview. The skill keys on the block
+file and shows only a 2KB preview in a `<persisted-output>` block (seen on
+2.1.323, the block's `Output too large` wording found in 2.1.327; the size
+limit not measured), and then the skill reads `TODO.md` at the worktree root.
+`TASK.md` needs no read: it holds neither section the skill reports. The skill keys on the block
 alone, never on a frame that merely looks short. That the loader itself injects
 a cut frame into every session over the limit is a separate question.
 

@@ -26,5 +26,6 @@ Behaviour lives in `docs/design/the-skills.md`; read it first.
   option; the templates are inline. `precompact` carries no `rename` and no
   `task`; the schema forbids both there.
 - `autoname` decides a title with no tool call, and its payload is exactly
-  `{"skill": "autoname", "rename": "<title>"}`. `pending` makes no tool call
-  and writes nothing.
+  `{"skill": "autoname", "rename": "<title>"}`. `pending` writes nothing and
+  makes no tool call unless its frame arrived cut
+  (`docs/design/the-skills.md`).
