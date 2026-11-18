@@ -1,22 +1,121 @@
 #!/usr/bin/env sh
 # gitlore launcher shim. Injects --settings '{"autoMemoryDirectory":…}' so CC's
 # native auto-memory lands in the gitlore submodule. Identical in both placements;
-# see docs/design.md "Memory Redirect Launcher" (D10).
+# see docs/references/memory-redirect.md in the gitlore repository.
 
 # real claude = next `claude` on PATH after stripping my own dir
-self=$(cd "$(dirname "$0")" && pwd)
-newpath=$(printf '%s' "$PATH" | tr ':' '\n' | grep -vxF "$self" | paste -sd:)
+unset CDPATH   # else `cd` may echo the target, corrupting the capture below
+self=$(cd "$(dirname "$0")" && pwd -P)
+# Every entry is resolved to the same physical form as $self before the
+# comparison, because a strip that matches raw spellings leaves my own
+# directory on PATH and the exec below then re-enters this script with no exit.
+# A `//`, a trailing `/`, a `..` and a symlinked duplicate all spell one
+# directory two ways, and macOS `$TMPDIR` ends in `/`, so every path built from
+# it carries the first of those. `[ -d ]` first: a PATH entry naming a
+# directory that does not exist is ordinary, and `cd` would report it.
+newpath=
+oldifs=$IFS
+IFS=:
+for d in $PATH; do
+  if [ -d "$d" ]; then n=$(cd "$d" && pwd -P); else n=$d; fi
+  [ "$n" = "$self" ] || newpath="${newpath:+$newpath:}$d"
+done
+IFS=$oldifs
+# Residual: a SECOND copy of this shim, in a directory of its own, is not
+# something the strip can see, and exec'ing it loops forever. The installer
+# places one, and no sentinel distinguishes that re-entry from an ordinary
+# nested `claude` inside a session, so it is left uncovered rather than
+# half-covered.
 real=$(PATH="$newpath" command -v claude) || { echo "gitlore: real claude not found" >&2; exit 127; }
 
 # already injected upstream? pass through (composability, anti-double-inject, anti-recursion)
 [ -n "$GITLORE_LAUNCHED" ] && exec "$real" "$@"
 
 # in a gitlore-enabled repo? cheap git checks first, so jq only runs for actual gitlore repos
+# Redirects kept deliberately in this file: the shim wraps EVERY `claude`
+# invocation, including ones outside any repo or in a non-gitlore repo. Those
+# failures are the common case, each already has its answer (passthrough below),
+# and their messages would print on every unrelated launch.
 root=$(git rev-parse --show-toplevel 2>/dev/null)
-mempath=$(git config --file "$root/.gitmodules" submodule.gitlore-memory.path 2>/dev/null)
-[ -n "$root" ] && [ -n "$mempath" ] || exec "$real" "$@"          # no gitlore submodule → passthrough
+[ -n "$root" ] || exec "$real" "$@"                               # not in a repo → passthrough
+mempath=$(git config --file "$root/.gitmodules" submodule.gitlore-memory.path)
+[ -n "$mempath" ] || exec "$real" "$@"                            # no gitlore submodule → passthrough
 [ "$(jq -r '.gitlore.enabled // false' "$root/.claude/settings.json" 2>/dev/null)" = true ] \
   || exec "$real" "$@"                                            # submodule present but disabled → passthrough
+
+# Containment. `mempath` comes from the checkout's own `.gitmodules`, and the
+# redirect gives it the standing of a value the user typed — Claude Code also
+# auto-allows writes under it — so it must name the memory submodule and
+# nothing else: a directory strictly inside the repo, outside its control
+# directories. That is a refusal rather than a miss, so it says why on one line
+# and launches claude unredirected.
+refuse() {   # refuse <reason> <claude args>…
+  printf 'gitlore: memory path %s in .gitmodules %s; launching claude without the memory redirect\n' \
+    "$shown" "$1" >&2
+  shift
+  exec "$real" "$@"
+}
+# The path reaches the terminal in that line, so one carrying a control
+# character — an escape sequence — is refused without being shown.
+shown="'$mempath'"
+case "$mempath" in *[[:cntrl:]]*) shown='(not shown)'; refuse "contains a control character" "$@" ;; esac
+# Lexical checks next, since before `git submodule update --init` the directory
+# does not exist yet: no absolute path, no `..` or `.` component (components,
+# so `my..memory` passes), and no `.git`, `.claude` or `.gitlore` component in
+# any case, since macOS filesystems ignore it.
+case "$mempath" in /*) refuse "is absolute" "$@" ;; esac
+case "/$mempath/" in */../*) refuse "has a '..' component" "$@" ;; esac
+case "/$mempath/" in */./*) refuse "has a '.' component" "$@" ;; esac
+# A `.claude` component is allowed only as `.claude/memory`, the documented
+# alternative layout; every other directory under `.claude` is one Claude Code
+# loads (skills, commands, agents, hooks), and `.claude` itself holds settings.
+control_dir() {   # control_dir <path>: does a component name a repo control directory?
+  cd_s="/$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')/"
+  case "$cd_s" in */.git/*|*/.gitlore/*) return 0 ;; esac
+  while :; do
+    case "$cd_s" in */.claude/*) ;; *) return 1 ;; esac
+    cd_s=${cd_s#*/.claude/}   # what follows the first `.claude` component
+    case "$cd_s" in memory/*) cd_s="/$cd_s" ;; *) return 0 ;; esac
+  done
+}
+reason_control="names a control directory (.git, .gitlore, or .claude other than .claude/memory)"
+control_dir "$mempath" && refuse "$reason_control" "$@"
+# Then the physical check, on the nearest existing directory: a symlink at the
+# memory path or at any parent of it can still point out of the repo or into a
+# control directory, and Claude Code would create a missing memory directory
+# through it. A symlink met on the way up, dangling or not, is refused outright:
+# nothing to resolve it against. The memory directory itself, once it exists,
+# must not resolve to the root.
+p="$root/$mempath"
+while [ ! -d "$p" ]; do
+  [ -L "$p" ] && refuse "crosses a symlink that names no directory" "$@"
+  p=${p%/*}
+done
+pabs=$(cd "$p" && pwd -P) || refuse "cannot be resolved" "$@"
+rootabs=$(cd "$root" && pwd -P) || refuse "cannot be resolved" "$@"
+case "$pabs/" in "$rootabs"/*) ;; *) refuse "resolves outside the repo" "$@" ;; esac
+# The resolved memory path: the resolved existing directory, relative to the
+# root, plus the part of the memory path not created yet.
+full="$root/$mempath"
+rel=${pabs#"$rootabs"}${full#"$p"}
+[ -z "$rel" ] && refuse "resolves to the repo root" "$@"
+control_dir "$rel" && refuse "resolves to a path that $reason_control" "$@"
+# Last, the one git call: the index must hold a submodule gitlink (mode 160000)
+# at exactly this path — one entry, or one per stage while a parent merge has
+# it unmerged. A fresh clone has it before `submodule update --init`. Literal
+# pathspec; the control-character check above keeps a tab or newline out of
+# the path, so each entry is one `mode sha stage<TAB>path` line. Git still
+# C-quotes a path holding `"` or `\` despite core.quotePath=false, so such a
+# path never matches and is refused — the safe direction. Its stderr (an
+# unreadable index, say) would only precede the refusal line that follows.
+entry=$(git -C "$root" -c core.quotePath=false ls-files -s -- ":(literal)$mempath" 2>/dev/null)
+gitlink=
+while IFS= read -r line || [ -n "$line" ]; do
+  case "$line" in "160000 "*"	$mempath") gitlink=1 ;; *) gitlink=; break ;; esac
+done <<EOF
+$entry
+EOF
+[ -n "$gitlink" ] || refuse "is not a submodule gitlink in the index" "$@"
 
 json=$(jq -nc --arg p "$root/$mempath" '{autoMemoryDirectory:$p}')
 export GITLORE_LAUNCHED=1
