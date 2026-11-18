@@ -1,6 +1,7 @@
 #!/usr/bin/env bats
 # shellcheck source-path=SCRIPTDIR source=hook-helpers.bash
 source "$BATS_TEST_DIRNAME/hook-helpers.bash"
+load lock-helpers
 
 # --- load-compact (SessionStart(compact): consume, re-inject the frame) ---
 #
@@ -174,4 +175,107 @@ link_root() {
     split_output "$output"
     [ "$MSG" = "handoff: compacted — No todo." ]
     [ "$CTX" = "" ]
+}
+
+# --- load-compact: the output limit (10000 characters of additionalContext) ---
+
+@test "load-compact (limit): a frame that fits is unchanged, with no pointer" {
+    seed_todo 1 5 100
+    seed_pending "$tmp" "compact continue"
+    run_load_compact "$tmp"
+    [ "$status" -eq 0 ]
+    split_output "$output"
+    [ "$(item_labels r)" = "r01r02r03r04r05" ]
+    [[ "$CTX" != *"TODO.md holds"* ]]
+}
+
+@test "load-compact (limit): remaining items go from the end first, then open decisions" {
+    seed_todo 2 40 300
+    seed_pending "$tmp" "compact continue"
+    run_load_compact "$tmp"
+    split_output "$output"
+    (( $(chars "$CTX") <= 10000 ))
+    [ "$(item_labels d)" = "d01d02" ]
+    shown=$(( $(chars "$(item_labels r)") / 3 ))
+    (( shown > 0 && shown < 40 ))
+    [ "${CTX##*$'\n\n'}" = "TODO.md holds $((40 - shown)) more remaining items than shown here: read it before acting on either list."$'\n' ]
+
+    seed_todo 8 3 1500
+    seed_pending "$tmp" "compact continue"
+    run_load_compact "$tmp"
+    split_output "$output"
+    (( $(chars "$CTX") <= 10000 ))
+    [ "$(item_labels r)" = "" ]
+    [[ "${CTX##*$'\n\n'}" == "TODO.md holds 3 more remaining items and "*" more open decision"* ]]
+}
+
+@test "load-compact (limit): characters are counted, not bytes" {
+    { printf '## Remaining\n\n- '; python3 -I -c 'print("é" * 6000)'; } > "$tmp/TODO.md"
+    seed_pending "$tmp" "compact continue"
+    run_load_compact "$tmp"
+    split_output "$output"
+    [[ "$CTX" != *"TODO.md holds"* ]]
+    [[ "$CTX" == *"$(python3 -I -c 'print("é" * 6000, end="")')"* ]]
+}
+
+@test "load-compact (limit): exactly 10000 characters stay whole, 10001 are cut" {
+    pad() { { printf '## Remaining\n\n- first\n- '; python3 -I -c 'import sys; print("x" * int(sys.argv[1]))' "$1"; } > "$tmp/TODO.md"; }
+    printf '## Remaining\n\n- first\n- x\n' > "$tmp/TODO.md"
+    seed_pending "$tmp" "compact continue"
+    run_load_compact "$tmp"
+    split_output "$output"
+    base="$(chars "$CTX")"
+    pad $((10000 - base + 1))
+    seed_pending "$tmp" "compact continue"
+    run_load_compact "$tmp"
+    split_output "$output"
+    [ "$(chars "$CTX")" -eq 10000 ]
+    [[ "$CTX" != *"TODO.md holds"* ]]
+    pad $((10000 - base + 2))
+    seed_pending "$tmp" "compact continue"
+    run_load_compact "$tmp"
+    split_output "$output"
+    [[ "$CTX" == *"TODO.md holds 1 more remaining item than shown"* ]]
+    (( $(chars "$CTX") <= 10000 ))
+}
+
+@test "load-compact (limit): the lock-failure sentence counts against the budget" {
+    printf '## Remaining\n\n- first\n- x\n' > "$tmp/TODO.md"
+    seed_pending "$tmp" "compact continue"
+    fail_lock_helper
+    run_load_compact "$tmp"
+    split_output "$output"
+    [[ "$CTX" == *"was left in place"* ]]
+    base="$(chars "$CTX")"
+    { printf '## Remaining\n\n- first\n- '; python3 -I -c 'import sys; print("x" * int(sys.argv[1]))' $((10000 - base + 2)); } > "$tmp/TODO.md"
+    run_load_compact "$tmp"
+    split_output "$output"
+    [[ "$CTX" == *"TODO.md holds 1 more remaining item"* ]]
+    [[ "$CTX" == *"was left in place"* ]]
+    (( $(chars "$CTX") <= 10000 ))
+}
+
+@test "load-compact (limit): open decisions are cut last wherever they sit; a cut frame of exactly 10000 characters stays" {
+    seed_todo 8 3 1500 last
+    seed_pending "$tmp" "compact continue"
+    run_load_compact "$tmp"
+    split_output "$output"
+    [ "$(item_labels r)" = "" ]
+    [ "$(item_labels d)" != "" ]
+    seed_todo_pad 9700
+    seed_pending "$tmp" "compact continue"
+    run_load_compact "$tmp"
+    split_output "$output"
+    n=$((9700 + 10000 - $(chars "$CTX")))
+    seed_todo_pad "$n"
+    seed_pending "$tmp" "compact continue"
+    run_load_compact "$tmp"
+    split_output "$output"
+    [ "$(chars "$CTX")" -eq 10000 ]
+    [[ "$CTX" == *"- k"* && "$CTX" == *"TODO.md holds 1 more remaining item than"* ]]
+    seed_todo_pad $((n + 1))
+    seed_pending "$tmp" "compact continue"
+    run_load_compact "$tmp"
+    split_output "$output"
+    [[ "$CTX" != *"- k"* && "$CTX" == *"TODO.md holds 2 more remaining items than"* ]]
 }

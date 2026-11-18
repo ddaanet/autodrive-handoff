@@ -49,6 +49,30 @@ loaders, neither read nor counted: the checkpoint refuses one naming the field,
 which is where it is reported, and a repository cannot commit a link that has
 some other readable file injected as its frame.
 
+
+### The frame's size
+
+A hook's `additionalContext` longer than 10000 characters is not injected:
+Claude Code persists it to a file and the model gets a 2000-character preview in
+a `<persisted-output>` block, with nothing saying the rest exists. Measured on
+Claude Code 2.1.327: 10000 characters stay inline and 10001 are persisted, counted
+in characters (10000 `é` stayed inline), per hook (two hooks of 10000 each both
+stayed inline). Both loaders therefore fit the whole string they emit — the
+frame, the loader's own notes appended after it and the closing newline — to
+`FRAME_LIMIT` in `_checkpoint_lib.py` (10000, counted in code points, so the
+cut never depends on the hook's locale). A frame that fits is untouched. Over
+it, `handoff_frame_fit()` (`_lib_frame.sh`, through the `--fit-frame` CLI) cuts
+`TODO.md` at whole items: an item is a line starting `- ` at column 0 with the
+lines after it up to the next such line or `##` heading. Items go from the end
+of the file, those under `## Remaining` and any other section first and those
+under `## Open decisions` only when that is not enough; headings stay, and the
+header and the task are never cut. The frame then ends with one line saying how
+many remaining items and open decisions `TODO.md` holds beyond those shown and
+to read it before acting on either list, a zero count omitted and the line
+counted in the budget. With every item gone and the budget still exceeded, that
+minimal form is emitted anyway. `/autodrive-handoff:pending`'s read of
+`TODO.md` is the fallback for a frame cut by the host regardless.
+
 ## One channel, one writer
 
 Both wrap-up skills decide their content and then make exactly one Bash

@@ -35,16 +35,34 @@ handoff_frame() {
     # to anything readable.
     [[ -n "$task" && -L "$task" ]] && task=""
     [[ -n "$todo" && -L "$todo" ]] && todo=""
-    FRAME="" FRAME_TASK=0 FRAME_TODO=0
+    FRAME="" FRAME_HEAD="" FRAME_TODO_TEXT="" FRAME_TASK=0 FRAME_TODO=0
     _handoff_has_body "$lib" "$task" && FRAME_TASK=1
     _handoff_has_body "$lib" "$todo" && FRAME_TODO=1
     (( FRAME_TASK + FRAME_TODO > 0 )) || return 1
-    FRAME="# Task — $(date '+%Y-%m-%d %H:%M:%S %z')"
+    FRAME_HEAD="# Task — $(date '+%Y-%m-%d %H:%M:%S %z')"
     if (( FRAME_TASK )); then
-        FRAME+=$'\n\n'"$(cat "$task")"
+        FRAME_HEAD+=$'\n\n'"$(cat "$task")"
     fi
+    FRAME="$FRAME_HEAD"
     if (( FRAME_TODO )); then
-        FRAME+=$'\n\n'"$(cat "$todo")"
+        FRAME_TODO_TEXT="$(cat "$todo")"
+        FRAME+=$'\n\n'"$FRAME_TODO_TEXT"
+    fi
+}
+
+# Fit FRAME, as handoff_frame left it, to the hook's output limit once the
+# loader's own text ($1, appended after the frame) and the closing newline are
+# counted: TODO.md items are cut from the end, the open decisions last, and a
+# line says how many. A frame that fits is untouched. The cut is
+# `fit_frame` in _checkpoint_lib.py, which counts characters whatever the hook's
+# locale. A cut that cannot run leaves the frame whole: a long frame is the
+# lesser loss. Sets FRAME in the caller's scope; call it bare, as handoff_frame.
+handoff_frame_fit() {
+    local lib="$HANDOFF_LIB_DIR/_checkpoint_lib.py" fitted
+    (( FRAME_TODO )) || return 0
+    if fitted=$(printf '%s\0%s\0%s\0' "$FRAME_HEAD" "$FRAME_TODO_TEXT" "$1" \
+            | python3 -I "$lib" --fit-frame); then
+        FRAME="$fitted"
     fi
 }
 

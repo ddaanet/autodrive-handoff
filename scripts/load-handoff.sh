@@ -85,8 +85,20 @@ task="$cwd/$HANDOFF_REL_TASK"
 todo="$cwd/$HANDOFF_REL_TODO"
 handoff_frame "$task" "$todo" || true
 
-context="$FRAME"
+# What follows the frame in the context. It is counted against the hook's output
+# limit, so the frame is fitted to it before the size is read.
+tail_text=""
 if [[ -n "$FRAME" ]]; then
+    if (( ! FRAME_TODO )); then
+        tail_text+=$'\n\n'"No todo."
+    elif (( ! FRAME_TASK )); then
+        tail_text+=$'\n\n'"No task frame."
+    fi
+    if [[ -n "$lock_ctx" ]]; then
+        tail_text+=$'\n\n'"$lock_ctx"
+    fi
+    handoff_frame_fit "$tail_text"
+
     bytes=${#FRAME}
     if (( bytes < 1024 )); then
         size="${bytes} B"
@@ -112,18 +124,16 @@ print(int(max(os.path.getmtime(p) for p in sys.argv[1:])))' "${counted[@]}")
 
     if (( ! FRAME_TODO )); then
         notes+=("No todo")
-        context+=$'\n\n'"No todo."
     elif (( ! FRAME_TASK )); then
         notes+=("No task frame")
-        context+=$'\n\n'"No task frame."
     fi
+    context="$FRAME$tail_text"
 else
     notes+=("No task frame or todo.")
     context="No task frame or todo."
-fi
-
-if [[ -n "$lock_ctx" ]]; then
-    context+=$'\n\n'"$lock_ctx"
+    if [[ -n "$lock_ctx" ]]; then
+        context+=$'\n\n'"$lock_ctx"
+    fi
 fi
 
 printf -v msg '%s; ' "${notes[@]}"

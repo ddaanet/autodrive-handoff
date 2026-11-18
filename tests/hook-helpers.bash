@@ -102,6 +102,43 @@ seed_pending() {
     printf '%s\n' "pending" "$@" > "$dir/.claude/autodrive"
 }
 
+# <decisions> <remaining> <width> [last] — a TODO.md of that many `## Open
+# decisions` items (d01…) and `## Remaining` items (r01…), each one line of
+# exactly <width> characters, so a test can compute what fits. The open
+# decisions come after the remaining ones when a fourth argument is given.
+seed_todo() {
+    python3 -I - "$tmp/TODO.md" "$1" "$2" "$3" "${4-}" <<'PY'
+import sys
+path, decisions, remaining, width = sys.argv[1], *map(int, sys.argv[2:5])
+last = len(sys.argv) > 5 and sys.argv[5] != ""
+def item(label):
+    return ("- " + label + " ").ljust(width, "x")
+dec = ["## Open decisions", ""] + [item(f"d{n:02}") for n in range(1, decisions + 1)]
+rem = ["## Remaining", ""] + [item(f"r{n:02}") for n in range(1, remaining + 1)]
+out = rem + [""] + dec if last else (dec + [""] if decisions else []) + rem
+open(path, "w", encoding="utf-8").write("\n".join(out) + "\n")
+PY
+}
+
+# <n> — a TODO.md of two remaining items, the first n+3 characters long, the
+# second one the item that goes first when the frame is over its limit.
+seed_todo_pad() {
+    python3 -I - "$tmp/TODO.md" "$1" <<'PY'
+import sys
+open(sys.argv[1], "w").write("## Remaining\n\n- k" + "x" * int(sys.argv[2]) + "\n- drop" + "x" * 200 + "\n")
+PY
+}
+
+# <text> — its length in characters (code points), whatever the locale.
+chars() {
+    printf '%s' "$1" | python3 -I -c 'import sys; print(len(sys.stdin.buffer.read().decode("utf-8")))'
+}
+
+# The item labels of one kind in CTX, run together: `item_labels r` -> "r01r02".
+item_labels() {
+    printf '%s' "$CTX" | { grep -o "^- $1[0-9][0-9]" || true; } | cut -c3- | tr -d '\n'
+}
+
 run_load_handoff() {
     run bash -c '
         jq -nc --arg cwd "$1" --arg s "$2" \

@@ -90,16 +90,20 @@ else
     msg="handoff: compacted — No todo"
 fi
 
-context="$FRAME"
 # A sentinel left because its lock could not be taken is named on both channels.
+# What follows the frame is counted against the hook's output limit, so the frame
+# is fitted to it.
+tail_text=""
 if (( lock_rc != 0 )); then
     lock_ctx="The transition state ($HANDOFF_REL_DRIVE) was left in place, not consumed: $HANDOFF_LOCK_MSG."
-    if [[ -n "$context" ]]; then
-        context+=$'\n\n'
+    if [[ -n "$FRAME" ]]; then
+        tail_text=$'\n\n'
     fi
-    context+="$lock_ctx"
+    tail_text+="$lock_ctx"
     msg+="; autodrive left in place — $HANDOFF_LOCK_MSG"
 fi
+handoff_frame_fit "$tail_text"
+context="$FRAME$tail_text"
 msg="$msg."
 
 jq -nc --arg f "$context" --arg m "$msg" \

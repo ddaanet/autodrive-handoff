@@ -1,6 +1,7 @@
 #!/usr/bin/env bats
 # shellcheck source-path=SCRIPTDIR source=hook-helpers.bash
 source "$BATS_TEST_DIRNAME/hook-helpers.bash"
+load lock-helpers
 
 # --- load-handoff ---
 
@@ -276,4 +277,151 @@ link_root() {
     [ "$status" -eq 0 ]
     split_output "$output"
     assert_msg_matches 'loaded — [0-9]+\.[0-9] KiB, saved.*'
+}
+
+# --- load-handoff: the output limit (10000 characters of additionalContext) ---
+#
+# Over it, Claude Code injects a 2000-character preview and nothing says the rest
+# exists, so the loader cuts TODO.md at whole items and says so itself.
+
+@test "load-handoff (limit): a frame that fits is unchanged, with no pointer" {
+    seed_todo 1 5 100
+    run_load_handoff "$tmp" clear
+    [ "$status" -eq 0 ]
+    split_output "$output"
+    [ "$(item_labels r)" = "r01r02r03r04r05" ]
+    [[ "$CTX" != *"TODO.md holds"* ]]
+}
+
+@test "load-handoff (limit): remaining items go from the end first, every open decision stays" {
+    seed_todo 2 40 300
+    run_load_handoff "$tmp" clear
+    [ "$status" -eq 0 ]
+    split_output "$output"
+    (( $(chars "$CTX") <= 10000 ))
+    [ "$(item_labels d)" = "d01d02" ]
+    shown=$(( $(chars "$(item_labels r)") / 3 ))
+    (( shown > 0 && shown < 40 ))
+    # a prefix: the last one shown is the one before the first dropped
+    [ "$(item_labels r)" = "$(printf 'r%02d' $(seq 1 "$shown") | tr -d ' ')" ]
+    pointer="TODO.md holds $((40 - shown)) more remaining items than shown here: read it before acting on either list."
+    [ "${CTX##*$'\n\n'}" = "$pointer"$'\n' ]
+    [[ "$CTX" != *ersist* && "$CTX" != *"Claude Code"* ]]
+}
+
+@test "load-handoff (limit): open decisions are cut only when the remaining ones are not enough" {
+    seed_todo 8 3 1500
+    run_load_handoff "$tmp" clear
+    [ "$status" -eq 0 ]
+    split_output "$output"
+    (( $(chars "$CTX") <= 10000 ))
+    [ "$(item_labels r)" = "" ]
+    [[ "$CTX" == *$'\n## Remaining\n'* ]]
+    shown=$(( $(chars "$(item_labels d)") / 3 ))
+    (( shown > 0 && shown < 8 ))
+    pointer="TODO.md holds 3 more remaining items and $((8 - shown)) more open decision"
+    [[ "${CTX##*$'\n\n'}" == "$pointer"* ]]
+    [[ "$CTX" == *"than shown here: read it before acting on either list."$'\n' ]]
+}
+
+@test "load-handoff (limit): one dropped item is singular, a zero count is omitted" {
+    seed_todo 0 2 4970
+    run_load_handoff "$tmp" clear
+    [ "$status" -eq 0 ]
+    split_output "$output"
+    [ "$(item_labels r)" = "r01" ]
+    [ "${CTX##*$'\n\n'}" = $'TODO.md holds 1 more remaining item than shown here: read it before acting on either list.\n' ]
+}
+
+@test "load-handoff (limit): characters are counted, not bytes" {
+    # 12000 bytes, 6002 characters: well inside the limit.
+    { printf '## Remaining\n\n- '; python3 -I -c 'print("é" * 6000)'; } > "$tmp/TODO.md"
+    run_load_handoff "$tmp" clear
+    [ "$status" -eq 0 ]
+    split_output "$output"
+    (( $(chars "$CTX") < 10000 ))
+    [[ "$CTX" != *"TODO.md holds"* ]]
+    [[ "$CTX" == *"$(python3 -I -c 'print("é" * 6000, end="")')"* ]]
+}
+
+@test "load-handoff (limit): exactly 10000 characters stay whole, 10001 are cut" {
+    printf '## Remaining\n\n- first\n- x\n' > "$tmp/TODO.md"
+    run_load_handoff "$tmp" clear
+    split_output "$output"
+    base="$(chars "$CTX")"
+    pad() { { printf '## Remaining\n\n- first\n- '; python3 -I -c 'import sys; print("x" * int(sys.argv[1]))' "$1"; } > "$tmp/TODO.md"; }
+    pad $((10000 - base + 1))
+    run_load_handoff "$tmp" clear
+    split_output "$output"
+    [ "$(chars "$CTX")" -eq 10000 ]
+    [[ "$CTX" != *"TODO.md holds"* ]]
+    pad $((10000 - base + 2))
+    run_load_handoff "$tmp" clear
+    split_output "$output"
+    [[ "$CTX" == *"TODO.md holds 1 more remaining item than shown"* ]]
+    (( $(chars "$CTX") <= 10000 ))
+}
+
+@test "load-handoff (limit): the loader's own notes count against the budget" {
+    # Boundary again, with the lock-failure sentence after the frame.
+    printf '## Remaining\n\n- first\n- x\n' > "$tmp/TODO.md"
+    seed_pending "$tmp" "clear continue" "A Title"
+    fail_lock_helper
+    run_load_handoff "$tmp" clear
+    split_output "$output"
+    [[ "$CTX" == *"was left in place"* ]]
+    base="$(chars "$CTX")"
+    { printf '## Remaining\n\n- first\n- '; python3 -I -c 'import sys; print("x" * int(sys.argv[1]))' $((10000 - base + 2)); } > "$tmp/TODO.md"
+    run_load_handoff "$tmp" clear
+    split_output "$output"
+    [[ "$CTX" == *"TODO.md holds 1 more remaining item"* ]]
+    [[ "$CTX" == *"was left in place"* ]]
+    (( $(chars "$CTX") <= 10000 ))
+}
+
+@test "load-handoff (limit): the task is never cut, even when nothing else can make it fit" {
+    python3 -I -c 'print("## Current task\n\n" + "t" * 11000)' > "$tmp/TASK.md"
+    seed_todo 1 3 200
+    run_load_handoff "$tmp" clear
+    [ "$status" -eq 0 ]
+    split_output "$output"
+    [[ "$CTX" == *"$(python3 -I -c 'print("t" * 11000, end="")')"* ]]
+    [ "$(item_labels d)$(item_labels r)" = "" ]
+    [[ "$CTX" == *"TODO.md holds 3 more remaining items and 1 more open decision than shown here"* ]]
+}
+
+@test "load-handoff (limit): open decisions are cut last wherever they sit in the file" {
+    seed_todo 8 3 1500 last
+    run_load_handoff "$tmp" clear
+    split_output "$output"
+    (( $(chars "$CTX") <= 10000 ))
+    [ "$(item_labels r)" = "" ]
+    [ "$(item_labels d)" != "" ]
+    [[ "${CTX##*$'\n\n'}" == "TODO.md holds 3 more remaining items and "*" more open decision"* ]]
+}
+
+@test "load-handoff (limit): a cut frame of exactly 10000 characters stays, 10001 drops one more item" {
+    seed_todo_pad 9700
+    run_load_handoff "$tmp" clear
+    split_output "$output"
+    [[ "$CTX" == *"TODO.md holds 1 more remaining item than"* ]]
+    n=$((9700 + 10000 - $(chars "$CTX")))
+    seed_todo_pad "$n"
+    run_load_handoff "$tmp" clear
+    split_output "$output"
+    [ "$(chars "$CTX")" -eq 10000 ]
+    [[ "$CTX" == *"- k"* && "$CTX" == *"TODO.md holds 1 more remaining item than"* ]]
+    seed_todo_pad $((n + 1))
+    run_load_handoff "$tmp" clear
+    split_output "$output"
+    [[ "$CTX" != *"- k"* && "$CTX" == *"TODO.md holds 2 more remaining items than"* ]]
+}
+
+@test "load-handoff (limit): with no remaining item, only the open decisions are counted in the pointer" {
+    seed_todo 8 0 1500
+    run_load_handoff "$tmp" clear
+    split_output "$output"
+    (( $(chars "$CTX") <= 10000 ))
+    [[ "${CTX##*$'\n\n'}" == "TODO.md holds "*" more open decisions than shown here: read it before acting on either list."$'\n' ]]
+    [[ "$CTX" != *"remaining item"* ]]
 }

@@ -37,8 +37,9 @@ file and shows only a 2KB preview in a `<persisted-output>` block (seen on
 2.1.323, the block's `Output too large` wording found in 2.1.327; the size
 limit not measured), and then the skill reads `TODO.md` at the worktree root.
 `TASK.md` needs no read: it holds neither section the skill reports. The skill keys on the block
-alone, never on a frame that merely looks short. That the loader itself injects
-a cut frame into every session over the limit is a separate question.
+alone, never on a frame that merely looks short. The loaders keep the frame under
+the limit themselves ([the frame's size](the-write-path.md#the-frames-size)), so
+that read is a fallback.
 
 The judgment is per-boundary, not per-drive-mode: commit awareness, memory
 capture, the drafting rules and the seam between the files and the
