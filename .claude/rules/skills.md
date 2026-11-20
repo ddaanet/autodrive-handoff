@@ -14,7 +14,7 @@ Behaviour lives in `docs/design/the-skills.md`; read it first.
   `skills/handoff/SKILL.md`. `skills/precompact/SKILL.md` repeats the todo
   template and the todo rules it needs, so an edit to the todo template or
   rules changes both skills. Neither loader restates them: each file carries
-  its own `##` headings and is inlined verbatim under the one `#` header the
+  its own `##` headings and is inlined verbatim (bar `TODO.md` items cut to fit the hook-output limit, with a line saying so) under the one `#` header the
   frame prepends.
 - A skill states none of what the checkpoint prints (the memory directive,
   the commit act, the `handoff-approved` instruction, the closing line): it

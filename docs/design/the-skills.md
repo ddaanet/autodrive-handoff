@@ -33,9 +33,9 @@ boundary for this plugin to cross and no frame to carry.
 the `## Open decisions` and `## Remaining` sections of the
 frame already injected into context, writing no file. It makes no tool call
 unless the frame arrived cut: Claude Code persists a large hook output to a
-file and shows only a 2KB preview in a `<persisted-output>` block (seen on
-2.1.323, the block's `Output too large` wording found in 2.1.327; the size
-limit not measured), and then the skill reads `TODO.md` at the worktree root.
+file and shows only a 2000-character preview in a `<persisted-output>` block (seen on
+2.1.323, the block's `Output too large` wording found in 2.1.327; the limit is
+measured), and then the skill reads `TODO.md` at the worktree root.
 The loaders keep the frame under the limit themselves by cutting `TODO.md`
 items ([the frame's size](the-write-path.md#the-frames-size)), and a frame they
 cut carries a line saying `TODO.md` holds more items than shown: the skill
