@@ -42,8 +42,9 @@ clean_pathspecs() {
     # otherwise be told about an exclusion its own copy does not make.
     #
     # One path is exempt, a gitlore-mounted memory submodule: its gitlink sits
-    # ahead of what HEAD records between commits by design — gitlore's own
-    # pre-commit hook folds that in on the next commit, not this one.
+    # ahead of what HEAD records between commits by design — gitlore's
+    # gitlore-commit stages it into the parent index after a memory commit, and
+    # the next parent commit records it, not this one.
     #
     # The mount path is read from .gitmodules rather than assumed to be
     # `memory`: that is only gitlore's default, the path being $1 to gitlore's
@@ -63,7 +64,7 @@ clean_pathspecs() {
     fi
     if [ -n "$mem" ]; then
         clean_specs+=(":(exclude)$mem")
-        clean_exempt+=("$mem/ — the gitlore memory submodule, whose gitlink the next commit folds in")
+        clean_exempt+=("$mem/ — the gitlore memory submodule, whose gitlink gitlore-commit stages and the next commit records")
     fi
 }
 
