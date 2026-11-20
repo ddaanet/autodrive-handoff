@@ -62,11 +62,11 @@ in characters (10000 `é` stayed inline), per hook (two hooks of 10000 each both
 stayed inline). Both loaders therefore fit the whole string they emit — the
 frame, the loader's own notes appended after it and the closing newline — to
 `FRAME_LIMIT` in `_checkpoint_lib.py` (10000, counted in UTF-16 code units,
-so the cut never depends on the hook's locale). The host is JavaScript, whose
-string length counts UTF-16 units: an emoji, one code point, is two there, and a
-code-point count would let a frame of emoji through over the limit. A UTF-16
-count is never below the code-point count, so it is safe whichever the host
-measures. A frame that fits is untouched. Over it, `handoff_frame_fit()`
+so the cut never depends on the hook's locale). The measurement cannot tell code
+points from UTF-16 units, and the host is JavaScript, whose string length counts
+UTF-16 units: an emoji, one code point, would be two there, and a code-point
+count would then let a frame of emoji through over the limit. A UTF-16 count is
+never below the code-point count, so it is safe whichever the host measures. A frame that fits is untouched. Over it, `handoff_frame_fit()`
 (`_lib_frame.sh`, through the `--fit-frame` CLI) cuts `TODO.md` at whole
 items: an item is a line starting with a list marker at column 0 — `- `, `* `,
 `+ `, or an ordered `1. ` or `1) `, since the handoff skill keeps an existing
@@ -74,7 +74,8 @@ file's shape — with the lines after it up to its last non-blank line before th
 next such line or `##` heading, so a cut leaves the blank line before the next
 heading. A line inside a fenced code block (```` ``` ```` or `~~~`) never
 starts an item or a section: it extends the item it sits in, so a cut never
-splits a fence. Items go from the end of the file, those under `## Remaining`
+splits a fence. A backtick fence's info string holds no backtick, as in
+CommonMark, so a line opening on an inline code span opens none. Items go from the end of the file, those under `## Remaining`
 and any other section first and those under `## Open decisions` (in any case,
 a trailing colon allowed) only when that is not enough; headings stay, and the
 header and the task are never cut. The frame then ends with one line saying how

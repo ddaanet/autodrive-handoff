@@ -323,7 +323,9 @@ def _todo_items(lines: list[str]) -> list[_Item]:
 
 
 # A code fence's opening line: its run of backticks or tildes.
-_FENCE = re.compile(r"\s*(`{3,}|~{3,})")
+# A backtick fence's info string holds no backtick (CommonMark), so a line
+# opening on an inline code span is not a fence.
+_FENCE = re.compile(r"\s*(`{3,}(?=[^`]*$)|~{3,})")
 
 
 def _closes(line: str, fence: str) -> bool:

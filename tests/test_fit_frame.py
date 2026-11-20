@@ -59,6 +59,16 @@ def test_a_tilde_line_does_not_close_a_backtick_fence() -> None:
     assert out.endswith(f"TODO.md holds 1 more remaining item {POINTER_TAIL}")
 
 
+def test_an_inline_code_span_opens_no_fence() -> None:
+    # Breaks if the opening span reads as a fence: it never closes, the rest of
+    # the file folds into no item and nothing is cut.
+    big = "z" * lib.FRAME_LIMIT
+    todo = f"## Remaining\n\n```cmd``` does X\n- keep\n- {big}\n"
+    out = lib.fit_frame(HEAD, todo, "")
+    assert "- keep" in out
+    assert out.endswith(f"TODO.md holds 1 more remaining item {POINTER_TAIL}")
+
+
 def test_an_astral_character_counts_two_units() -> None:
     # 6000 emoji: 6000 code points, 12000 UTF-16 units. A code-point count
     # leaves the frame whole, over the host's limit.
