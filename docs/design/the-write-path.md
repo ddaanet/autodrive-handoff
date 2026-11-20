@@ -9,10 +9,12 @@ The dated records named here are in the `changelog-archive` tag's
 
 `TASK.md` and `TODO.md`, in the project root, are the durable side. Both are
 plain tracked files: nothing is gitignored, nothing is force-added, and no hook
-stages them. Both are injected verbatim at `SessionStart`, task first, under
-one timestamp header — the *frame*, assembled in memory by `handoff_frame()`
-in `scripts/_lib_frame.sh` (reached through `_lib.sh`) and shared by the two loaders so the two transitions
-cannot drift.
+stages them. Both are injected at `SessionStart`, task first, under one
+timestamp header, verbatim but for `TODO.md` items cut to fit the hook-output
+limit, which a closing pointer line then names (below) — the *frame*,
+assembled in memory by `handoff_frame()` in `scripts/_lib_frame.sh` (reached
+through `_lib.sh`) and shared by the two loaders so the two transitions cannot
+drift.
 
 - **`TASK.md`** — `## Current task` alone: the task in hand and where it
   stands, as prose. Authored whole by the checkpoint at the clear boundary and
@@ -59,20 +61,32 @@ Claude Code 2.1.327: 10000 characters stay inline and 10001 are persisted, count
 in characters (10000 `é` stayed inline), per hook (two hooks of 10000 each both
 stayed inline). Both loaders therefore fit the whole string they emit — the
 frame, the loader's own notes appended after it and the closing newline — to
-`FRAME_LIMIT` in `_checkpoint_lib.py` (10000, counted in code points, so the
-cut never depends on the hook's locale). A frame that fits is untouched. Over
-it, `handoff_frame_fit()` (`_lib_frame.sh`, through the `--fit-frame` CLI) cuts
-`TODO.md` at whole items: an item is a line starting `- ` at column 0 with the
-lines after it up to its last non-blank line before the next such line or `##`
-heading, so a cut leaves the blank line before the next heading. Items go from the end
-of the file, those under `## Remaining` and any other section first and those
-under `## Open decisions` only when that is not enough; headings stay, and the
+`FRAME_LIMIT` in `_checkpoint_lib.py` (10000, counted in UTF-16 code units,
+so the cut never depends on the hook's locale). The host is JavaScript, whose
+string length counts UTF-16 units: an emoji, one code point, is two there, and a
+code-point count would let a frame of emoji through over the limit. A UTF-16
+count is never below the code-point count, so it is safe whichever the host
+measures. A frame that fits is untouched. Over it, `handoff_frame_fit()`
+(`_lib_frame.sh`, through the `--fit-frame` CLI) cuts `TODO.md` at whole
+items: an item is a line starting with a list marker at column 0 — `- `, `* `,
+`+ `, or an ordered `1. ` or `1) `, since the handoff skill keeps an existing
+file's shape — with the lines after it up to its last non-blank line before the
+next such line or `##` heading, so a cut leaves the blank line before the next
+heading. A line inside a fenced code block (```` ``` ```` or `~~~`) never
+starts an item or a section: it extends the item it sits in, so a cut never
+splits a fence. Items go from the end of the file, those under `## Remaining`
+and any other section first and those under `## Open decisions` (in any case,
+a trailing colon allowed) only when that is not enough; headings stay, and the
 header and the task are never cut. The frame then ends with one line saying how
 many remaining items and open decisions `TODO.md` holds beyond those shown and
 to read it before acting on either list, a zero count omitted and the line
 counted in the budget. With every item gone and the budget still exceeded, that
-minimal form is emitted anyway. `/autodrive-handoff:pending` reads `TODO.md` when
-it sees that line, and when the host cut the frame regardless.
+minimal form is emitted anyway. The cut is the smallest run of items, in that
+order, that fits; it is found with a binary search and a few renders rather
+than one render per dropped item, which is quadratic and took a `TODO.md` of
+10000 items past the loaders' 10-second hook timeout.
+`/autodrive-handoff:pending` reads `TODO.md` when it sees that line, and when
+the host cut the frame regardless.
 
 ## One channel, one writer
 

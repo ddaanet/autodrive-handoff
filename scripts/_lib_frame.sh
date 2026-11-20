@@ -54,8 +54,8 @@ handoff_frame() {
 # loader's own text ($1, appended after the frame) and the closing newline are
 # counted: TODO.md items are cut from the end, the open decisions last, and a
 # line says how many. A frame that fits is untouched. The cut is
-# `fit_frame` in _checkpoint_lib.py, which counts characters whatever the hook's
-# locale. A cut that cannot run leaves the frame whole: a long frame is the
+# `fit_frame` in _checkpoint_lib.py, which counts UTF-16 units, as the host does,
+# whatever the hook's locale. A cut that cannot run leaves the frame whole: a long frame is the
 # lesser loss. Sets FRAME in the caller's scope; call it bare, as handoff_frame.
 handoff_frame_fit() {
     local lib="$HANDOFF_LIB_DIR/_checkpoint_lib.py" fitted

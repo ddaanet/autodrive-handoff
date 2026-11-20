@@ -226,15 +226,16 @@ def fit_frame(head: str, todo: str, tail: str) -> str:
 
     `head` is the header and the task, `todo` the TODO.md text, `tail` what the
     loader appends after the frame; the whole context is the frame, the tail and
-    one newline, at most FRAME_LIMIT characters. A frame that fits comes back
-    byte for byte. Otherwise items go from the end, the open decisions last, and
-    a line closes the frame saying how many TODO.md holds beyond those shown.
-    The task and header are never cut: with every item gone the minimal form is
-    returned even if it is still over. A TODO.md with no item to cut is
+    one newline, at most FRAME_LIMIT UTF-16 code units. A frame that fits comes
+    back byte for byte. Otherwise items go from the end, the open decisions
+    last, and a line closes the frame saying how many TODO.md holds beyond those
+    shown. The task and header are never cut: with every item gone the minimal
+    form is returned even if it is still over. A TODO.md with no item to cut is
     returned whole.
     """
+    budget = FRAME_LIMIT - _units(tail) - 1
     whole = head + "\n\n" + todo
-    if len(whole) + len(tail) + 1 <= FRAME_LIMIT:
+    if _units(whole) <= budget:
         return whole
     lines = todo.split("\n")
     items = _todo_items(lines)
@@ -242,63 +243,117 @@ def fit_frame(head: str, todo: str, tail: str) -> str:
     order = [i for i in reversed(items) if not i.decision] + [
         i for i in reversed(items) if i.decision
     ]
-    out = whole
-    dropped: list[_Item] = []
-    gone: set[int] = set()
-    for item in order:
-        dropped.append(item)
-        gone.update(range(item.start, item.end))
-        out = _without_items(head, lines, gone, dropped)
-        if len(out) + len(tail) + 1 <= FRAME_LIMIT:
+    if not order:
+        return whole
+    # The smallest prefix of `order` that fits. The kept text shrinks as the
+    # prefix grows and the pointer only lengthens, so no prefix whose kept text
+    # is over the budget beside the shortest pointer can fit: binary-search the
+    # first one that might, then render forward from it until one does. Each
+    # render walks the whole file, so one per dropped item is quadratic.
+    shortest = _pointer(order[:1])
+    lo, hi = 1, len(order)
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if _units(_render(head, _kept(lines, order[:mid]), shortest)) <= budget:
+            hi = mid
+        else:
+            lo = mid + 1
+    for k in range(lo, len(order) + 1):
+        out = _render(head, _kept(lines, order[:k]), _pointer(order[:k]))
+        if _units(out) <= budget:
             break
     return out
 
 
-# The most characters (code points, not bytes) of one hook's additionalContext
-# that Claude Code injects whole. Measured on Claude Code 2.1.327: from 10001 the
-# output is persisted to a file and the model gets a 2000-character preview.
+def _units(text: str) -> int:
+    """Return the length of `text` in UTF-16 code units, the host's count.
+
+    Never below the code-point count, so it is safe whichever the host uses. A
+    lone surrogate (an undecodable byte, through surrogateescape) counts one.
+    """
+    return len(text.encode("utf-16-le", errors="surrogatepass")) // 2
+
+
+# The most UTF-16 code units of one hook's additionalContext that Claude Code
+# injects whole. Measured on Claude Code 2.1.327: from 10001 the output is
+# persisted to a file and the model gets a 2000-character preview. The host is
+# JavaScript, whose string length counts UTF-16 units, so an astral character
+# (an emoji) costs two.
 FRAME_LIMIT = 10000
 
 
 class _Item(NamedTuple):
-    """A top-level `- ` item of TODO.md: its line range and its section kind."""
+    """A top-level item of TODO.md: its line range and its section kind."""
 
     start: int
     end: int
     decision: bool
 
 
+def _todo_items(lines: list[str]) -> list[_Item]:
+    """Return the items of TODO.md, in file order.
+
+    An item starts at a list marker at column 0 (`- `, `* `, `+ `, `1. `,
+    `1) `) outside a code fence, and runs to its last non-blank line before the
+    next such line or the next `##` heading. A fence's lines never start an item
+    or a section: they extend the item they sit in.
+    """
+    items: list[_Item] = []
+    decision = False
+    current = False
+    fence = ""
+    for n, line in enumerate(lines):
+        if fence:
+            if _closes(line, fence):
+                fence = ""
+        elif m := _FENCE.match(line):
+            fence = m.group(1)
+        elif _SECTION_HEADING.match(line):
+            heading = line[2:].strip().rstrip(":").strip().lower()
+            decision = heading == "open decisions"
+            current = False
+            continue
+        elif _ITEM_MARKER.match(line):
+            items.append(_Item(n, n + 1, decision))
+            current = True
+            continue
+        if current and line.strip():
+            items[-1] = items[-1]._replace(end=n + 1)
+    return items
+
+
+# A code fence's opening line: its run of backticks or tildes.
+_FENCE = re.compile(r"\s*(`{3,}|~{3,})")
+
+
+def _closes(line: str, fence: str) -> bool:
+    """Tell whether `line` closes the fence opened by `fence`."""
+    m = _FENCE.match(line)
+    return bool(
+        m
+        and m.group(1)[0] == fence[0]
+        and len(m.group(1)) >= len(fence)
+        and not line[m.end() :].strip()
+    )
+
+
 # A `##` heading line that is not a deeper one.
 _SECTION_HEADING = re.compile(r"##(?!#)(\s|$)")
 
-
-def _todo_items(lines: list[str]) -> list[_Item]:
-    """Return the `- ` items of TODO.md, in file order.
-
-    An item runs to its last non-blank line before the next `- ` line at column
-    0 or the next `##` heading.
-    """
-    starts: list[tuple[int, bool]] = []
-    ends: list[int] = []
-    decision = False
-    current = False
-    for n, line in enumerate(lines):
-        if _SECTION_HEADING.match(line):
-            decision = line[2:].strip().lower() == "open decisions"
-            current = False
-        elif line.startswith("- "):
-            starts.append((n, decision))
-            ends.append(n + 1)
-            current = True
-        elif current and line.strip():
-            ends[-1] = n + 1
-    return [_Item(s, e, d) for (s, d), e in zip(starts, ends, strict=True)]
+# A list item's marker at column 0: bullet or ordered.
+_ITEM_MARKER = re.compile(r"([-*+]|\d+[.)]) ")
 
 
-def _without_items(
-    head: str, lines: list[str], gone: set[int], dropped: list[_Item]
-) -> str:
-    kept = "\n".join(_kept_lines(lines, gone)).rstrip()
+def _render(head: str, kept: str, pointer: str) -> str:
+    return head + ("\n\n" + kept if kept else "") + "\n\n" + pointer
+
+
+def _kept(lines: list[str], dropped: list[_Item]) -> str:
+    gone = {n for i in dropped for n in range(i.start, i.end)}
+    return "\n".join(_kept_lines(lines, gone)).rstrip()
+
+
+def _pointer(dropped: list[_Item]) -> str:
     decisions = sum(1 for i in dropped if i.decision)
     remaining = len(dropped) - decisions
     counts = []
@@ -306,11 +361,10 @@ def _without_items(
         counts.append(f"{remaining} more remaining item{'s' * (remaining != 1)}")
     if decisions:
         counts.append(f"{decisions} more open decision{'s' * (decisions != 1)}")
-    pointer = (
+    return (
         f"TODO.md holds {' and '.join(counts)} than shown here: "
         "read it before acting on either list."
     )
-    return head + ("\n\n" + kept if kept else "") + "\n\n" + pointer
 
 
 def _kept_lines(lines: list[str], gone: set[int]) -> list[str]:
@@ -345,7 +399,7 @@ def _cli(argv: list[str]) -> int:
 
     `--fit-frame` reads head, todo and tail on stdin, each NUL-terminated, and
     prints the fitted frame without a trailing newline. Bytes, not the locale's
-    text: the count is of code points whatever the hook's locale.
+    text: the count is of UTF-16 units whatever the hook's locale.
     """
     if len(argv) == 2 and argv[1] == "--has-body":
         content = sys.stdin.read()
