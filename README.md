@@ -5,7 +5,7 @@ Clear or compact a long Claude Code session without losing the thread.
 Before a `/clear` or `/compact`, the plugin has Claude put the work in
 progress on disk: the open decisions and remaining to-do items, plus the task
 in hand before a `/clear`. After the reset the files are injected back,
-verbatim. If you ask, the plugin also runs the reset and resumes the work, so
+verbatim, except that `TODO.md` items may be cut to fit the hook-output limit, with a line saying so. If you ask, the plugin also runs the reset and resumes the work, so
 you type nothing.
 
 ## What you get
@@ -37,7 +37,7 @@ Ask in plain words, or invoke a skill:
 | `/autodrive-handoff:handoff` | before a `/clear` |
 | `/autodrive-handoff:precompact` | before a `/compact` |
 | `/autodrive-handoff:autoname` | to name the session, and nothing else |
-| `/autodrive-handoff:pending` | to list the open decisions and remaining todos already loaded, with no tool calls |
+| `/autodrive-handoff:pending` | to list the open decisions and remaining todos already loaded, with no tool calls unless the loaded frame was cut short |
 
 Examples of what to say:
 

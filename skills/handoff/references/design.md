@@ -25,7 +25,7 @@ step fold into the current task, and Open questions are the open decisions.
 
 - **Current task** — what was in progress, where it stands and the next
   concrete action, in at most 1000 characters of prose
-- **Open decisions** — unmade choices still blocking progress
+- **Open decisions** — unmade choices some work still waits on
 
 These are the irreducible residual. **Current task** lives alone in
 `TASK.md` — a snapshot of a moment, agent-authored from the template in

@@ -4,7 +4,8 @@
 Port of _checkpoint-lib.sh. Each directive function returns its directive text,
 or "" when silent; the caller decides whether to print it. `err` is the one exit
 for a schema or write-time error, shared by both callers. The emptiness rule is
-also reachable from bash through the --has-body CLI.
+also reachable from bash through the --has-body CLI, and the frame's size cut
+through --fit-frame.
 """
 
 from __future__ import annotations
@@ -13,7 +14,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import NoReturn
+from typing import NamedTuple, NoReturn
 
 
 def _printf_lines(*args: str) -> str:
@@ -220,18 +221,200 @@ def todo_boundary(root: str) -> str:
     )
 
 
-def _cli(argv: list[str]) -> int:
-    """Run `checkpoint_lib.py --has-body`.
+def fit_frame(head: str, todo: str, tail: str) -> str:
+    """Return the frame, with whole TODO.md items cut when it would not fit.
 
-    Reads content on stdin, exits 0 if it has a body, 1 if it is empty, 2 on an
-    unknown invocation. Success is the body because 0 is the one status no crash
-    can produce: an uncaught exception, at import as much as here, exits 1, and
-    a library python3 cannot open exits 2, so a broken check reads as "no body"
-    and the loader injects nothing on its account.
+    `head` is the header and the task, `todo` the TODO.md text, `tail` what the
+    loader appends after the frame; the whole context is the frame, the tail and
+    one newline, at most FRAME_LIMIT UTF-16 code units. A frame that fits comes
+    back byte for byte. Otherwise items go from the end, the open decisions
+    last, and a line closes the frame saying how many TODO.md holds beyond those
+    shown. The task and header are never cut: with every item gone the minimal
+    form is returned even if it is still over. A TODO.md with no item to cut is
+    returned whole.
+    """
+    budget = FRAME_LIMIT - _units(tail) - 1
+    whole = head + "\n\n" + todo
+    if _units(whole) <= budget:
+        return whole
+    lines = todo.split("\n")
+    items = _todo_items(lines)
+    # Open decisions are cut last; within a tier, the end of the file first.
+    order = [i for i in reversed(items) if not i.decision] + [
+        i for i in reversed(items) if i.decision
+    ]
+    if not order:
+        return whole
+    # The smallest prefix of `order` that fits. The kept text shrinks as the
+    # prefix grows and the pointer only lengthens, so no prefix whose kept text
+    # is over the budget beside the shortest pointer can fit: binary-search the
+    # first one that might, then render forward from it until one does. Each
+    # render walks the whole file, so one per dropped item is quadratic.
+    shortest = _pointer(order[:1])
+    lo, hi = 1, len(order)
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if _units(_render(head, _kept(lines, order[:mid]), shortest)) <= budget:
+            hi = mid
+        else:
+            lo = mid + 1
+    for k in range(lo, len(order) + 1):
+        out = _render(head, _kept(lines, order[:k]), _pointer(order[:k]))
+        if _units(out) <= budget:
+            break
+    return out
+
+
+def _units(text: str) -> int:
+    """Return the length of `text` in UTF-16 code units, the host's count.
+
+    Never below the code-point count, so it is safe whichever the host uses. A
+    lone surrogate (an undecodable byte, through surrogateescape) counts one.
+    """
+    return len(text.encode("utf-16-le", errors="surrogatepass")) // 2
+
+
+# The most UTF-16 code units of one hook's additionalContext that Claude Code
+# injects whole. Measured on Claude Code 2.1.327: from 10001 the output is
+# persisted to a file and the model gets a 2000-character preview. The host is
+# JavaScript, whose string length counts UTF-16 units, so an astral character
+# (an emoji) costs two.
+FRAME_LIMIT = 10000
+
+
+class _Item(NamedTuple):
+    """A top-level item of TODO.md: its line range and its section kind."""
+
+    start: int
+    end: int
+    decision: bool
+
+
+def _todo_items(lines: list[str]) -> list[_Item]:
+    """Return the items of TODO.md, in file order.
+
+    An item starts at a list marker at column 0 (`- `, `* `, `+ `, `1. `,
+    `1) `) outside a code fence, and runs to its last non-blank line before the
+    next such line or the next `##` heading. A fence's lines never start an item
+    or a section: they extend the item they sit in.
+    """
+    items: list[_Item] = []
+    decision = False
+    current = False
+    fence = ""
+    for n, line in enumerate(lines):
+        if fence:
+            if _closes(line, fence):
+                fence = ""
+        elif m := _FENCE.match(line):
+            fence = m.group(1)
+        elif _SECTION_HEADING.match(line):
+            heading = line[2:].strip().rstrip(":").strip().lower()
+            decision = heading == "open decisions"
+            current = False
+            continue
+        elif _ITEM_MARKER.match(line):
+            items.append(_Item(n, n + 1, decision))
+            current = True
+            continue
+        if current and line.strip():
+            items[-1] = items[-1]._replace(end=n + 1)
+    return items
+
+
+# A code fence's opening line: its run of backticks or tildes.
+# A backtick fence's info string holds no backtick (CommonMark), so a line
+# opening on an inline code span is not a fence.
+_FENCE = re.compile(r"\s*(`{3,}(?=[^`]*$)|~{3,})")
+
+
+def _closes(line: str, fence: str) -> bool:
+    """Tell whether `line` closes the fence opened by `fence`."""
+    m = _FENCE.match(line)
+    return bool(
+        m
+        and m.group(1)[0] == fence[0]
+        and len(m.group(1)) >= len(fence)
+        and not line[m.end() :].strip()
+    )
+
+
+# A `##` heading line that is not a deeper one.
+_SECTION_HEADING = re.compile(r"##(?!#)(\s|$)")
+
+# A list item's marker at column 0: bullet or ordered.
+_ITEM_MARKER = re.compile(r"([-*+]|\d+[.)]) ")
+
+
+def _render(head: str, kept: str, pointer: str) -> str:
+    return head + ("\n\n" + kept if kept else "") + "\n\n" + pointer
+
+
+def _kept(lines: list[str], dropped: list[_Item]) -> str:
+    gone = {n for i in dropped for n in range(i.start, i.end)}
+    return "\n".join(_kept_lines(lines, gone)).rstrip()
+
+
+def _pointer(dropped: list[_Item]) -> str:
+    decisions = sum(1 for i in dropped if i.decision)
+    remaining = len(dropped) - decisions
+    counts = []
+    if remaining:
+        counts.append(f"{remaining} more remaining item{'s' * (remaining != 1)}")
+    if decisions:
+        counts.append(f"{decisions} more open decision{'s' * (decisions != 1)}")
+    return (
+        f"TODO.md holds {' and '.join(counts)} than shown here: "
+        "read it before acting on either list."
+    )
+
+
+def _kept_lines(lines: list[str], gone: set[int]) -> list[str]:
+    """Return the lines not in `gone`, with no blank line doubled across a cut.
+
+    An item's range stops at its last non-blank line, so the blank lines that
+    separated it from what follows stay; where a cut leaves one blank run
+    against another, the second goes.
+    """
+    kept: list[str] = []
+    cut = False
+    for n, line in enumerate(lines):
+        if n in gone:
+            cut = True
+            continue
+        if cut and not line.strip() and kept and not kept[-1].strip():
+            continue
+        if line.strip():
+            cut = False
+        kept.append(line)
+    return kept
+
+
+def _cli(argv: list[str]) -> int:
+    """Run `checkpoint_lib.py --has-body` or `--fit-frame`.
+
+    `--has-body` reads content on stdin, exits 0 if it has a body, 1 if it is
+    empty, 2 on an unknown invocation. Success is the body because 0 is the one
+    status no crash can produce: an uncaught exception, at import as much as
+    here, exits 1, and a library python3 cannot open exits 2, so a broken check
+    reads as "no body" and the loader injects nothing on its account.
+
+    `--fit-frame` reads head, todo and tail on stdin, each NUL-terminated, and
+    prints the fitted frame without a trailing newline. Bytes, not the locale's
+    text: the count is of UTF-16 units whatever the hook's locale.
     """
     if len(argv) == 2 and argv[1] == "--has-body":
         content = sys.stdin.read()
         return 1 if is_empty_body(content) else 0
+    if len(argv) == 2 and argv[1] == "--fit-frame":
+        raw = sys.stdin.buffer.read().decode("utf-8", errors="surrogateescape")
+        parts = raw.split("\0")
+        if len(parts) != 4 or parts[3]:
+            print("checkpoint_lib.py: --fit-frame: head, todo, tail", file=sys.stderr)
+            return 2
+        out = fit_frame(parts[0], parts[1], parts[2])
+        sys.stdout.buffer.write(out.encode("utf-8", errors="surrogateescape"))
+        return 0
     print("checkpoint_lib.py: unknown invocation", file=sys.stderr)
     return 2
 

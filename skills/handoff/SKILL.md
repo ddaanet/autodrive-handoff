@@ -64,7 +64,7 @@ Then decide the content:
   after the first action, or a task list with open items in play; if so, draft
   it from the todo template below.
 
-These two files are re-injected verbatim on the far side, and they are the only
+These two files are re-injected verbatim on the far side (bar `TODO.md` items cut to fit the hook-output limit, with a line saying so), and they are the only
 carrier: the continuation is a fixed prompt that points at them and says
 nothing of its own, so a fact left out of them is gone.
 

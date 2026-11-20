@@ -95,8 +95,10 @@ handoff_owner_live() {
 # child, and the lock stays with the shell's descriptor after that child is
 # gone. The `-d` test keeps bash from opening anything else, a FIFO say, which
 # could block. Residual: a FIFO swapped in between the test and the open still
-# blocks it, and no wait of the lock's bounds that open; only the hook's or the
-# Bash tool's own timeout ends it. `wait` checks that fd 9 is the directory the
+# blocks the open. HANDOFF_LOCK_WAIT_SECS does not bound it, since it bounds
+# only the helper's wait, which runs after; only whatever runs the caller can
+# end it: a hook's timeout, the Bash tool's, or the host's default on the mod's
+# process run (sentinel-lock.md). `wait` checks that fd 9 is the directory the
 # path names. `wait` exits 75 for busy and anything else for unavailable (a
 # crashed or missing python3 included).
 # shellcheck disable=SC2034  # HANDOFF_LOCK_MSG is read by the sourcing scripts
