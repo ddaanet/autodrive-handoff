@@ -345,17 +345,13 @@ link_root() {
 }
 
 @test "load-handoff (limit): exactly 10000 characters stay whole, 10001 are cut" {
-    printf '## Remaining\n\n- first\n- x\n' > "$tmp/TODO.md"
-    run_load_handoff "$tmp" clear
-    split_output "$output"
-    base="$(chars "$CTX")"
-    pad() { { printf '## Remaining\n\n- first\n- '; python3 -I -c 'import sys; print("x" * int(sys.argv[1]))' "$1"; } > "$tmp/TODO.md"; }
-    pad $((10000 - base + 1))
+    measure_base run_load_handoff "$tmp" clear
+    seed_todo_x $((10000 - base + 1))
     run_load_handoff "$tmp" clear
     split_output "$output"
     [ "$(chars "$CTX")" -eq 10000 ]
     [[ "$CTX" != *"TODO.md holds"* ]]
-    pad $((10000 - base + 2))
+    seed_todo_x $((10000 - base + 2))
     run_load_handoff "$tmp" clear
     split_output "$output"
     [[ "$CTX" == *"TODO.md holds 1 more remaining item than shown"* ]]
@@ -364,14 +360,11 @@ link_root() {
 
 @test "load-handoff (limit): the loader's own notes count against the budget" {
     # Boundary again, with the lock-failure sentence after the frame.
-    printf '## Remaining\n\n- first\n- x\n' > "$tmp/TODO.md"
     seed_pending "$tmp" "clear continue" "A Title"
     fail_lock_helper
-    run_load_handoff "$tmp" clear
-    split_output "$output"
+    measure_base run_load_handoff "$tmp" clear
     [[ "$CTX" == *"was left in place"* ]]
-    base="$(chars "$CTX")"
-    { printf '## Remaining\n\n- first\n- '; python3 -I -c 'import sys; print("x" * int(sys.argv[1]))' $((10000 - base + 2)); } > "$tmp/TODO.md"
+    seed_todo_x $((10000 - base + 2))
     run_load_handoff "$tmp" clear
     split_output "$output"
     [[ "$CTX" == *"TODO.md holds 1 more remaining item"* ]]

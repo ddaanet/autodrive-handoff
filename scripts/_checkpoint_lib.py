@@ -14,7 +14,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import NoReturn
+from typing import NamedTuple, NoReturn
 
 
 def _printf_lines(*args: str) -> str:
@@ -243,8 +243,12 @@ def fit_frame(head: str, todo: str, tail: str) -> str:
         i for i in reversed(items) if i.decision
     ]
     out = whole
-    for count in range(1, len(order) + 1):
-        out = _without_items(head, lines, order[:count])
+    dropped: list[_Item] = []
+    gone: set[int] = set()
+    for item in order:
+        dropped.append(item)
+        gone.update(range(item.start, item.end))
+        out = _without_items(head, lines, gone, dropped)
         if len(out) + len(tail) + 1 <= FRAME_LIMIT:
             break
     return out
@@ -256,38 +260,44 @@ def fit_frame(head: str, todo: str, tail: str) -> str:
 FRAME_LIMIT = 10000
 
 
-class _Item:
+class _Item(NamedTuple):
     """A top-level `- ` item of TODO.md: its line range and its section kind."""
 
-    def __init__(self, start: int, *, decision: bool) -> None:
-        self.start = start
-        self.end = start + 1
-        self.decision = decision
+    start: int
+    end: int
+    decision: bool
 
 
-# An item runs to its last non-blank line before the next `- ` line at column 0
-# or the next `##` heading.
+# A `##` heading line that is not a deeper one.
 _SECTION_HEADING = re.compile(r"##(?!#)(\s|$)")
 
 
 def _todo_items(lines: list[str]) -> list[_Item]:
-    items: list[_Item] = []
+    """Return the `- ` items of TODO.md, in file order.
+
+    An item runs to its last non-blank line before the next `- ` line at column
+    0 or the next `##` heading.
+    """
+    starts: list[tuple[int, bool]] = []
+    ends: list[int] = []
     decision = False
-    current: _Item | None = None
+    current = False
     for n, line in enumerate(lines):
         if _SECTION_HEADING.match(line):
             decision = line[2:].strip().lower() == "open decisions"
-            current = None
+            current = False
         elif line.startswith("- "):
-            current = _Item(n, decision=decision)
-            items.append(current)
-        elif current is not None and line.strip():
-            current.end = n + 1
-    return items
+            starts.append((n, decision))
+            ends.append(n + 1)
+            current = True
+        elif current and line.strip():
+            ends[-1] = n + 1
+    return [_Item(s, e, d) for (s, d), e in zip(starts, ends, strict=True)]
 
 
-def _without_items(head: str, lines: list[str], dropped: list[_Item]) -> str:
-    gone = {n for i in dropped for n in range(i.start, i.end)}
+def _without_items(
+    head: str, lines: list[str], gone: set[int], dropped: list[_Item]
+) -> str:
     kept = "\n".join(_kept_lines(lines, gone)).rstrip()
     decisions = sum(1 for i in dropped if i.decision)
     remaining = len(dropped) - decisions

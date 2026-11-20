@@ -219,19 +219,15 @@ link_root() {
 }
 
 @test "load-compact (limit): exactly 10000 characters stay whole, 10001 are cut" {
-    pad() { { printf '## Remaining\n\n- first\n- '; python3 -I -c 'import sys; print("x" * int(sys.argv[1]))' "$1"; } > "$tmp/TODO.md"; }
-    printf '## Remaining\n\n- first\n- x\n' > "$tmp/TODO.md"
     seed_pending "$tmp" "compact continue"
-    run_load_compact "$tmp"
-    split_output "$output"
-    base="$(chars "$CTX")"
-    pad $((10000 - base + 1))
+    measure_base run_load_compact "$tmp"
+    seed_todo_x $((10000 - base + 1))
     seed_pending "$tmp" "compact continue"
     run_load_compact "$tmp"
     split_output "$output"
     [ "$(chars "$CTX")" -eq 10000 ]
     [[ "$CTX" != *"TODO.md holds"* ]]
-    pad $((10000 - base + 2))
+    seed_todo_x $((10000 - base + 2))
     seed_pending "$tmp" "compact continue"
     run_load_compact "$tmp"
     split_output "$output"
@@ -240,14 +236,11 @@ link_root() {
 }
 
 @test "load-compact (limit): the lock-failure sentence counts against the budget" {
-    printf '## Remaining\n\n- first\n- x\n' > "$tmp/TODO.md"
     seed_pending "$tmp" "compact continue"
     fail_lock_helper
-    run_load_compact "$tmp"
-    split_output "$output"
+    measure_base run_load_compact "$tmp"
     [[ "$CTX" == *"was left in place"* ]]
-    base="$(chars "$CTX")"
-    { printf '## Remaining\n\n- first\n- '; python3 -I -c 'import sys; print("x" * int(sys.argv[1]))' $((10000 - base + 2)); } > "$tmp/TODO.md"
+    seed_todo_x $((10000 - base + 2))
     run_load_compact "$tmp"
     split_output "$output"
     [[ "$CTX" == *"TODO.md holds 1 more remaining item"* ]]

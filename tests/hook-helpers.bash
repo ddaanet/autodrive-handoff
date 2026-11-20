@@ -129,6 +129,23 @@ open(sys.argv[1], "w").write("## Remaining\n\n- k" + "x" * int(sys.argv[2]) + "\
 PY
 }
 
+# <n> — a TODO.md of two remaining items, the second n characters of x, so a
+# test can move the frame's length one character at a time.
+seed_todo_x() {
+    { printf '## Remaining\n\n- first\n- '; python3 -I -c 'import sys; print("x" * int(sys.argv[1]))' "$1"; } > "$tmp/TODO.md"
+}
+
+# <loader call…> — seed the smallest seed_todo_x TODO.md, run the loader call
+# and set `base` to the characters its context holds, the figure the limit
+# tests measure the 10000 boundary from.
+measure_base() {
+    seed_todo_x 1
+    "$@"
+    # shellcheck disable=SC2154  # set by the bats `run` inside the loader call
+    split_output "$output"
+    base="$(chars "$CTX")"
+}
+
 # <text> — its length in characters (code points), whatever the locale.
 chars() {
     printf '%s' "$1" | python3 -I -c 'import sys; print(len(sys.stdin.buffer.read().decode("utf-8")))'

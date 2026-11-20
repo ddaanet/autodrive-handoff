@@ -85,18 +85,27 @@ task="$cwd/$HANDOFF_REL_TASK"
 todo="$cwd/$HANDOFF_REL_TODO"
 handoff_frame "$task" "$todo" || true
 
-# What follows the frame in the context. It is counted against the hook's output
-# limit, so the frame is fitted to it before the size is read.
+# What follows the frame in the context: the missing half, named, and the lock
+# note. It is counted against the hook's output limit, so the frame is fitted to
+# it before the size is read.
+missing="" sep=$'\n\n'
+if [[ -z "$FRAME" ]]; then
+    missing="No task frame or todo"
+    sep=""
+elif (( ! FRAME_TODO )); then
+    missing="No todo"
+elif (( ! FRAME_TASK )); then
+    missing="No task frame"
+fi
 tail_text=""
+if [[ -n "$missing" ]]; then
+    tail_text="$sep$missing."
+fi
+if [[ -n "$lock_ctx" ]]; then
+    tail_text+=$'\n\n'"$lock_ctx"
+fi
+
 if [[ -n "$FRAME" ]]; then
-    if (( ! FRAME_TODO )); then
-        tail_text+=$'\n\n'"No todo."
-    elif (( ! FRAME_TASK )); then
-        tail_text+=$'\n\n'"No task frame."
-    fi
-    if [[ -n "$lock_ctx" ]]; then
-        tail_text+=$'\n\n'"$lock_ctx"
-    fi
     handoff_frame_fit "$tail_text"
 
     bytes=${#FRAME}
@@ -121,20 +130,11 @@ print(int(max(os.path.getmtime(p) for p in sys.argv[1:])))' "${counted[@]}")
     else age="$((delta / 86400))d ago"
     fi
     notes+=("loaded — ${size}, saved ${age}")
-
-    if (( ! FRAME_TODO )); then
-        notes+=("No todo")
-    elif (( ! FRAME_TASK )); then
-        notes+=("No task frame")
-    fi
-    context="$FRAME$tail_text"
+    if [[ -n "$missing" ]]; then notes+=("$missing"); fi
 else
-    notes+=("No task frame or todo.")
-    context="No task frame or todo."
-    if [[ -n "$lock_ctx" ]]; then
-        context+=$'\n\n'"$lock_ctx"
-    fi
+    notes+=("$missing.")
 fi
+context="$FRAME$tail_text"
 
 printf -v msg '%s; ' "${notes[@]}"
 
