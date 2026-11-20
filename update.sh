@@ -15,7 +15,37 @@ TOOLKIT_PREFIX="plugin-dev"
 
 ref="${1:-}"
 
-git diff --quiet HEAD || { echo "error: uncommitted changes — commit or stash before updating" >&2; exit 1; }
+refuse_dirty() {
+    local path
+    echo "error: uncommitted changes — commit or stash before updating" >&2
+    # NUL-delimited, so a path with a space or newline is one path.
+    while IFS= read -r -d '' path; do
+        printf '  %s\n' "$path" >&2
+    done < <({ git diff --name-only -z --ignore-submodules=untracked HEAD -- "${dirt_specs[@]}"
+               git diff --name-only -z --ignore-submodules=untracked --cached HEAD -- "${dirt_specs[@]}"
+             } | sort -zu)
+    echo "a change inside a submodule is committed or stashed in that submodule" >&2
+    exit 1
+}
+
+# A moved gitlore memory gitlink is the one dirt allowed through: a session
+# commits facts to the store as it goes, so its pointer is routinely ahead of
+# HEAD. It is exempted by pathspec, found by its submodule name as
+# release-preflight.sh finds it, not by the path it is mounted at; every other
+# gitlink counts whatever the consumer's own ignore settings say, hence
+# `--ignore-submodules=untracked`: a moved gitlink or modified content in
+# another submodule refuses, and only untracked files inside one pass. This
+# holds under the consumer's ignore settings, which `git subtree`'s own check
+# honours: it would pass edited content of a submodule they ignore. Any other
+# tracked change, staged or not, refuses.
+memory=""
+if [ -f .gitmodules ]; then
+    memory="$(git config -f .gitmodules --get submodule.gitlore-memory.path)" || memory=""
+fi
+dirt_specs=(.)
+[ -z "$memory" ] || dirt_specs+=(":(exclude,literal)$memory")
+git diff --quiet --ignore-submodules=untracked HEAD -- "${dirt_specs[@]}" || refuse_dirty
+git diff --quiet --ignore-submodules=untracked --cached HEAD -- "${dirt_specs[@]}" || refuse_dirty
 [ -d "$TOOLKIT_PREFIX" ] || { echo "error: $TOOLKIT_PREFIX/ not found — is the toolkit vendored here?" >&2; exit 1; }
 
 if [ -z "$ref" ]; then
@@ -56,7 +86,35 @@ if [ -f "$TOOLKIT_PREFIX/VERSION" ]; then
     old_version="$(tr -d '[:space:]' < "$TOOLKIT_PREFIX/VERSION")"
 fi
 
-git subtree pull --prefix="$TOOLKIT_PREFIX" "$TOOLKIT_URL" "$ref" --squash
+# A merge stopped on a conflict is finished by the user's commit, which would
+# record a pointer staged now, so then the restore is left as a command.
+restage_memory() {
+    local top
+    if git rev-parse -q --verify MERGE_HEAD >/dev/null; then
+        top="$(git rev-parse --show-toplevel)"
+        {
+            printf 'note: the staged %s pointer was not restored. Once the merge is committed,\n' "$memory"
+            printf 'restage it with:\n  git -C %q update-index --add --cacheinfo 160000,%s,%q\n' "$top" "$staged" "$memory"
+            printf 'and check it: git -C %q rev-parse %q should print %s.\n' "$top" ":$memory" "$staged"
+            printf 'Finish the merge with git commit, not git commit -a or git add -A, which would commit the checkout'"'"'s sha.\n'
+        } >&2
+    else
+        git update-index --add --cacheinfo 160000 "$staged" "$memory"
+    fi
+}
+
+# A staged pointer would land in the merge commit, which commits the index, so
+# it is unstaged for the pull and restored at exit to the sha that was staged,
+# which the checkout may have moved past.
+if [ -n "$memory" ] && ! git diff --quiet --ignore-submodules=none --cached HEAD -- ":(literal)$memory"; then
+    staged="$(git rev-parse ":$memory")"
+    trap restage_memory EXIT
+    git reset -q -- ":(literal)$memory"
+fi
+
+# The ignore key, for the submodule named gitlore-memory only, hides its pointer
+# from `git subtree`'s own clean check, which refuses any tracked change.
+git -c submodule.gitlore-memory.ignore=all subtree pull --prefix="$TOOLKIT_PREFIX" "$TOOLKIT_URL" "$ref" --squash
 
 # Verify VERSION matches the requested tag (catches half-applied subtree
 # pulls). Unconditional: the guard above means only a dist-v* ref reaches
