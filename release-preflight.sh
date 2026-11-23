@@ -27,24 +27,36 @@ check_marketplace_writable() {
 }
 
 tree_is_clean() {
-    # $1=repo root. True when nothing tracked is uncommitted there, ignoring the
-    # paths clean_pathspecs exempts.
-    clean_pathspecs "$1"
-    git -C "$1" diff --quiet HEAD -- "${clean_specs[@]}"
+    # $1=repo root, $2=`plugin` for the plugin repo. True when nothing tracked
+    # is uncommitted there, ignoring the paths clean_pathspecs exempts. `--ignore-submodules=untracked` overrides
+    # a consumer's `submodule.<name>.ignore` and `diff.ignoreSubmodules`, so a
+    # moved gitlink refuses under any setting; untracked files inside a
+    # submodule pass, as they do in the parent. Worktree and index are each
+    # compared to HEAD: a path staged ahead of HEAD whose worktree was put
+    # back matches HEAD on disk, yet would ride the release commit.
+    clean_pathspecs "$1" "${2:-}"
+    git -C "$1" diff --quiet --ignore-submodules=untracked HEAD -- "${clean_specs[@]}" \
+        && git -C "$1" diff --quiet --ignore-submodules=untracked --cached HEAD -- "${clean_specs[@]}"
 }
 
 clean_pathspecs() {
-    # $1=repo root. Sets two globals describing the check tree_is_clean applies
+    # $1=repo root, $2=`plugin` for the plugin repo. Sets two globals describing the check tree_is_clean applies
     # there: $clean_specs, the pathspecs, and $clean_exempt, the same set in the
     # words report_dirty prints. They are built together so a refusal names the
     # exemptions that were actually applied rather than a list written from
     # memory — a consumer whose vendored plugin-dev/ predates one of them would
     # otherwise be told about an exclusion its own copy does not make.
     #
-    # One path is exempt, a gitlore-mounted memory submodule: its gitlink sits
-    # ahead of what HEAD records between commits by design — gitlore's
-    # gitlore-commit stages it into the parent index after a memory commit, and
-    # the next parent commit records it, not this one.
+    # One path is exempt in either repo, a gitlore-mounted memory submodule:
+    # its gitlink sits ahead of what HEAD records between commits by design —
+    # gitlore's gitlore-commit stages it into the parent index after a memory
+    # commit, and the next parent commit records it, not this one.
+    #
+    # The plugin repo also exempts the root TASK.md and TODO.md, the handoff
+    # files a session rewrites to record the post-release state: they never
+    # take a commit of their own, so bump_commit_tag stages them into the
+    # release commit. The marketplace repo makes no commit that would take
+    # them, so there they refuse like any other path.
     #
     # The mount path is read from .gitmodules rather than assumed to be
     # `memory`: that is only gitlore's default, the path being $1 to gitlore's
@@ -56,20 +68,26 @@ clean_pathspecs() {
     # Deliberately this narrow. A consumer that vendors some other submodule
     # and forgets to commit its moved gitlink should be refused, so
     # `--ignore-submodules=all` is not the shortcut it looks like.
-    local dir="$1" mem=""
+    local dir="$1" kind="${2:-}" mem=""
     clean_specs=(.)
     clean_exempt=()
     if [ -f "$dir/.gitmodules" ]; then
         mem=$(git config -f "$dir/.gitmodules" --get submodule.gitlore-memory.path) || mem=""
     fi
     if [ -n "$mem" ]; then
-        clean_specs+=(":(exclude)$mem")
+        clean_specs+=(":(exclude,literal)$mem")
         clean_exempt+=("$mem/ — the gitlore memory submodule, whose gitlink gitlore-commit stages and the next commit records")
+    fi
+    if [ "$kind" = plugin ]; then
+        clean_specs+=(":(exclude,literal)TASK.md" ":(exclude,literal)TODO.md")
+        clean_exempt+=("TASK.md — a handoff file, which the release commit takes"
+                       "TODO.md — a handoff file, which the release commit takes")
     fi
 }
 
 report_dirty() {
-    # $1=repo root, $2=what to call it in the message. Prints what made it
+    # $1=repo root, $2=what to call it in the message, $3=`plugin` for the
+    # plugin repo. Prints what made it
     # dirty, then any exemptions that did not save it. Callers add the
     # site-specific consequence and next command, then die.
     #
@@ -78,11 +96,13 @@ report_dirty() {
     # newline still prints across two lines — git has no quoting mode that
     # survives -z — which is the residual bound here.
     local dir="$1" label="$2" p
-    clean_pathspecs "$dir"
-    printf 'hint: these tracked paths in %s differ from HEAD:\n' "$label" >&2
+    clean_pathspecs "$dir" "${3:-}"
+    printf 'hint: these tracked paths in %s differ from HEAD, on disk or staged:\n' "$label" >&2
     while IFS= read -r -d '' p; do
         printf '        %s\n' "$p" >&2
-    done < <(git -C "$dir" diff -z --name-only HEAD -- "${clean_specs[@]}")
+    done < <({ git -C "$dir" diff -z --name-only --ignore-submodules=untracked HEAD -- "${clean_specs[@]}"
+               git -C "$dir" diff -z --name-only --ignore-submodules=untracked --cached HEAD -- "${clean_specs[@]}"
+             } | sort -zu)
     if [ "${#clean_exempt[@]}" -gt 0 ]; then
         printf '      exempt from this check, and so not among the paths above:\n' >&2
         for p in "${clean_exempt[@]}"; do
@@ -93,8 +113,21 @@ report_dirty() {
 
 common_preflight() {
     [ -f "$manifest" ] || die "$manifest not found — run from the plugin root"
-    tree_is_clean "." || {
-        report_dirty "." "the plugin repo"
+    # The clean-tree check exempts the handoff files, and bump_commit_tag stages
+    # them as they are on disk, which marks an unmerged one resolved and commits
+    # its conflict markers. So an unmerged one refuses, before anything else.
+    local unmerged=() p
+    while IFS= read -r -d '' p; do
+        unmerged+=("$p")
+    done < <(git diff -z --name-only --diff-filter=U -- ':(literal)TASK.md' ':(literal)TODO.md')
+    if [ "${#unmerged[@]}" -gt 0 ]; then
+        printf 'hint: these handoff files are unmerged, which the release commit would take as resolved:\n' >&2
+        printf '        %s\n' "${unmerged[@]}" >&2
+        printf '      resolve and stage them, then run the same command again.\n' >&2
+        die "unmerged handoff file"
+    fi
+    tree_is_clean "." plugin || {
+        report_dirty "." "the plugin repo" plugin
         printf '      commit or stash them, then run the same command again. the release\n' >&2
         printf '      commit must be the only thing this run lands.\n' >&2
         die "uncommitted changes"

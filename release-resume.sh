@@ -86,10 +86,11 @@ resume_preflight() {
         fi
         die "no tag $tag for plugin.json version $V"
     }
-    # The tag's commit must be one HEAD contains: the resume publishes that commit,
-    # and origin's main must reach it by fast-forward. No ancestry check on main or
-    # origin/main here: those guard a commit and tag about to be cut, and a release
-    # already on origin's main has nothing left they would protect.
+    # The tag's commit must be one HEAD contains: the resume publishes that
+    # commit, alone or inside the merge push_target accepts. No ancestry check
+    # on main or origin/main here: those guard a commit and tag about to be cut,
+    # and a release already on origin's main has nothing left they would
+    # protect.
     if ! is_ancestor "refs/tags/$tag^{commit}" HEAD; then
         if git rev-parse -q --verify "refs/heads/$main_branch" >/dev/null \
             && is_ancestor "refs/tags/$tag^{commit}" "refs/heads/$main_branch"; then
@@ -110,8 +111,7 @@ resume_preflight() {
         fi
         # A release with an earlier release tag cut a bump commit, the last one to
         # change the manifest's version line; a first release tags HEAD as it was,
-        # so that line names an older commit it never published. Same guard as
-        # print_undo in release-publish.sh.
+        # so that line names an older commit it never published.
         local earlier
         earlier=$(release_tags | grep -vxF -- "$tag") || earlier=""
         bump_sha=""
