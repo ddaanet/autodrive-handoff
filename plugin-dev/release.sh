@@ -19,7 +19,8 @@ set -euo pipefail
 # It runs from the default branch (main) or from dev, and never changes branch.
 # The tag's commit is pushed to main by refspec, so dev is never pushed and its
 # later commits stay local; local main is moved to the release commit by a
-# fast-forward, never a checkout.
+# fast-forward, never a checkout. When origin's main moved past the release, the
+# refusal says to merge it and resume, and the resume pushes the merged HEAD.
 #
 # A plugin that carries dist.include (see dist.sh) also publishes its shipped
 # paths as the `dist` branch and a `dist-vX.Y.Z` tag, and its marketplace entry
@@ -63,8 +64,12 @@ first_release=0
 # 1 when the commit being released carries dist.include (dist_opted_in).
 dist_on=0
 # The commit the tag names, in both modes: set once the tag exists, before
-# move_main and push_branch read it.
+# push_target, move_main and push_branch read it.
 release_commit=""
+# The commit main is moved to and pushed, and origin's main as read before it:
+# set by push_target.
+push_commit=""
+remote_head=""
 
 # shellcheck source=release-preflight.sh
 source "$here/release-preflight.sh"
@@ -89,6 +94,8 @@ else
     release_commit=$(git rev-parse "$tag^{commit}")
     dist_opted_in "$release_commit"
 fi
+published_tags_check
+push_target
 move_main
 push_branch
 push_tag

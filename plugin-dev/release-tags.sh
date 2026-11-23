@@ -245,7 +245,7 @@ release_preflight() {
     #
     # `git checkout HEAD -- $manifest` is always a no-op. common_preflight
     # refuses a dirty tree before release_preflight runs, and clean_pathspecs
-    # exempts only the gitlore submodule — never
+    # exempts only the gitlore submodule and the handoff files — never
     # `.claude-plugin/` — so the hand-written bump this refusal is about has
     # always been committed already. Reverting it therefore takes a new commit,
     # which is what the hint now says.

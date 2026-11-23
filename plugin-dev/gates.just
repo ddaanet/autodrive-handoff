@@ -21,7 +21,8 @@
 #
 #   sentinel-guard <gate> <pathspec>...   first line of the body; exits the
 #                                         recipe 0, reporting "cached", when the
-#                                         inputs match the last recorded pass
+#                                         inputs match the last recorded pass;
+#                                         fails it first if any path is unmerged
 #   hash-sentinel                         after a formatter that may rewrite
 #                                         inputs, before the checks; re-takes
 #                                         the hash record-sentinel records
@@ -60,7 +61,26 @@ plugin_dev_gate_prolog := "/usr/bin/env bash\nset -euo pipefail\n" + "gate_built
 # keys the sentinel file and heads the report. Leaves the recipe when the
 # inputs are unchanged -- `exit`, not `return`, because a shebang recipe is one
 # script and the checks follow on the next line.
+#
+# A tree with unmerged paths is refused first, before the cache is read and
+# before any formatter runs: a formatter that stages a file can resolve its
+# conflict with the markers still in it, and the hash, which reads disk and
+# not the index, would then cache a pass over it. Whole repository, whatever
+# the pathspecs, and a forced run too. A failing `git ls-files` lists nothing
+# here and leaves the refusal to `check-sentinel`.
 sentinel-guard () {
+    local record path prev='' unmerged=()
+    while IFS= read -r -d '' record; do
+        path=${record#*$'\t'}
+        [ "$path" = "$prev" ] || unmerged+=("$path")
+        prev=$path
+    done < <(git ls-files -u -z --full-name -- ':/' 2>/dev/null)
+    if [ "${#unmerged[@]}" -gt 0 ]; then
+        echo "$1: refused, unmerged paths:" >&2
+        printf '  %s\n' "${unmerged[@]}" >&2
+        echo "$1: resolve the conflicts and git add each path, then rerun" >&2
+        exit 1
+    fi
     if check-sentinel "$@"; then
         echo "$1: cached (inputs unchanged)"
         exit 0
@@ -155,6 +175,7 @@ check-sentinel () {
     sentinel="$sentinel_dir/$1"; shift
     # A pathspec that matches nothing is a typo that would cache forever. An
     # exclude has no files of its own to match.
+    positive=()
     for spec in "$@"; do
         case "$spec" in
             :\!*|:^*|:/\!*|:/^*) continue ;;
@@ -163,12 +184,26 @@ check-sentinel () {
                 case ",${magic%%)*}," in *,exclude,*) continue ;; esac
                 ;;
         esac
-        # Stops at the first file rather than listing them all.
-        IFS= read -r -d '' _ < <(git ls-files -z --cached --others --exclude-standard -- "$spec") || {
-            echo "check-sentinel: pathspec '$spec' matches no file" >&2
+        positive+=("$spec")
+    done
+    # One listing for them all, not one per pathspec: `--error-unmatch` has git
+    # name every pathspec that matched nothing, by its own pathspec rules and
+    # magic, and counts an untracked, non-ignored file as a match. Its lines
+    # are rewrapped under this function's name; any other failure is printed
+    # as git wrote it, behind a `check-sentinel: ` prefix. `LC_ALL=C` keeps the
+    # line the rewrap reads untranslated. The rewrap is per line: a pathspec
+    # containing a newline is still refused, but its message comes out split
+    # across lines, each prefixed, and not rewrapped.
+    if [ "${#positive[@]}" -gt 0 ]; then
+        unmatched=$(LC_ALL=C git ls-files -z --cached --others --exclude-standard \
+            --error-unmatch -- "${positive[@]}" 2>&1 >/dev/null) || {
+            printf '%s\n' "$unmatched" | sed \
+                -e "s/^error: pathspec '\(.*\)' did not match any file(s) known to git\$/check-sentinel: pathspec '\1' matches no file/" \
+                -e '/^Did you forget/d' \
+                -e '/^check-sentinel: /!s/^/check-sentinel: /' >&2
             exit 1
         }
-    done
+    fi
     gate_cwd=$PWD
     gate_inputs=("$@")
     # Taken before the checks run, and on every path -- a forced run and a

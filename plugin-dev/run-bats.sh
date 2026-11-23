@@ -50,6 +50,9 @@ elif [ "$status" -ne 0 ]; then
     # count that does not add up, bats dying before a plan) -- the log is the
     # only account of it.
     cat "$log"
+    # A log whose last line has no newline would take the count line onto it,
+    # where a reader anchored on `^bats: ` misses it.
+    [ -z "$(tail -c 1 "$log")" ] || echo
 fi
 
 if [ "$status" -eq 0 ]; then

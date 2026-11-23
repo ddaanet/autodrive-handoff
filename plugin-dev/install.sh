@@ -82,7 +82,24 @@ if [ ! -d "$TOOLKIT_PREFIX" ]; then
         echo "error: no commits yet — commit the plugin before vendoring" >&2
         exit 1
     }
-    git diff --quiet HEAD || { echo "error: uncommitted changes — commit or stash before vendoring" >&2; exit 1; }
+    # A moved gitlore memory gitlink is the one dirt let through, as in
+    # update.sh's dirt check, which this copies so the bootstrap script stays
+    # runnable on its own: the store's path is read from .gitmodules by its
+    # submodule name and excluded literally. `--ignore-submodules=untracked`
+    # overrides the consumer's ignore settings, so any other moved gitlink
+    # refuses under any of them. The index is compared too: `subtree add`
+    # commits it, and a path staged and then reverted would ride that commit.
+    memory=""
+    if [ -f .gitmodules ]; then
+        memory="$(git config -f .gitmodules --get submodule.gitlore-memory.path)" || memory=""
+    fi
+    dirt_specs=(.)
+    [ -z "$memory" ] || dirt_specs+=(":(exclude,literal)$memory")
+    if ! git diff --quiet --ignore-submodules=untracked HEAD -- "${dirt_specs[@]}" \
+        || ! git diff --quiet --ignore-submodules=untracked --cached HEAD -- "${dirt_specs[@]}"; then
+        echo "error: uncommitted changes — commit or stash before vendoring" >&2
+        exit 1
+    fi
     if [ -z "$ref" ]; then
         # Same resolver as update.sh's no-ref default. Kept as a copy here:
         # the bootstrap script must stay runnable on its own, without
@@ -112,7 +129,22 @@ if [ ! -d "$TOOLKIT_PREFIX" ]; then
           exit 1
           ;;
     esac
-    git subtree add --prefix="$TOOLKIT_PREFIX" "$TOOLKIT_URL" "$ref" --squash
+    # A staged pointer would land in the commit `subtree add` makes, which
+    # commits the index, so it is unstaged for the add and restored at exit to
+    # the sha that was staged. Unlike update.sh's pull, an add into a new
+    # prefix cannot stop on a merge conflict, so the restore is unconditional.
+    if [ -n "$memory" ] && ! git diff --quiet --ignore-submodules=none --cached HEAD -- ":(literal)$memory"; then
+        staged="$(git rev-parse ":$memory")"
+        restage_memory() {
+            git update-index --add --cacheinfo 160000 "$staged" "$memory"
+        }
+        trap restage_memory EXIT
+        git reset -q -- ":(literal)$memory"
+    fi
+    # The ignore key, for the submodule named gitlore-memory only, hides its
+    # pointer from `git subtree`'s own clean check, which refuses any tracked
+    # change.
+    git -c submodule.gitlore-memory.ignore=all subtree add --prefix="$TOOLKIT_PREFIX" "$TOOLKIT_URL" "$ref" --squash
     changed+=("$TOOLKIT_PREFIX/ (vendored at $ref)")
 elif [ -n "$ref" ]; then
     echo "warning: $TOOLKIT_PREFIX/ already vendored — ignoring ref '$ref'." >&2
