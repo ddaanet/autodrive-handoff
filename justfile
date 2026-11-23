@@ -51,15 +51,27 @@ check-plugin:
 # Python lint + type checks and the bats + pytest suites; skipped while its inputs are unchanged
 check-code:
     #!{{ plugin_dev_gate_prolog }}
-    sentinel-guard check-code .gitignore bin hooks scripts tests pyproject.toml uv.lock
-    ruff check scripts tests
-    ruff format --check scripts tests
-    docformatter --check scripts/*.py tests/*.py
+    sentinel-guard check-code .gitignore bin hooks scripts tests pyproject.toml uv.lock vibe-plugin/scripts
+    ruff check scripts tests vibe-plugin/scripts
+    ruff format --check scripts tests vibe-plugin/scripts
+    docformatter --check scripts/*.py tests/*.py vibe-plugin/scripts/*.py
     mypy
     ty check
     plugin-dev/run-bats.sh tests/*.bats
     pytest
     record-sentinel
+
+# The Vibe port: canonical scripts/ -> the three caller skills' copies.
+# Checkpoints downstream: ruff/format/docformatter read the canonical dir
+# only, and tests/test_vibe_checkpoint.py's copy-identity test fails on a
+# drifted copy, so a hand edit under vibe-plugin/scripts/ re-syncs first.
+sync-vibe:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for skill in handoff precompact autoname; do
+        cp vibe-plugin/scripts/*.py "vibe-plugin/skills/$skill/"
+    done
+    echo "sync-vibe: copied $(ls vibe-plugin/scripts/*.py | wc -l | tr -d ' ') modules into 3 skills"
 
 # `claude plugin validate --strict`, minus two findings that cannot be fixed,
 # each dropped only on the entry whose `file` is the one it belongs to: the

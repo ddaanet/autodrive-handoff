@@ -48,8 +48,13 @@ wrap-summaries = 80
 wrap-descriptions = 80
 
 [tool.ruff]
-# scripts/ and tests/ hold all the Python; everything else is shell/markdown.
-include = ["scripts/*.py", "tests/*.py"]
+# scripts/, tests/ and vibe-plugin/scripts/ hold all the Python; everything
+# else is shell/markdown. The Vibe port's skill-directory copies are checked
+# only through the copy-identity test (tests/test_vibe_checkpoint.py): mypy
+# and ty cannot take them — three directories of flat modules with the same
+# names, and the bare sibling imports resolve to whichever dir is on the
+# path, so forked binaries would type-check against the Claude originals.
+include = ["scripts/*.py", "tests/*.py", "vibe-plugin/scripts/*.py"]
 output-format = "concise"
 unsafe-fixes = true
 
@@ -109,6 +114,9 @@ ignore = [
 ]
 "scripts/*.py" = [
     "INP001",   # scripts/ is a flat script dir, not an importable package
+]
+"vibe-plugin/scripts/*.py" = [
+    "INP001",   # vibe-plugin/scripts/ is a flat script dir, not a package
 ]
 "scripts/worktree_root.py" = [
     "INP001",   # scripts/ is a flat script dir, not an importable package

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "autodrive-handoff",
+  "version": "0.23.1",
+  "description": "Task snapshot that survives a /clear or /compact in Mistral Vibe: the agent writes the current task to TASK.md and the open decisions and remaining todos to TODO.md, in the project root, and one AGENTS.md line has the fresh session read both files before its first reply. Also names the session and checks the custom compaction prompt is installed.",
+  "author": {
+    "name": "David Allouche",
+    "email": "david@allouche.net"
+  },
+  "homepage": "https://github.com/ddaanet/autodrive-handoff",
+  "repository": "https://github.com/ddaanet/autodrive-handoff",
+  "license": "MIT",
+  "keywords": [
+    "handoff",
+    "task-frame",
+    "memory",
+    "vibe"
+  ]
+}

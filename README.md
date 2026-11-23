@@ -28,6 +28,13 @@ you type nothing.
 /plugin install autodrive-handoff@ddaanet
 ```
 
+**Mistral Vibe:** the same boundaries ship as a native Vibe plugin, in-repo
+under `vibe-plugin/` — not installed by this marketplace entry; copy that
+directory into `~/.vibe/plugins/`, add one AGENTS.md line, and install the
+compaction prompt (`vibe-plugin/README.md` has the three steps). The
+transitions are prepared, not driven: the user types the `/clear` or
+`/compact`.
+
 ## Use it
 
 Ask in plain words, or invoke a skill:

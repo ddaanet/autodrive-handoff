@@ -198,7 +198,8 @@ gitlore's numbering has no meaning in this repo.
 ## Architecture
 
 Four skills, one write path, one mod, six hooks, and two files that cross a
-boundary.
+boundary — plus the native Vibe port, which is the second write path and no
+transition machinery at all.
 
 Where the argument lives:
 
@@ -227,6 +228,8 @@ Where the argument lives:
   stays unsafe?
 - [Scoping](design/scoping.md) — Which root does a hook anchor on, and how is
   a session that drifts out of it reported?
+- [The Vibe port](design/vibe-port.md) — What survives Mistral Vibe's three-hook
+  surface, what drops with the mod, and where does the compact seam live?
 - [Release infrastructure](design/release-infrastructure.md) — Why is the
   release machinery vendored from claude-plugin-dev rather than inlined?
 - [Design decisions](design/decisions.md) — Why is each standing call the way
