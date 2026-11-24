@@ -28,6 +28,10 @@ prepared on disk and the user types the `/clear` or `/compact` themselves.
    that survives the /clear.
    ```
 
+   A headless run (`vibe -p`) in a folder Vibe does not trust ignores the
+   project's AGENTS.md, so there the line, and with it the frame, is
+   skipped without a word. Trust the folder before driving it headless.
+
 3. **Install the compaction prompt** (the compact seam). Without it,
    `/compact` paraphrases the context under the builtin prompt and the task
    file's removal loses the task. Fine to skip when you only ever use
