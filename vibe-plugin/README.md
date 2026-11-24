@@ -66,10 +66,13 @@ ln -s ~/.claude/plugins/cache/ddaanet/gitlore/<version> ~/.vibe/plugins/gitlore
 ```
 
 Vibe's foreign-format adapter imports gitlore's skills and exposes them
-under their plugin namespace, so the directive's `gitlore:commit` names the
-same skill the session sees. Without the plugin installed, the boundary
-still prints its directive and the memory stays dirty until committed by
-hand.
+under their plugin namespace (probed live: all six `gitlore:*` skills
+surface, exact names), so the directive's `gitlore:commit` names the
+same skill the session sees. The link pins the cached version, and
+Claude Code owns that cache: after it updates gitlore, re-link the new
+`<version>` or the symlink dangles. Without the plugin installed, the
+boundary still prints its directive and the memory stays dirty until
+committed by hand.
 
 ## Skills
 
