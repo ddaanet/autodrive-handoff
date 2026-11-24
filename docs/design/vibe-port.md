@@ -38,14 +38,17 @@ The consequences, kept together so the shape reads in one place:
   `TODO.md` is a plain file write, as under Claude those files always were
   (NFR1).
 - **Memory rides gitlore alone.** The memory directive and the commit act are
-  the Claude texts unchanged; the seam needs gitlore installed under Vibe.
+  the Claude texts unchanged; the seam needs gitlore discoverable under Vibe.
   Vibe discovers plugins only from `~/.vibe/plugins/` and `.vibe/plugins/`,
-  so as of the port gitlore (a Claude-format plugin, user-scope for Claude
-  Code) is *installed but not discoverable*: the README's symlink line is the
-  fix, and an uninstalled gitlore degrades to a printed directive the skill
-  cannot act on. The directive's `gitlore:commit` names the same alias the
-  adapter exposes (`{plugin namespace}:{frontmatter name}`, derived from the
-  plugin name — `_native.py`), verified in the 3.0.1 source.
+  so gitlore (a Claude-format plugin, user-scope for Claude Code) sits
+  outside that surface, and the port makes no move to pull it in: bridging
+  through a symlink into Claude Code's plugin cache was ruled out (see
+  `rejected-alternatives.md`), and gitlore shipping natively is its own
+  repo's work. Uninstalled gitlore degrades to a printed directive the
+  skill cannot act on. The directive's `gitlore:commit` names the same
+  alias the adapter exposes (`{plugin namespace}:{frontmatter name}`,
+  derived from the plugin name — `_native.py`), verified in the 3.0.1
+  source.
 
 ## Where the copies live
 
@@ -84,5 +87,7 @@ Install is copy-plus-two-config-steps, in `vibe-plugin/README.md`. Verified
 (payload on stdin from a skill-directory path), the guard's silent and loud
 arms, the schema fork, and gitlore's alias naming. Not yet verified live: a
 Vibe session invoking a ported skill end to end (`/autodrive-handoff:handoff`
-in a consumer), and the symlinks under `~/.vibe/plugins/` — both need the
-installed state, which is the user's environment, and a headless probe.
+in a consumer) — it needs the installed state, which is the user's
+environment, and a headless probe. A symlink of the Claude cache into
+`~/.vibe/plugins/` was probed live on 2026-11-23 (all six `gitlore:*`
+skills surfaced under exact names) and then removed as ruled out.

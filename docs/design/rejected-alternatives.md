@@ -251,3 +251,5 @@ already use, moves the leftover instead of removing it: one file per root, named
 by a mapping from the root that every actor has to agree on. The lock is on
 `.claude/` itself instead.
 [The sentinel's lock](sentinel-lock.md)
+
+**Symlinking the Claude plugin cache into `~/.vibe/plugins/` to surface gitlore** — Vibe's foreign adapter does import Claude-format trees and exposes their skills under `{namespace}:{name}` (probed live 2026-11-23, all six gitlore skills under exact names), so the bridge works — but it couples Vibe's plugin state to Claude Code's cache: the target is a versioned directory Claude Code owns and prunes on update, so the link dangles under a foreign tool's lifecycle and the two config trees become interdependent. Ruled out on that coupling, not on capability. The accepted cost is the one the plugin already documents: an undiscoverable gitlore degrades the memory seam to a printed directive committed by hand. The durable fix is a Vibe-native gitlore install, which is gitlore's repo's work, not this plugin's.

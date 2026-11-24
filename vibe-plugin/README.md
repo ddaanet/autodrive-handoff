@@ -57,22 +57,14 @@ Vibe has no native memory system; durable learnings ride
 [gitlore](https://github.com/ddaanet/gitlore), which publishes memory
 through git. The boundary's memory directive points at gitlore's
 `gitlore:commit` skill when the repo's `gitlore-memory` submodule is
-dirty. For that line to be actionable, gitlore must be
-installed under Vibe: symlink it into the plugins directory —
-
-```
-mkdir -p ~/.vibe/plugins
-ln -s ~/.claude/plugins/cache/ddaanet/gitlore/<version> ~/.vibe/plugins/gitlore
-```
-
-Vibe's foreign-format adapter imports gitlore's skills and exposes them
-under their plugin namespace (probed live: all six `gitlore:*` skills
-surface, exact names), so the directive's `gitlore:commit` names the
-same skill the session sees. The link pins the cached version, and
-Claude Code owns that cache: after it updates gitlore, re-link the new
-`<version>` or the symlink dangles. Without the plugin installed, the
-boundary still prints its directive and the memory stays dirty until
-committed by hand.
+dirty. gitlore installs for Claude Code; it has no Vibe-native install of
+its own, and bridging one through a symlink into Claude Code's plugin
+cache is ruled out — the port deliberately waits for gitlore to ship
+natively. Until then the boundary still prints its directive and the
+memory stays dirty until committed by hand. (For the record: Vibe's
+foreign-format adapter does import Claude-format trees and expose their
+skills under `{namespace}:{name}` — the coupling, not the capability, is
+what was refused.)
 
 ## Skills
 
