@@ -121,6 +121,7 @@ def test_handoff_prepared_wording_when_not_clear(project: Path) -> None:
         result.stdout.rstrip("\n").splitlines()[-1]
         == "`Written — /clear when you are ready.`"
     )
+    assert "Ready to /clear" not in result.stdout
     assert "`/rename Some Title`" in result.stdout
 
 
@@ -180,6 +181,10 @@ def test_precompact_removes_task_and_warns_when_no_prompt(
     assert result.returncode == 0, result.stderr
     assert not (project / "TASK.md").exists()
     assert "the custom compaction prompt, and none is installed" in result.stdout
+    assert (
+        result.stdout.rstrip("\n").splitlines()[-1]
+        == "`Ready to /compact — everything durable is on disk or in the todo.`"
+    )
 
 
 def test_precompact_guard_silent_when_prompt_installed(
@@ -207,6 +212,10 @@ def test_precompact_guard_silent_when_prompt_installed(
     assert result.returncode == 0, result.stderr
     assert not (project / "TASK.md").exists()
     assert "compaction prompt" not in result.stdout
+    assert (
+        result.stdout.rstrip("\n").splitlines()[-1]
+        == "`Ready to /compact — everything durable is on disk or in the todo.`"
+    )
 
 
 def test_precompact_focus_string_refused(project: Path) -> None:
@@ -241,6 +250,10 @@ def test_todo_edit_replaces_one_occurrence(project: Path) -> None:
     )
     assert result.returncode == 0, result.stderr
     assert (project / "TODO.md").read_text() == "## Remaining\n\n\n- Second item.\n"
+    assert (
+        result.stdout.rstrip("\n").splitlines()[-1]
+        == "`Written — /compact when you are ready.`"
+    )
 
 
 def test_autoname_prints_the_rename_line_and_writes_nothing(
