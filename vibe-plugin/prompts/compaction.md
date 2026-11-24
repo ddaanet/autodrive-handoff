@@ -13,6 +13,8 @@ Reproduce the on-disk frames byte for byte, headings and blank lines included, i
 
 Do not trim, reword, reorder, or "summarize" these blocks. They exist so the next session keeps the exact identifiers, decisions and steps that were chosen to survive; a paraphrase defeats the boundary that wrote them.
 
+Add nothing of your own inside these blocks: no note, parenthetical, marker or status remark, not even after the last line. Anything inside a block reads as the file's content. A comment on a file goes in Layer 2, outside every fence.
+
 ## Layer 2: what the files do not carry
 
 After the verbatim blocks, and briefly:
