@@ -30,7 +30,9 @@ prepared on disk and the user types the `/clear` or `/compact` themselves.
 
    A headless run (`vibe -p`) in a folder Vibe does not trust ignores the
    project's AGENTS.md, so there the line, and with it the frame, is
-   skipped without a word. Trust the folder before driving it headless.
+   skipped without a word. Trust the folder before driving it headless —
+   an interactive session, or `--trust` on the headless invocation (it
+   trusts the working directory for that run only).
 
 3. **Install the compaction prompt** (the compact seam). Without it,
    `/compact` paraphrases the context under the builtin prompt and the task
@@ -94,4 +96,7 @@ hand.
   tool prints. `TASK.md` and `TODO.md` keep the Claude plugin's templates
   and cap (1000 characters of prose).
 - **Updates**: reinstalling the directory replaces everything; the frame
-  files in your project are kept as they are.
+  files in your project are kept as they are. The project-local compaction
+  prompt is outside the plugin directory: after updating, re-copy
+  `prompts/compaction.md` over `.vibe/prompts/handoff-compact.md`, or the
+  summary runs under the old wording.
