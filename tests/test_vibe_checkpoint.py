@@ -95,6 +95,10 @@ def test_handoff_writes_the_frame_and_names_the_clear(
     assert (project / "TASK.md").read_text() == TASK
     assert (project / "TODO.md").read_text() == TODO
     assert "Ready to /clear" in result.stdout
+    assert (
+        result.stdout.rstrip("\n").splitlines()[-1]
+        == "`Ready to /clear — the fresh session reads TASK.md and TODO.md first.`"
+    )
     assert "`/rename Port The Handoff Plugin To Vibe`" in result.stdout
     assert "make the commit the request called for" in result.stdout
 
@@ -113,8 +117,10 @@ def test_handoff_prepared_wording_when_not_clear(project: Path) -> None:
         },
     )
     assert result.returncode == 0, result.stderr
-    assert "Written — /clear when you are ready." in result.stdout
-    assert "Ready to /clear" not in result.stdout
+    assert (
+        result.stdout.rstrip("\n").splitlines()[-1]
+        == "`Written — /clear when you are ready.`"
+    )
     assert "`/rename Some Title`" in result.stdout
 
 
