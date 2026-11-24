@@ -163,7 +163,7 @@ root — go back there and run the call again.
 
 The last part is always the closing line. Vibe runs no transition for you:
 end the reply on that line, so the user reads what to type — `/clear` (and
-`/rename <title>` under `clear: true`, from the rename line) — and types it.
+`/rename <title>`, from the rename line) — and types it.
 
 ## Anti-patterns
 

@@ -110,7 +110,7 @@ def commit_directive(*, memory: bool = False) -> str:
 
 
 def rename_directive(title: str) -> str:
-    """Return the rename act for autoname (and no other skill).
+    """Return the rename act for autoname and handoff.
 
     Vibe has no drive to submit `/rename` at turn end, so the title crosses only
     as a line the user acts on.

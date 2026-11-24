@@ -10,6 +10,7 @@ through `just sync-vibe`; a drifted copy fails here.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -36,7 +37,12 @@ TODO = "## Open decisions\n\n- None left.\n\n## Remaining\n\n- Run the gates."
 def run_checkpoint(
     tmp_path: Path, payload: dict[str, Any], *, skill: str = "handoff"
 ) -> subprocess.CompletedProcess[str]:
-    """Run the named skill's checkpoint with the payload on stdin."""
+    """Run the named skill's checkpoint with the payload on stdin.
+
+    HOME is pinned to the project dir: the guard resolves the user's installed
+    compaction prompt through Path.home(), and a runner that has one must not
+    silence the warning the tests assert.
+    """
     return subprocess.run(
         [
             sys.executable,
@@ -46,6 +52,7 @@ def run_checkpoint(
         capture_output=True,
         text=True,
         cwd=tmp_path,
+        env={**os.environ, "HOME": str(tmp_path)},
         check=False,
     )
 
@@ -88,6 +95,7 @@ def test_handoff_writes_the_frame_and_names_the_clear(
     assert (project / "TASK.md").read_text() == TASK
     assert (project / "TODO.md").read_text() == TODO
     assert "Ready to /clear" in result.stdout
+    assert "`/rename Port The Handoff Plugin To Vibe`" in result.stdout
     assert "make the commit the request called for" in result.stdout
 
 
@@ -107,6 +115,7 @@ def test_handoff_prepared_wording_when_not_clear(project: Path) -> None:
     assert result.returncode == 0, result.stderr
     assert "Written — /clear when you are ready." in result.stdout
     assert "Ready to /clear" not in result.stdout
+    assert "`/rename Some Title`" in result.stdout
 
 
 def test_claude_continue_key_is_unknown(project: Path) -> None:

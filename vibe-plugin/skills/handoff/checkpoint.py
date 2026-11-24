@@ -113,9 +113,9 @@ def compose_directives(
     or clean, and omitted), then the todo boundary/SDD nudge, then the
     compaction-prompt guard (precompact only), then the commit act (present
     only under "with-commit", naming the memory gitlink when memory is
-    owed), then the closing line — always last. autoname gets the rename
-    directive alone: with no drive, the title reaches the user only through
-    the printed line.
+    owed), then the rename directive (handoff; autoname gets the rename
+    directive alone, since with no drive the title reaches the user only
+    through the printed line), then the closing line — always last.
     """
     if skill == "autoname":
         return [lib.rename_directive(title)]
@@ -130,6 +130,8 @@ def compose_directives(
         parts.append(lib.compaction_prompt_guard(str(root)))
     if commit_mode == "with-commit":
         parts.append(lib.commit_directive(memory=bool(memory)))
+    if skill == "handoff":
+        parts.append(lib.rename_directive(title))
     parts.append(lib.closing_directive(skill, ready=ready))
     return [part for part in parts if part]
 
