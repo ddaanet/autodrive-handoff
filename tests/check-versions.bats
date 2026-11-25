@@ -43,10 +43,18 @@ write_manifests() {
     [[ "$output" == *"missing $ROOT/vibe-plugin/plugin.json"* ]]
 }
 
-@test "an empty or unparseable Claude version is refused" {
+@test "an empty .version is refused" {
     write_manifests 1.2.3 1.2.3
     printf '{}\n' > "$ROOT/.claude-plugin/plugin.json"
     run bash scripts/check-versions.sh "$ROOT"
     [ "$status" -eq 1 ]
-    [[ "$output" == *"unparseable or empty"* ]]
+    [[ "$output" == *"empty .version"* ]]
+}
+
+@test "an unparseable manifest is refused with the friendly message" {
+    write_manifests 1.2.3 1.2.3
+    printf '{not json}\n' > "$ROOT/.claude-plugin/plugin.json"
+    run bash scripts/check-versions.sh "$ROOT"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"check-versions: unparseable .version in"* ]]
 }

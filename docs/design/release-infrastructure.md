@@ -39,8 +39,10 @@ toolkit, vendored at `plugin-dev/` via `git subtree`. Rationale:
 The native Vibe tree (`vibe-plugin/`) is part of the same plugin and
 ships under the same version. The coupling is one-way enforced where it
 can be: the toolkit's `release` recipe bumps only the Claude manifest,
-so the release sequence is `just release X.Y.Z` (commits, tags, pushes),
-then a `vibe-plugin/plugin.json` sync commit bumping it to `X.Y.Z` —
+so the release sequence is `just release <tier>` with tier one of
+`patch|minor|major` (commits, tags, pushes),
+then a `vibe-plugin/plugin.json` sync commit bumping it to the version
+`just release <tier>` wrote —
 plain tree state, no recipe to widen. Between the two commits the
 manifests legitimately disagree, and `check-versions` (uncached, in
 `precommit`) refuses any commit outside that window whose manifests

@@ -19,7 +19,11 @@ set -euo pipefail
 root="${1:-.}"
 
 read_version() {
-    jq -r '.version // empty' "$1"
+    # stderr dropped and the status routed through fail: under `set -e` an
+    # unparseable manifest would otherwise abort inside the command
+    # substitution -- jq's raw parse error on stderr, exit 5, and this
+    # script's own refusal message never printed.
+    jq -r '.version // empty' "$1" 2>/dev/null || fail "unparseable .version in $1"
 }
 
 fail() {
@@ -34,9 +38,9 @@ vibe_manifest="$root/vibe-plugin/plugin.json"
 [[ -f "$vibe_manifest" ]] || fail "missing $vibe_manifest (run from the repo root)"
 
 claude_version="$(read_version "$claude_manifest")"
-[[ -n "$claude_version" ]] || fail "unparseable or empty .version in $claude_manifest"
+[[ -n "$claude_version" ]] || fail "empty .version in $claude_manifest"
 vibe_version="$(read_version "$vibe_manifest")"
-[[ -n "$vibe_version" ]] || fail "unparseable or empty .version in $vibe_manifest"
+[[ -n "$vibe_version" ]] || fail "empty .version in $vibe_manifest"
 
 if [[ "$claude_version" == "$vibe_version" ]]; then
     printf 'check-versions: %s == %s == %s\n' "$claude_manifest" "$vibe_manifest" "$claude_version"

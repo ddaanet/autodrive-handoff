@@ -156,7 +156,8 @@ What you are touching → what to read first, under `docs/design/`:
   checked off: what landed is reconstructable from `git log`, and a done item
   still listed reads as outstanding and gets redone.
 - `plugin-dev/` is vendored and read-only.
-- When acknowledging a `release X.Y.Z` request, name both push targets up
+- When acknowledging a release request — an `X.Y.Z` version or a tier; the
+  release itself always runs as `just release <tier>` — name both push targets up
   front — "bumps `handoff` (tag + GH release) and `claude-plugins`
   (marketplace entry)" — since auto-mode's permission harness reads only the
   current message.

@@ -279,5 +279,6 @@ hook: the toolkit's `version-guard.sh` guards the Claude manifest and is
 Claude-only; Vibe's `pre_tool`/`post_tool` hooks are real surface the port
 leaves unused until something needs it, and a mirror guard there would refuse
 the coupled bump the policy itself requires. The gate is the one place both
-agents meet, and the sync commit — the only commit where the manifests are
-allowed to have disagreed — is green under it.
+agents meet: the only commit carrying the disagreement is the release commit,
+whose gate ran in `prerelease`, before the bump, and the sync commit restores
+parity and reads green under it.
