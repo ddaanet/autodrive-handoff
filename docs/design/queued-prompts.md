@@ -39,7 +39,7 @@ this session owns, so an ordinary prompt forks nothing new. A prompt is
   lines are offered: typing them would replay a transition and continuation
   composed before the prompt arrived. The `prepare` note differs: the marker
   drives nothing, so no `/compact` failed to run. What the sweep loses is the
-  marker a hand-typed `/compact` would have found, which gates the todo's
+  marker a hand-typed `/compact` would have found, which gates the frame's
   re-injection, and the note says so.
 
 Cancelling rather than sparing these two is not for want of a working drive: a
