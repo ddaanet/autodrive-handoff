@@ -17,6 +17,7 @@ write-time error, shared by both callers.
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import sys
@@ -58,8 +59,9 @@ def memory_directive(root: str) -> str:
     """Return the gitlore memory directive, or "" when nothing is owed.
 
     Owed when the `gitlore-memory` submodule is materialized and its worktree is
-    dirty. The text names the dirty paths and points at the `gitlore:commit`
-    skill, which owns the commit; it is the same under both commit modes.
+    dirty. The text names the dirty paths and says they stay uncommitted:
+    gitlore has no Vibe install, so the commit is left to a session that has it.
+    It is the same under both commit modes.
     """
     mempath = _resolve_submodule_path(root)
     if not mempath:
@@ -82,8 +84,10 @@ def memory_directive(root: str) -> str:
         "",
         status,
         "",
-        "Commit them through the gitlore:commit skill: invoke it before drafting a "
-        "summary, and follow it.",
+        "Vibe has no gitlore:commit skill, so these stay uncommitted. Report to the "
+        "user that the memory changes above are left for a session that has "
+        "gitlore (a Claude Code session) to commit, then go on with the parts "
+        "below.",
     )
 
 
@@ -93,13 +97,14 @@ def commit_directive(*, memory: bool = False) -> str:
     Names no git verb for the commit itself: the request may call for an amend
     or a fresh commit, and the checkpoint does not know which. Names the two
     files because nothing has staged what this call did to them. With `memory`
-    owed, the act also names the memory gitlink that `gitlore:commit` staged.
+    owed, the act leaves the memory pointer out of the commit and names it as
+    left out: nothing staged it.
     """
     if memory:
         sentence = (
             "Once everything above is done, make the commit the request called for, "
-            "including any change to `TASK.md` and `TODO.md` and the memory gitlink "
-            "`gitlore:commit` staged."
+            "including any change to `TASK.md` and `TODO.md`, but leave the memory "
+            "pointer out of it and say in your reply that it is left out."
         )
     else:
         sentence = (
@@ -224,37 +229,47 @@ def compaction_prompt_guard(root: str) -> str:
     /compact: this checkpoint removes `TASK.md`, and without the prompt the
     summary paraphrases what the removal just took to disk. The check mirrors
     Vibe 3.0.1's load_prompt resolution: `compaction_prompt_id` read from the
-    project layer, then the user layer, of config.toml, and the named prompt
-    looked up in the project prompts dir, then the user's — the builtin id is
-    the seam's absence, not its presence. Residual bound: an env override
-    (VIBE_COMPACTION_PROMPT_ID) or a config file changed between the read and
-    the /compact escapes the check.
+    project layer, then the user layer (VIBE_HOME, else ~/.vibe) of config.toml,
+    and the named prompt looked up in the project prompts dir, then the user's —
+    the builtin id is the seam's absence, not its presence. Residual bound: an
+    env override (VIBE_COMPACTION_PROMPT_ID) or a config file changed between
+    the read and the /compact escapes the check; presence is checked, not
+    content, so a custom prompt that is not the plugin's passes; and the project
+    layer is read even where Vibe skips an untrusted folder.
     """
     prompt_id = _compaction_prompt_id(root)
     if prompt_id != "compact":
         for prompts_dir in (
             Path(root) / ".vibe" / "prompts",
-            Path.home() / ".vibe" / "prompts",
+            _vibe_home() / "prompts",
         ):
             if (prompts_dir / f"{prompt_id}.md").is_file():
                 return ""
     return _printf_lines(
-        "TASK.md is removed at this boundary, and every compaction after it "
-        "paraphrases its context: the task reaches the compacted session only "
-        "through the custom compaction prompt, and none is installed.",
+        "Tell the user: TASK.md is removed at this boundary, and every compaction "
+        "after it paraphrases its context: the task reaches the compacted "
+        "session only through the custom compaction prompt, and none is "
+        "installed.",
         "",
-        "Install it before running /compact: copy the plugin's prompts/"
+        "To install it before running /compact, copy the plugin's prompts/"
         "compaction.md to .vibe/prompts/handoff-compact.md and set "
         'compaction_prompt_id = "handoff-compact" — the plugin README has '
         "the whole setup.",
     )
 
 
+def _vibe_home() -> Path:
+    """Return Vibe's user layer: VIBE_HOME when set, else ~/.vibe."""
+    if vibe_home := os.environ.get("VIBE_HOME"):
+        return Path(vibe_home).expanduser().resolve()
+    return Path.home() / ".vibe"
+
+
 def _compaction_prompt_id(root: str) -> str:
     """Return the effective compaction_prompt_id, "" only when unreadable."""
     for cfg in (
         Path(root) / ".vibe" / "config.toml",
-        Path.home() / ".vibe" / "config.toml",
+        _vibe_home() / "config.toml",
     ):
         try:
             with cfg.open("rb") as f:

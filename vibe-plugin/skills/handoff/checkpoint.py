@@ -14,8 +14,9 @@ continuation. So the payload schema loses `continue`, and where the Claude
 checkpoint armed a transition this one only writes the frame and ends with the
 instruction naming what the user types (`/clear`, `/compact`, `/rename`). The
 root is the cwd — Vibe has no PreToolUse hook to inject HANDOFF_ROOT — guarded
-by a run-from-the-project-root check. `gitlore:commit` and the compaction-prompt
-guard are the only seams left to other machinery.
+by a run-from-the-project-root check, which autoname skips: it writes nothing.
+The memory directive and the compaction-prompt guard are the only seams left to
+other machinery.
 
 Validating the payload lives in _checkpoint_payload.py, resolving the two halves
 to file plans and applying them in _checkpoint_plan.py, and the directive texts
@@ -44,8 +45,8 @@ def main() -> int:
     errored call leaves `TASK.md` and `TODO.md` as they were.
     """
     payload = validation.read_payload()
-    root = validate_root()
     skill = validation.validate_skill(payload)
+    root = Path.cwd() if skill == "autoname" else validate_root()
     validation.validate_top_level_keys(payload)
 
     if skill == "autoname":

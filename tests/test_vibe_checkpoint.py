@@ -180,7 +180,8 @@ def test_precompact_removes_task_and_warns_when_no_prompt(
     )
     assert result.returncode == 0, result.stderr
     assert not (project / "TASK.md").exists()
-    assert "the custom compaction prompt, and none is installed" in result.stdout
+    assert "Tell the user: TASK.md is removed" in result.stdout
+    assert "and none is installed" in result.stdout
     assert (
         result.stdout.rstrip("\n").splitlines()[-1]
         == "`Ready to /compact — everything durable is on disk or in the todo.`"
@@ -268,6 +269,38 @@ def test_autoname_prints_the_rename_line_and_writes_nothing(
     assert not (project / "TASK.md").exists()
 
 
+def test_autoname_succeeds_outside_a_project(tmp_path: Path) -> None:
+    """Autoname writes nothing, so a cwd with no project marker is fine."""
+    result = run_checkpoint(
+        tmp_path, {"skill": "autoname", "rename": "Try Guard"}, skill="autoname"
+    )
+    assert result.returncode == 0, result.stderr
+    assert "/rename Try Guard" in result.stdout
+
+
+def test_precompact_guard_reads_vibe_home(
+    project: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """VIBE_HOME, as Vibe resolves it, holds the user layer."""
+    home = tmp_path / "vh"
+    (home / "prompts").mkdir(parents=True)
+    (home / "prompts" / "mine.md").write_text("keep it\n")
+    (home / "config.toml").write_text('compaction_prompt_id = "mine"\n')
+    monkeypatch.setenv("VIBE_HOME", str(home))
+    result = run_checkpoint(
+        project,
+        {
+            "skill": "precompact",
+            "commit": "without-commit",
+            "compact": True,
+            "todo": {"action": "keep"},
+        },
+        skill="precompact",
+    )
+    assert result.returncode == 0, result.stderr
+    assert "compaction prompt" not in result.stdout
+
+
 def test_autoname_refuses_boundary_fields(project: Path) -> None:
     """A boundary field under autoname names the field, exit 2."""
     result = run_checkpoint(
@@ -296,8 +329,9 @@ def test_memory_directive_names_the_dirty_submodule(tmp_path: Path) -> None:
     )
     assert result.returncode == 0, result.stderr
     assert "gitlore memory has uncommitted changes:" in result.stdout
-    assert "gitlore:commit" in result.stdout
-    assert "the memory gitlink `gitlore:commit` staged" in result.stdout
+    assert "Vibe has no gitlore:commit skill" in result.stdout
+    assert "leave the memory pointer out of it" in result.stdout
+    assert "staged" not in result.stdout
 
 
 def test_root_check_refuses_a_non_project_cwd(tmp_path: Path) -> None:
