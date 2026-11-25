@@ -83,6 +83,17 @@ sync-vibe:
     done
     echo "sync-vibe: copied $(ls vibe-plugin/scripts/*.py | wc -l | tr -d ' ') modules into $skills skills"
 
+# Overwrite an installed Vibe compaction prompt with this repo's copy, so
+# the summary stops running under an old wording. The default target is the
+# user-level prompt (`$VIBE_HOME`, else ~/.vibe); pass a project's
+# `.vibe/prompts/handoff-compact.md` to refresh that one instead.
+refresh-vibe-prompt target=(env("VIBE_HOME", home_directory() / ".vibe") / "prompts/handoff-compact.md"):
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cp vibe-plugin/prompts/compaction.md {{quote(target)}}
+    cmp -s vibe-plugin/prompts/compaction.md {{quote(target)}}
+    echo "refresh-vibe-prompt: "{{quote(target)}}" matches vibe-plugin/prompts/compaction.md"
+
 # `claude plugin validate --strict`, minus two findings that cannot be fixed,
 # each dropped only on the entry whose `file` is the one it belongs to: the
 # warning that the repo-root CLAUDE.md is not loaded (it is this repo's own
