@@ -166,7 +166,7 @@ would have collided as numbers. `FR6`, `FR7` and `FR-H` are retired.
 **The driven transition** — argued in
 [Driving the transition](design/driving-the-transition.md).
 
-- **FR-G** — The prepare-only compact path re-injects the todo. Nothing
+- **FR-G** — The prepare-only compact path re-injects the frame. Nothing
   runs, but the transition is *expected*, and that expectation is what
   `SessionStart(compact)` gates re-injection on — otherwise a hand-typed
   `/compact` would re-inject nothing.
@@ -246,7 +246,7 @@ The standing calls, each argued in
 - **Both files are plain files; only the sentinel is guarded.**
 - **Both files are tracked, and for the same reason.**
 - **The task is bounded, and the bound is set from the residual.**
-- **The compact boundary carries no task.**
+- **Both boundaries carry the task.**
 - **Commit/push status never appears in either file.**
 - **The frame carries no transcript.**
 - **The agent supplies one fact; the code owns the branch.**

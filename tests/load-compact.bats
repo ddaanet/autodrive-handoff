@@ -14,9 +14,8 @@ load lock-helpers
     [ "$output" = "" ]
 }
 
-# A transition in flight with a todo: the todo is what is re-injected, and the
-# user is told so. The seeded TASK.md is removed first, which is the state the
-# checkpoint leaves behind.
+# A transition in flight with a todo and no task file (the checkpoint cleared
+# it): the todo is what is re-injected, and the user is told so.
 @test "load-compact (pending present, todo present: consumes it, todo re-injected)" {
     rm -f "$tmp/TASK.md"
     printf '## Remaining\n\n- finish the parser\n' > "$tmp/TODO.md"
@@ -32,7 +31,7 @@ load lock-helpers
     [[ "$output" != *"continue with task 3"* ]]
 }
 
-# The seeded TASK.md is removed and no todo is written: nothing to re-inject.
+# Both files cleared at the checkpoint: nothing to re-inject.
 # The message goes to the user alone; the agent is told nothing.
 @test "load-compact (pending present, no todo, no task: consumed, No todo, nothing injected)" {
     rm -f "$tmp/TASK.md" "$tmp/TODO.md"
@@ -66,10 +65,9 @@ load lock-helpers
     [ "$(sed -n 2p "$tmp/.claude/autodrive")" = "clear continue" ]
 }
 
-# The checkpoint removes TASK.md at this boundary, so the only way one is there
-# when the compaction completes is a hand-written file. It is still the task
-# frame, and it is injected.
-@test "load-compact (a hand-written TASK.md alone: injected, and the message says No todo)" {
+# The checkpoint writes TASK.md at this boundary as it does at the clear one,
+# so a task file alone is the task frame, and it is injected.
+@test "load-compact (TASK.md alone: injected, and the message says No todo)" {
     seed_pending "$tmp" "compact continue"
     printf '%s\n' "## Now" "- rewire the parser" > "$tmp/TASK.md"
     run_load_compact "$tmp"
@@ -82,7 +80,7 @@ load lock-helpers
     [ -s "$tmp/TASK.md" ]
 }
 
-@test "load-compact (a hand-written TASK.md beside a todo: both injected, task first)" {
+@test "load-compact (TASK.md beside a todo: both injected, task first)" {
     seed_pending "$tmp" "compact continue"
     printf '%s\n' "## Now" "- rewire the parser" > "$tmp/TASK.md"
     printf '## Remaining\n\n- finish the parser\n' > "$tmp/TODO.md"

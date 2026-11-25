@@ -69,10 +69,10 @@ finished items are dropped), and the session is renamed when your turn ends.
 With "continue", it is also cleared. The fresh session starts with both files
 injected, and the plugin submits one fixed prompt to resume.
 
-**Compact.** The wrap-up writes `TODO.md` only; the compaction summary
-carries the task, so an old `TASK.md` is removed. Whatever must survive
-word for word goes in `TODO.md`. With "continue", `/compact` runs when your
-turn ends, `TODO.md` is re-injected and the work resumes.
+**Compact.** The wrap-up writes `TASK.md` and `TODO.md` as at a clear, and
+both survive the compaction. Whatever must survive word for word goes in
+them. With "continue", `/compact` runs when your turn ends, both files are
+re-injected and the work resumes.
 
 **Memory.** If your repository uses
 [gitlore](https://github.com/ddaanet/gitlore), the wrap-up also sends the agent

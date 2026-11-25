@@ -127,15 +127,21 @@ def test_continue_true_is_legal_when_either_half_has_a_body(
 
 
 @pytest.mark.parametrize("todo", [todo_clear(), todo_keep()], ids=["clear", "keep"])
-def test_precompact_continue_true_needs_no_file_the_summary_carries_the_task(
+def test_precompact_continue_true_needs_no_file_body(
     tmp_path: Path, todo: object
 ) -> None:
+    """The clear boundary's refusal does not reach the compact one.
+
+    Neither file has a body after the plans, which handoff refuses; a
+    compaction's summary still carries the conversation, so precompact arms.
+    """
     repo = make_repo(tmp_path)
     payload = {
         "skill": "precompact",
         "commit": "without-commit",
         "compact": True,
         "continue": True,
+        "task": task_clear(),
         "todo": todo,
     }
     result = run_checkpoint(repo, payload)
@@ -192,6 +198,7 @@ def test_precompact_compact_false_composes_the_prepare_marker(tmp_path: Path) ->
         "commit": "without-commit",
         "compact": False,
         "continue": False,
+        "task": task_clear(),
         "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)
@@ -209,6 +216,7 @@ def test_precompact_compact_true_no_continuation_bare_compact(tmp_path: Path) ->
         "commit": "without-commit",
         "compact": True,
         "continue": False,
+        "task": task_clear(),
         "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)
@@ -226,6 +234,7 @@ def test_precompact_compact_true_with_continuation(tmp_path: Path) -> None:
         "commit": "without-commit",
         "compact": True,
         "continue": True,
+        "task": task_clear(),
         "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)
@@ -243,6 +252,7 @@ def test_precompact_focus_directive_no_continuation(tmp_path: Path) -> None:
         "commit": "without-commit",
         "compact": "keep the parser work",
         "continue": False,
+        "task": task_clear(),
         "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)
@@ -262,6 +272,7 @@ def test_precompact_focus_directive_and_continuation_both_carried(
         "commit": "without-commit",
         "compact": "keep the parser work",
         "continue": True,
+        "task": task_clear(),
         "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)

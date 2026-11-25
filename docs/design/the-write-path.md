@@ -17,9 +17,8 @@ through `_lib.sh`) and shared by the two loaders so the two transitions cannot
 drift.
 
 - **`TASK.md`** — `## Current task` alone: the task in hand and where it
-  stands, as prose. Authored whole by the checkpoint at the clear boundary and
-  removed by it at the compact boundary, where the summary carries the task. A
-  snapshot of a moment.
+  stands, as prose. Authored whole, or removed, by the checkpoint at either
+  boundary. A snapshot of a moment.
 - **`TODO.md`** — `## Open decisions` when any remain, plus `## Remaining`,
   open items only. A scratch list the agent edits directly all session; the
   wrap-up only folds in the final remainder. A ledger, not a snapshot — open
@@ -102,8 +101,8 @@ action. `task` takes `{"action": "clear"}`; `todo` also takes
 "new_string": …}`. The task file is authored whole, so it has no edit
 action, and no keep — a clear boundary with nothing to carry says so with
 `clear`, which is the case an agent used to reach for `null` and get
-silence. At the compact boundary `task` is forbidden by key presence, like
-`rename`, and the checkpoint removes the file. Where a key is taken it is
+silence. Both boundaries take `task` and `todo` alike; `rename` is forbidden
+by key presence at the compact one. Where a key is taken it is
 required by key presence: `null` and an absent key
 are each a named error, because a spelling that quietly does the wrong
 thing is the defect this shape exists to prevent — a wrong one has to fail
@@ -125,7 +124,8 @@ replace their wording with a generic one. What is left for it is a key
 belonging to no skill's vocabulary, which has nothing skill-specific to say
 about it. A `continue: true` at the clear boundary is refused, naming
 `continue`, when neither half would have a body after the plans, before
-anything is written; `precompact` is exempt, its summary carrying the task. The two
+anything is written; `precompact` is exempt, since a compaction's summary still
+carries the conversation. The two
 `required` messages name the whole vocabulary for the same reason: that
 branch is what an out-of-date producer sending the retired
 `{"file_path": …, "content": …}` shape lands on, so it has to say what to
@@ -167,8 +167,7 @@ an orphan under the `.claude/autodrive*` ignore — and prints on stdout what
 the agent does next (see [What the checkpoint
 prints](the-checkpoint-directive.md#what-the-checkpoint-prints)). A content
 string is written as given, whatever is in it; a root file is removed by
-`{"action": "clear"}` and, for the task file, by the compact boundary, and by
-nothing else. An empty `TODO.md` somebody keeps for another purpose is not the
+`{"action": "clear"}` and by nothing else. An empty `TODO.md` somebody keeps for another purpose is not the
 checkpoint's to delete.
 
 What sits at a root name is checked during resolution, under every action,

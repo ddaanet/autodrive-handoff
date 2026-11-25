@@ -31,7 +31,7 @@ The `continue` flag is optional on the two driven kinds, because running the
 transition and submitting a prompt into what it opens are separate decisions.
 `prepare` is the marker `compact: false` writes: nothing runs, but a
 transition is expected, and that expectation is what `SessionStart(compact)`
-gates the todo's re-injection on.
+gates the frame's re-injection on.
 
 The grammar holds no version, so a file from the version before the mod held
 the commands is refused only where its line count breaks its kind's rule, as an

@@ -7,8 +7,7 @@ scripts/_checkpoint_lib.py, the frame-fitting half and the
 --has-body/--fit-frame CLI dropped (the loaders that consumed them do not
 exist under Vibe), the closing directive rewritten for a boundary the *user*
 carries out — nothing under Vibe can type `/clear` — and a rename directive
-where the drive's `/rename` used to run. New: the compaction-prompt guard,
-which is the Vibe compact seam's only liveness check.
+where the drive's `/rename` used to run.
 
 Each directive function returns its directive text, or "" when silent; the
 caller decides whether to print it. `err` is the one exit for a schema or
@@ -17,11 +16,9 @@ write-time error, shared by both callers.
 
 from __future__ import annotations
 
-import os
 import re
 import subprocess
 import sys
-import tomllib
 from pathlib import Path
 from typing import NoReturn
 
@@ -220,63 +217,3 @@ def todo_boundary(root: str) -> str:
         "them if they are already there; that file holds only work outstanding "
         "outside the plan. Bring the ledger current if it has drifted."
     )
-
-
-def compaction_prompt_guard(root: str) -> str:
-    """Return the compact-seam warning, or "" when the seam is in place.
-
-    The custom compaction prompt is the only carrier of the task across a Vibe
-    /compact: this checkpoint removes `TASK.md`, and without the prompt the
-    summary paraphrases what the removal just took to disk. The check mirrors
-    Vibe 3.0.1's load_prompt resolution: `compaction_prompt_id` read from the
-    project layer, then the user layer (VIBE_HOME, else ~/.vibe) of config.toml,
-    and the named prompt looked up in the project prompts dir, then the user's —
-    the builtin id is the seam's absence, not its presence. Residual bound: an
-    env override (VIBE_COMPACTION_PROMPT_ID) or a config file changed between
-    the read and the /compact escapes the check; presence is checked, not
-    content, so a custom prompt that is not the plugin's passes; and the project
-    layer is read even where Vibe skips an untrusted folder.
-    """
-    prompt_id = _compaction_prompt_id(root)
-    if prompt_id != "compact":
-        for prompts_dir in (
-            Path(root) / ".vibe" / "prompts",
-            _vibe_home() / "prompts",
-        ):
-            if (prompts_dir / f"{prompt_id}.md").is_file():
-                return ""
-    return _printf_lines(
-        "Tell the user: TASK.md is removed at this boundary, and every compaction "
-        "after it paraphrases its context: the task reaches the compacted "
-        "session only through the custom compaction prompt, and none is "
-        "installed.",
-        "",
-        "To install it before running /compact, copy the plugin's prompts/"
-        "compaction.md to .vibe/prompts/handoff-compact.md and set "
-        'compaction_prompt_id = "handoff-compact" — the plugin README has '
-        "the whole setup.",
-    )
-
-
-def _vibe_home() -> Path:
-    """Return Vibe's user layer: VIBE_HOME when set, else ~/.vibe."""
-    if vibe_home := os.environ.get("VIBE_HOME"):
-        return Path(vibe_home).expanduser().resolve()
-    return Path.home() / ".vibe"
-
-
-def _compaction_prompt_id(root: str) -> str:
-    """Return the effective compaction_prompt_id, "compact" when unreadable."""
-    for cfg in (
-        Path(root) / ".vibe" / "config.toml",
-        _vibe_home() / "config.toml",
-    ):
-        try:
-            with cfg.open("rb") as f:
-                data = tomllib.load(f)
-        except (OSError, tomllib.TOMLDecodeError):
-            continue
-        value = data.get("compaction_prompt_id")
-        if isinstance(value, str) and value:
-            return value
-    return "compact"

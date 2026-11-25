@@ -296,6 +296,7 @@ def test_sentinel_typing_nothing_arms_even_with_memory_gate_pending(
         "commit": commit,
         "compact": False,
         "continue": False,
+        "task": task_clear(),
         "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)

@@ -20,9 +20,8 @@ user-facing version.
 
 `handoff` is the `/clear` boundary's skill, `precompact` the `/compact` one's,
 and `autoname` a rename only: the payload's `skill` field names it and keys
-what the checkpoint prints. Only `handoff` carries `task` (FR13: at most 1000
-characters of prose, no list item); `precompact` removes `TASK.md`, while
-`TODO.md` survives it. Both carry `todo`. `clear` (bool) under `handoff`,
+what the checkpoint prints. Both carry `task` (FR13: at most 1000 characters
+of prose, no list item) and `todo`, with the same rules. `clear` (bool) under `handoff`,
 `compact` (bool, or a focus directive) under `precompact` and `continue`
 (bool) at both are required, with no default. `continue: true` is legal only
 when the transition is carried out (`typed` in the code), and under `handoff`
@@ -30,7 +29,7 @@ is refused when neither file would have a body; the continuation is the fixed
 prompt `CONTINUATION` in the mod, which points at the files and carries
 nothing, and the sentinel carries only the `continue` flag. `compact: false`
 writes a `prepare` marker that runs nothing (FR-G), on which
-`SessionStart(compact)` gates the todo's re-injection.
+`SessionStart(compact)` gates the frame's re-injection.
 
 The sentinel's line 1 is its state, line 2 its kind (`rename`, `clear`,
 `compact`, or `prepare`; `clear` and `compact` take a trailing ` continue`)
@@ -130,7 +129,7 @@ What you are touching → what to read first, under `docs/design/`:
   `with-commit`, the gitlore seam, FR9, FR12 → `the-checkpoint-directive.md`
 - `worktree_root.py`, `handoff_root_read`, `inject-checkpoint-root.sh`,
   `session-pointer.sh`, `HANDOFF_ROOT` → `scoping.md`
-- `vibe-plugin/`, its schema fork, the compaction-prompt guard, the AGENTS.md
+- `vibe-plugin/`, its schema fork, the compaction prompt, the AGENTS.md
   loader line, `sync-vibe` → `vibe-port.md`
 - `plugin-dev/`, `release.just`, `$MARKETPLACE_DIR` →
   `release-infrastructure.md`

@@ -20,7 +20,7 @@ happen or the lists moved since (step 2).
    remaining items from it when the first prompt's read is missing (an older
    session, a repo without the loader line yet), when the lists were edited
    after that read, or after a `/compact` (the compacted summary tells the
-   next turn to re-read `TODO.md`). Otherwise what context holds is current
+   next turn to re-read `TASK.md` and `TODO.md`). Otherwise what context holds is current
    however short it looks.
 3. List the open decisions and remaining items, grouped as they appear
    ("Open decisions" / "Remaining"). Trim for brevity; do not re-derive

@@ -45,18 +45,6 @@ def run_checkpoint(
     )
 
 
-@pytest.fixture(autouse=True)
-def _hermetic_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Pin HOME to the tmp dir and unset VIBE_HOME.
-
-    The guard resolves the user's installed compaction prompt through VIBE_HOME,
-    else Path.home(), and a runner that has one must not silence the warning the
-    tests assert.
-    """
-    monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.delenv("VIBE_HOME", raising=False)
-
-
 @pytest.fixture
 def project(tmp_path: Path) -> Path:
     """A throwaway project root: git init marks it for the root check."""
@@ -164,60 +152,49 @@ def test_task_over_limit_rejected_and_nothing_written(project: Path) -> None:
     assert not (project / "TODO.md").exists()
 
 
-def test_precompact_removes_task_and_warns_when_no_prompt(
+def test_precompact_writes_the_task_and_names_the_compact(
     project: Path,
 ) -> None:
-    """Compact: true removes TASK.md; the guard warns the seam is absent."""
-    (project / "TASK.md").write_text(TASK)
+    """Compact: true writes TASK.md as handoff does, and the output is the
+    closing line alone: no compaction-prompt check."""
+    (project / "TASK.md").write_text("## Current task\n\nstale\n")
     result = run_checkpoint(
         project,
         {
             "skill": "precompact",
             "commit": "without-commit",
             "compact": True,
+            "task": TASK,
             "todo": {"action": "keep"},
         },
         skill="precompact",
     )
     assert result.returncode == 0, result.stderr
-    assert not (project / "TASK.md").exists()
-    assert "Tell the user: TASK.md is removed" in result.stdout
-    assert "and none is installed" in result.stdout
-    assert (
-        result.stdout.rstrip("\n").splitlines()[-1]
-        == "`Ready to /compact — everything durable is on disk or in the todo.`"
+    assert (project / "TASK.md").read_text() == TASK
+    assert result.stdout == (
+        "Once everything above is done, end on one line:\n"
+        "`Ready to /compact — everything durable is on disk or in the todo.`\n"
     )
 
 
-def test_precompact_guard_silent_when_prompt_installed(
+def test_precompact_without_task_errors_and_keeps_the_task_file(
     project: Path,
 ) -> None:
-    """The installed prompt and its config line resolve, and the guard is
-    quiet."""
-    prompts = project / ".vibe" / "prompts"
-    prompts.mkdir(parents=True)
-    (prompts / "handoff-compact.md").write_text("preserve the files\n")
-    (project / ".vibe" / "config.toml").write_text(
-        'compaction_prompt_id = "handoff-compact"\n'
-    )
+    """An absent `task` is a named error under precompact, not a removal."""
     (project / "TASK.md").write_text(TASK)
     result = run_checkpoint(
         project,
         {
             "skill": "precompact",
             "commit": "without-commit",
-            "compact": True,
+            "compact": False,
             "todo": {"action": "keep"},
         },
         skill="precompact",
     )
-    assert result.returncode == 0, result.stderr
-    assert not (project / "TASK.md").exists()
-    assert "compaction prompt" not in result.stdout
-    assert (
-        result.stdout.rstrip("\n").splitlines()[-1]
-        == "`Ready to /compact — everything durable is on disk or in the todo.`"
-    )
+    assert result.returncode == 2
+    assert "task: required" in result.stderr
+    assert (project / "TASK.md").read_text() == TASK
 
 
 def test_precompact_focus_string_refused(project: Path) -> None:
@@ -228,6 +205,7 @@ def test_precompact_focus_string_refused(project: Path) -> None:
             "skill": "precompact",
             "commit": "without-commit",
             "compact": "keep the parser work",
+            "task": {"action": "clear"},
             "todo": {"action": "keep"},
         },
         skill="precompact",
@@ -246,6 +224,7 @@ def test_todo_edit_replaces_one_occurrence(project: Path) -> None:
             "skill": "precompact",
             "commit": "with-commit",
             "compact": False,
+            "task": {"action": "clear"},
             "todo": {"action": "edit", "old_string": "- Old item.", "new_string": ""},
         },
         skill="precompact",
@@ -277,29 +256,6 @@ def test_autoname_succeeds_outside_a_project(tmp_path: Path) -> None:
     )
     assert result.returncode == 0, result.stderr
     assert "/rename Try Guard" in result.stdout
-
-
-def test_precompact_guard_reads_vibe_home(
-    project: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """VIBE_HOME, as Vibe resolves it, holds the user layer."""
-    home = tmp_path / "vh"
-    (home / "prompts").mkdir(parents=True)
-    (home / "prompts" / "mine.md").write_text("keep it\n")
-    (home / "config.toml").write_text('compaction_prompt_id = "mine"\n')
-    monkeypatch.setenv("VIBE_HOME", str(home))
-    result = run_checkpoint(
-        project,
-        {
-            "skill": "precompact",
-            "commit": "without-commit",
-            "compact": True,
-            "todo": {"action": "keep"},
-        },
-        skill="precompact",
-    )
-    assert result.returncode == 0, result.stderr
-    assert "compaction prompt" not in result.stdout
 
 
 def test_autoname_refuses_boundary_fields(project: Path) -> None:

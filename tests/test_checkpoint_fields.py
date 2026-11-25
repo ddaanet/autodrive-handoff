@@ -218,6 +218,7 @@ def test_top_level_unknown_key_errors_under_precompact(tmp_path: Path) -> None:
         "commit": "without-commit",
         "compact": False,
         "continue": False,
+        "task": task_clear(),
         "todo": todo_keep(),
         "bogus": "x",
     }
@@ -245,16 +246,13 @@ def test_top_level_unknown_key_errors_under_autoname(tmp_path: Path) -> None:
             ("todo", "null", "got null"),
             ("todo", "absent", "required"),
         )
-        # `task` is required only under handoff; precompact forbids it, and
-        # test_task_present_under_precompact_errors owns that side.
-        if not (skill == "precompact" and field == "task")
     ],
 )
 def test_task_or_todo_null_or_absent_errors_naming_field(
     tmp_path: Path, skill: str, field: str, shape: str, reason: str
 ) -> None:
-    """`todo` is required at both boundaries and `task` under handoff, by key
-    presence, with no default.
+    """`task` and `todo` are required at both boundaries, by key presence, with
+    no default.
 
     `null` and an absent key are distinct, named errors on each field — the
     defect being fixed is an agent choosing a spelling that silently did the
@@ -268,10 +266,9 @@ def test_task_or_todo_null_or_absent_errors_naming_field(
         "skill": skill,
         "commit": "with-commit",
         "continue": False,
+        "task": task_clear(),
         "todo": todo_keep(),
     }
-    if skill == "handoff":
-        payload["task"] = task_clear()
     if skill == "handoff":
         payload["rename"] = "T"
         payload["clear"] = False

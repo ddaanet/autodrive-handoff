@@ -84,9 +84,9 @@ tests also consume:
   `continue: false`.
 - **FR-G.** A `prepare` kind runs nothing. The file is left `pending`, the plan
   has kind `prepare`, and the message says so; the mod toasts it and runs
-  nothing. That `pending` state is what `SessionStart(compact)` gates the todo's
+  nothing. That `pending` state is what `SessionStart(compact)` gates the frame's
   re-injection on: a hand-typed `/compact` with the marker pending re-injects
-  the todo and consumes the marker, and with no marker it re-injects nothing.
+  the frame and consumes the marker, and with no marker it re-injects nothing.
 - **Malformed** files are removed and reported with `kind` null and the
   constraint that failed, so the complaint does not repeat each turn.
 
@@ -157,11 +157,11 @@ depend on the frame, so a `clear` with nothing to inject still consumes. A
 loader that cannot take the lock consumes nothing and still injects the frame,
 saying so.
 
+Both inject the same frame, the task file and the todo, whichever has a body.
 What each says afterwards differs. `load-handoff.sh` always reports, on both
 channels: the frame's size and age, plus `No task frame` or `No todo` when one
-half has no body, or `No task frame or todo.` alone. `load-compact.sh` runs
-after a compaction whose checkpoint removed the task file, so what it
-re-injects is the todo, and it tells the user `todo re-injected` or `No todo`.
+half has no body, or `No task frame or todo.` alone. `load-compact.sh` tells
+the user alone `todo re-injected` or `No todo`.
 With no `pending` compaction it is silent, which is what keeps a hand-typed
 `/compact` or a threshold auto-compaction from re-injecting a stale list.
 

@@ -11,9 +11,9 @@ Behaviour lives in `docs/design/the-skills.md`; read it first.
   not longer). Detailed rationale goes to `references/` or `docs/design.md`.
 - The markdown templates of `TASK.md` and `TODO.md`, and the seam between
   what the files carry and the fixed continuation, live in
-  `skills/handoff/SKILL.md`. `skills/precompact/SKILL.md` repeats the todo
-  template and the todo rules it needs, so an edit to the todo template or
-  rules changes both skills. Neither loader restates them: each file carries
+  `skills/handoff/SKILL.md`. `skills/precompact/SKILL.md` repeats both
+  templates and their rules, so an edit to either template or its rules
+  changes both skills. Neither loader restates them: each file carries
   its own `##` headings and is inlined verbatim (bar `TODO.md` items cut to fit the hook-output limit, with a line saying so) under the one `#` header the
   frame prepends.
 - A skill states none of what the checkpoint prints (the memory directive,
@@ -23,8 +23,8 @@ Behaviour lives in `docs/design/the-skills.md`; read it first.
 - At a boundary skill, only the memory writes may precede the one
   `handoff-checkpoint` call. Nothing is read: no project state, `TASK.md`
   and `TODO.md` included. A reference file read on every call is not an
-  option; the templates are inline. `precompact` carries no `rename` and no
-  `task`; the schema forbids both there.
+  option; the templates are inline. `precompact` carries no `rename`; the
+  schema forbids it there.
 - `autoname` decides a title with no tool call, and its payload is exactly
   `{"skill": "autoname", "rename": "<title>"}`. `pending` writes nothing and
   makes no tool call unless its frame arrived cut

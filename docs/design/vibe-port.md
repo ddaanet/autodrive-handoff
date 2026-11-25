@@ -6,7 +6,7 @@ verified against mistral-vibe 3.0.1): Vibe's hook surface is
 `post_agent`/`pre_tool`/`post_tool` only — no SessionStart, no Stop, no
 PreCompact — and its Claude-format adapter refuses executable scripts, so the
 mod cannot run in any form. The port is `vibe-plugin/`, a separate tree: four
-skills, one write path, one AGENTS.md line, one compaction prompt.
+skills, one write path, one AGENTS.md line, one optional compaction prompt.
 
 ## What ports and what drops
 
@@ -17,8 +17,9 @@ The consequences, kept together so the shape reads in one place:
   `_checkpoint_*` siblings. The payload schema loses `continue`, which only a
   driven continuation could serve, and `compact` becomes a boolean only —
   Vibe's `/compact` takes no argument, so the Claude focus string has no
-  carrier; the error says to put the focus in the todo. Under `precompact`
-  the compaction prompt, not a loader, carries the task.
+  carrier; the error says to put the focus in the todo. `precompact` drives
+  no compaction: it is the memory flush and the `TASK.md`/`TODO.md`
+  update, then the closing line naming `/compact` for the user.
 - **The transition is user-run.** Nothing under Vibe can type `/clear`
   (`/compact`, `/rename`), so the closing directive names the command for the
   user instead of announcing an armed transition, and the skills' anti-pattern
@@ -72,29 +73,25 @@ checkpoint fork's directory is sized like the Claude one.
 
 ## The compact seam
 
-The custom compaction prompt is the whole seam: `compaction_prompt_id` names
-a bare filename resolved from the project's `.vibe/prompts/` first, then the
-user's, then builtins (Vibe 3.0.1, `core/prompts/__init__.py`), and the
-prompt text replaces the builtin summary request entirely. The shipped
-`prompts/compaction.md` does not reproduce `TASK.md`, which `precompact`
-removes: it has the summary state the current task and the next action from
-the conversation, and instead of copying `TODO.md` it tells the next turn to
-re-read `TODO.md` from disk, where it survives. Because the installed prompt
-is invisible to the skill protocol, the checkpoint carries a guard:
-`compaction_prompt_guard` mirrors Vibe's own resolution (config file layers,
-the user layer resolved as Vibe does, then prompt dirs, via `tomllib` —
-reading a config grammar with its parser) and prints the setup line when the
-seam is absent, so a skipped install step surfaces at the boundary where it
-is cheap, not at the compaction where it is a lost task. Residual bound: the
-guard checks only that the key resolves to some non-builtin prompt file, so
-a custom prompt of the user's own, not the plugin's, passes it.
+There is no way to drive a compaction under Vibe, so `precompact` does what
+`handoff` does to the two files and leaves `/compact` to the user: both
+files survive it on disk. The optional custom compaction prompt is the one
+piece of the seam left: `compaction_prompt_id` names a bare filename
+resolved from the project's `.vibe/prompts/` first, then the user's, then
+builtins (Vibe 3.0.1, `core/prompts/__init__.py`), and the prompt text
+replaces the builtin summary request entirely. The shipped
+`prompts/compaction.md` has the summary state the current task and the next
+action from the conversation, and instead of copying `TASK.md` and
+`TODO.md` it tells the next turn to re-read both from disk, where they
+survive. The checkpoint does not check whether the prompt is installed: with
+the task on disk, a missing prompt costs a paraphrase, not the task.
 
 ## Install and verification status
 
 Install is copy-plus-two-config-steps, in `vibe-plugin/README.md`. Verified
 2026-11-23 under 3.0.1 source and the test suite: the end-to-end checkpoint
-(payload on stdin from a skill-directory path), the guard's silent and loud
-arms, the schema fork, and gitlore's alias naming. Not yet verified live: a
+(payload on stdin from a skill-directory path), the schema fork, and
+gitlore's alias naming. Not yet verified live: a
 Vibe session invoking a ported skill end to end (`/autodrive-handoff:handoff`
 in a consumer) — it needs the installed state, which is the user's
 environment, and a headless probe. A symlink of the Claude cache into

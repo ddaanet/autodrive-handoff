@@ -283,11 +283,16 @@ def handoff_payload(commit: str) -> dict[str, object]:
     }
 
 
-def precompact_payload(commit: str, todo: object = None) -> dict[str, object]:
+def precompact_payload(
+    commit: str, todo: object = None, task: object = None
+) -> dict[str, object]:
+    """A prepared `precompact` payload, its task cleared and its todo kept by
+    default."""
     return {
         "skill": "precompact",
         "commit": commit,
         "compact": False,
         "continue": False,
+        "task": task_clear() if task is None else task,
         "todo": todo_keep() if todo is None else todo,
     }

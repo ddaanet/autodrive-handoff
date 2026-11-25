@@ -47,16 +47,16 @@ of three with the choice of sample. **Reopen if** the residual moves: the
 method and its scripts are in the plan's `reports/overflow/`.
 2026-10-11 TASK.md and TODO.md move to the root
 
-**The compact boundary carries no task.** A compaction produces its own
-account of the task, the summary, and a snapshot written just before it is a
-second one: on disk beside the first, liable to disagree with it, and
-re-injected at the next session start after the work has moved on. So
-`precompact` takes no `task` and removes the file. What has to cross verbatim
-— a commit range, a checklist — goes in the todo file or in the `compact`
-focus directive, which is what the task file was standing in for when the
-todo file did not exist.
-2026-07-20 One task file, two transitions,
-2026-10-11 TASK.md and TODO.md move to the root
+**Both boundaries carry the task.** `precompact` takes `task` with the same
+field, rules and FR13 shape as `handoff`, and `TASK.md` survives a
+compaction as `TODO.md` does. The two session files are handled
+symmetrically: a boundary that removed one file and kept the other caused
+confusion, about which file held the task after a compaction and why it was
+gone. The summary still paraphrases the conversation; the task file is the
+copy that does not drift, re-injected beside the todo. What differs between
+the boundaries is the transition alone, and the one asymmetry kept is that
+`continue: true` with neither file holding a body is refused only at the
+clear, since a compaction's summary still carries the conversation.
 
 **Commit/push status never appears in either file.** The routine wrap-up is
 `/handoff` then `/commit`, so any bookkeeping written at handoff time is

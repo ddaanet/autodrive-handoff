@@ -66,6 +66,7 @@ def test_clear_present_under_precompact_errors(tmp_path: Path) -> None:
         "clear": True,
         "compact": False,
         "continue": False,
+        "task": task_clear(),
         "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)
@@ -79,6 +80,7 @@ def test_compact_missing_under_precompact_errors(tmp_path: Path) -> None:
         "skill": "precompact",
         "commit": "with-commit",
         "continue": False,
+        "task": task_clear(),
         "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)
@@ -110,6 +112,7 @@ def test_compact_neither_boolean_nor_string_errors(tmp_path: Path) -> None:
         "commit": "with-commit",
         "compact": ["focus"],
         "continue": False,
+        "task": task_clear(),
         "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)
@@ -124,6 +127,7 @@ def test_empty_compact_directive_errors(tmp_path: Path) -> None:
         "commit": "with-commit",
         "compact": "",
         "continue": False,
+        "task": task_clear(),
         "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)
@@ -138,6 +142,7 @@ def test_multiline_compact_directive_errors(tmp_path: Path) -> None:
         "commit": "with-commit",
         "compact": "keep the parser\nand the tests",
         "continue": False,
+        "task": task_clear(),
         "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)
@@ -163,6 +168,7 @@ def test_continue_missing_errors_at_either_boundary(tmp_path: Path) -> None:
         "skill": "precompact",
         "commit": "with-commit",
         "compact": True,
+        "task": task_clear(),
         "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)
@@ -209,8 +215,7 @@ def boundary_payload(boundary: str, cont: object) -> dict[str, object]:
         "todo": todo_keep(),
         **BOUNDARIES[boundary],
     }
-    if payload["skill"] == "handoff":
-        payload["task"] = task_clear()
+    payload["task"] = task_clear()
     return payload
 
 
@@ -287,6 +292,7 @@ def test_compact_directive_with_any_line_break_errors(tmp_path: Path, brk: str) 
         "commit": "with-commit",
         "compact": f"keep the parser{brk}and the tests",
         "continue": False,
+        "task": task_clear(),
         "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)

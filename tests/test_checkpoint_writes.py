@@ -34,7 +34,8 @@ pytestmark = pytest.mark.usefixtures("_session_id")
 
 
 def test_task_write_creates_file(tmp_path: Path) -> None:
-    """Handoff only: precompact forbids `task`, so it never writes one."""
+    """Handoff; test_precompact_task_content_writes_the_task_file is the compact
+    boundary's row."""
     repo = make_repo(tmp_path)
     content = "## Current task\n\nreal content\n"
     result = run_checkpoint(repo, frame_payload(content))

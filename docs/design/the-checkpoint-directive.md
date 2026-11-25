@@ -87,7 +87,7 @@ is the commands running, not which transition they carry. An untyped handoff
 runs no transition but still runs `/rename`, racing the same
 answer — so it holds too. What is exempt is the sentinel that names nothing
 at all: the bare compact marker, which would otherwise lose the expectation
-`SessionStart(compact)` gates the todo's re-injection on to a gate it has
+`SessionStart(compact)` gates the frame's re-injection on to a gate it has
 no reason to wait on. Of the other parts, the ledger nudge and the todo
 boundary never hold: they are acts, not questions, and the turn's end comes after
 them either way. The commit act is the one that can fail, which is the

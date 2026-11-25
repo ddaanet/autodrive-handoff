@@ -88,6 +88,7 @@ def test_each_boundary_composes_own_directive_not_the_others(
             "commit": "without-commit",
             "compact": False,
             "continue": False,
+            "task": task_clear(),
             "todo": todo_keep(),
         }
     result = run_checkpoint(repo, payload)

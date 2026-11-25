@@ -38,10 +38,10 @@ prepared on disk and the user types the `/clear` or `/compact` themselves.
    an interactive session, or `--trust` on the headless invocation (it
    trusts the working directory for that run only).
 
-3. **Install the compaction prompt** (the compact seam). Without it,
-   `/compact` paraphrases the context under the builtin prompt and the task
-   file's removal loses the task. Fine to skip when you only ever use
-   `/clear`:
+3. **Install the compaction prompt** (optional). It has the summary state
+   the current task and next action from the conversation, and sends the
+   next turn to re-read `TASK.md` and `TODO.md` from disk. Fine to skip
+   when you only ever use `/clear`:
 
    ```
    mkdir -p .vibe/prompts
@@ -51,15 +51,12 @@ prepared on disk and the user types the `/clear` or `/compact` themselves.
 
    Then set the key `compaction_prompt_id = "handoff-compact"` in
    `.vibe/config.toml` as a top-level key, above the file's first `[table]`
-   header: below a header it belongs to that table, and Vibe and the guard
-   ignore it. When the file is absent, create it holding just that line;
-   when the key already exists, change its value rather than adding a
-   second one, which is invalid TOML.
+   header: below a header it belongs to that table, and Vibe ignores it.
+   When the file is absent, create it holding just that line; when the key
+   already exists, change its value rather than adding a second one, which
+   is invalid TOML.
 
-   Then run `/reload`. The boundary itself reports when the prompt is
-   missing — the checkpoint's compaction-prompt guard mirrors Vibe's own
-   resolution order — so a skipped step surfaces at the boundary, where it
-   is cheap, rather than at the compaction, where it is a lost task.
+   Then run `/reload`.
 
 ## Memory
 
@@ -106,8 +103,10 @@ what was refused.)
   prompt is outside the plugin directory: after updating, re-copy
   `prompts/compaction.md` over `.vibe/prompts/handoff-compact.md`, or the
   summary runs under the old wording.
-- **Compaction carries the task in the summary.** `TASK.md` is gone at
-  `precompact`, so the prompt has the summary state the current task and
-  next action from the conversation, and tells the next turn to re-read
-  `TODO.md` from disk instead of reproducing it.
+- **Nothing drives the compaction.** `precompact` flushes memory and
+  writes `TASK.md` and `TODO.md`, as `handoff` does, then names
+  `/compact` for you to type. Both files survive the compaction; the
+  prompt has the summary state the current task and next action from the
+  conversation, and tells the next turn to re-read both files from disk
+  instead of reproducing them.
 - **`autoname` runs from any directory**; it needs no project root.

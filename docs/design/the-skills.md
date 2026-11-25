@@ -12,16 +12,15 @@ One skill per boundary, plus the rename:
 | compaction | `/autodrive-handoff:precompact` | `compact`: `false` \| `true` \| `"<directive>"` |
 | clear | `/autodrive-handoff:handoff` | `clear`: `false` \| `true` |
 
-The two differ in one content field. `handoff` carries a `task`, because a
-`/clear` leaves nothing else to say what was in hand. `precompact` takes none
-and removes the task file, because the compaction's summary says it
-([The compact boundary carries no task](decisions.md)). Both carry `todo`.
+The two carry the same content fields, `task` and `todo`, with the same
+rules: they differ in the transition alone
+([Both boundaries carry the task](decisions.md)).
 
 The templates of the two files, their rules and the seam between what the
 files carry and the continuation are inline in `skills/handoff/SKILL.md`.
-`skills/precompact/SKILL.md` repeats the todo template and the todo rules it
-needs, so neither skill reads anything to draft; an edit to the todo template
-or rules changes both. Memory writes are the only tool calls ahead of the
+`skills/precompact/SKILL.md` repeats both templates and their rules, so
+neither skill reads anything to draft; an edit to either template or its
+rules changes both. Memory writes are the only tool calls ahead of the
 checkpoint
 ([Between deciding and the checkpoint, no tool call](decisions.md)).
 
@@ -70,8 +69,8 @@ precompact  compact:true|"…"     continue:true   compact and continue
 `continue` is a boolean, and `true` is a schema error against a transition that
 is not carried out, since nothing would submit the prompt, and at the clear
 boundary also when neither file would have a body once the plans are applied
-(checked before any write; after a compaction the
-summary carries the task, so `precompact` is exempt). The prompt it asks
+(checked before any write; `precompact` is exempt, since a compaction's
+summary still carries the conversation). The prompt it asks
 for is one fixed prompt, `CONTINUATION` in the mod (`hooks/handoff.ts`), that points the fresh
 context at the task and todo files. It was once a line of prose the agent
 wrote, and the agent used it to carry the task: a description of the next step,

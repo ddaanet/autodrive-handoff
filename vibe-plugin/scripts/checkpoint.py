@@ -4,8 +4,8 @@
 Reads a JSON payload on stdin, validates it against the schema (a violation
 exits 2 naming the offending field on stderr), applies the task/todo tagged
 union — content, or an object naming an action — to `TASK.md` and `TODO.md` in
-the cwd, and prints the directive output. Only `handoff` carries a `task`;
-`precompact` forbids the key and removes any task file on disk.
+the cwd, and prints the directive output. `handoff` and `precompact` carry
+`task` and `todo` alike.
 
 The Vibe port of the Claude plugin's scripts/checkpoint.py: the sentinel, its
 lock, the hold predicate and the session-owner identity all drop, because the
@@ -15,8 +15,7 @@ checkpoint armed a transition this one only writes the frame and ends with the
 instruction naming what the user types (`/clear`, `/compact`, `/rename`). The
 root is the cwd — Vibe has no PreToolUse hook to inject HANDOFF_ROOT — guarded
 by a run-from-the-project-root check, which autoname skips: it writes nothing.
-The memory directive and the compaction-prompt guard are the only seams left to
-other machinery.
+The memory directive is the only seam left to other machinery.
 
 Validating the payload lives in _checkpoint_payload.py, resolving the two halves
 to file plans and applying them in _checkpoint_plan.py, and the directive texts
@@ -57,7 +56,7 @@ def main() -> int:
 
     plans: list[planning.FilePlan] = []
     if skill in ("handoff", "precompact"):
-        task_fields = validation.validate_task(payload, skill)
+        task_fields = validation.validate_task(payload)
         todo_fields = validation.validate_todo(payload)
         plans = [
             planning.plan_task(root, *task_fields),
@@ -111,10 +110,9 @@ def compose_directives(
     """Return the ordered, non-empty directive parts for this boundary.
 
     Print order: the memory directive ("" when the gitlore store is absent
-    or clean, and omitted), then the todo boundary/SDD nudge, then the
-    compaction-prompt guard (precompact only), then the commit act (present
-    only under "with-commit", leaving the memory gitlink out when memory is
-    owed), then the rename directive (handoff; autoname gets the rename
+    or clean, and omitted), then the todo boundary/SDD nudge, then the commit
+    act (present only under "with-commit", leaving the memory gitlink out when
+    memory is owed), then the rename directive (handoff; autoname gets the rename
     directive alone, since with no drive the title reaches the user only
     through the printed line), then the closing line — always last.
     """
@@ -128,7 +126,6 @@ def compose_directives(
         parts.append(lib.todo_boundary(str(root)))
     else:
         parts.append(lib.sdd_directive(str(root)))
-        parts.append(lib.compaction_prompt_guard(str(root)))
     if commit_mode == "with-commit":
         parts.append(lib.commit_directive(memory=bool(memory)))
     if skill == "handoff":

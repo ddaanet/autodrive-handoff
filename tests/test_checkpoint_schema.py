@@ -178,6 +178,7 @@ def test_each_of_two_skill_values_accepted(tmp_path: Path) -> None:
         "commit": "without-commit",
         "compact": False,
         "continue": False,
+        "task": task_clear(),
         "todo": todo_keep(),
     }
     assert run_checkpoint(repo, payload).returncode == 0
@@ -218,6 +219,7 @@ def test_rename_present_under_precompact_errors(tmp_path: Path) -> None:
         "rename": "Not Allowed",
         "compact": False,
         "continue": False,
+        "task": task_clear(),
         "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)
@@ -236,6 +238,7 @@ def test_empty_or_null_rename_under_precompact_errors(
         "commit": "with-commit",
         "compact": False,
         "continue": False,
+        "task": task_clear(),
         "todo": todo_keep(),
         "rename": value,
     }
@@ -245,33 +248,29 @@ def test_empty_or_null_rename_under_precompact_errors(
     assert "precompact" in result.stderr
 
 
-@pytest.mark.parametrize(
-    "value",
-    ["## Current task\n\nreplacement\n", task_clear(), None],
-    ids=["content", "clear", "null"],
-)
-def test_task_present_under_precompact_errors(tmp_path: Path, value: object) -> None:
-    """`task` is forbidden under precompact by key presence, whatever its value.
-
-    The pre-existing frame and the absent sentinel pin where the check runs: a
-    payload rejected after the task half was applied would pass the message
-    assertions and still replace or remove the file.
-    """
+def test_precompact_task_content_writes_the_task_file(tmp_path: Path) -> None:
+    """`task` is taken at the compact boundary as at the clear one: a content
+    string replaces the file whole."""
     repo = make_repo(tmp_path)
-    stale = "## Current task\n\nIMPORTANT UNSAVED\n"
+    (repo / "TASK.md").write_text("## Current task\n\nstale\n")
+    task = "## Current task\n\nrewire the parser; next, run its tests\n"
+    result = run_checkpoint(repo, precompact_payload("with-commit", task=task))
+    assert result.returncode == 0, result.stderr
+    assert (repo / "TASK.md").read_text() == task
+
+
+def test_precompact_task_over_the_cap_errors_and_writes_nothing(
+    tmp_path: Path,
+) -> None:
+    """FR13's shape holds at the compact boundary too, checked before any
+    write."""
+    repo = make_repo(tmp_path)
+    stale = "## Current task\n\nstale\n"
     (repo / "TASK.md").write_text(stale)
-    payload = {
-        "skill": "precompact",
-        "commit": "with-commit",
-        "compact": False,
-        "continue": False,
-        "todo": todo_keep(),
-        "task": value,
-    }
-    result = run_checkpoint(repo, payload)
+    task = "## Current task\n\n" + "a" * 1001 + "\n"
+    result = run_checkpoint(repo, precompact_payload("with-commit", task=task))
     assert result.returncode == 2
-    assert "task" in result.stderr
-    assert 'forbidden when skill is "precompact"' in result.stderr
+    assert "the limit is 1000" in result.stderr
     assert (repo / "TASK.md").read_text() == stale
     assert not (repo / ".claude" / "autodrive").exists()
 
@@ -279,11 +278,11 @@ def test_task_present_under_precompact_errors(tmp_path: Path, value: object) -> 
 @pytest.mark.parametrize(
     "existed", [True, False], ids=["pre_existing", "never_existed"]
 )
-def test_precompact_without_task_leaves_no_task_file(
+def test_precompact_task_clear_leaves_no_task_file(
     tmp_path: Path, *, existed: bool
 ) -> None:
-    """The removal runs whether or not there is a file, and is no error without
-    one.
+    """`{"action": "clear"}` removes the file whether or not there is one, and
+    is no error without one.
 
     The todo half writes in the same call, so a pass is not a run that stopped
     before the task half.
@@ -292,36 +291,44 @@ def test_precompact_without_task_leaves_no_task_file(
     if existed:
         (repo / "TASK.md").write_text("## Current task\n\nstale\n")
     todo = "## Remaining\n\n- an item\n"
-    result = run_checkpoint(repo, precompact_payload("with-commit", todo))
+    result = run_checkpoint(
+        repo, precompact_payload("with-commit", todo, task=task_clear())
+    )
     assert result.returncode == 0
     assert result.stderr == ""
     assert not (repo / "TASK.md").exists()
     assert (repo / "TODO.md").read_text() == todo
 
 
-def test_precompact_task_removal_leaves_kept_todo_byte_identical(
+def test_precompact_without_task_errors_and_keeps_the_task_file(
     tmp_path: Path,
 ) -> None:
+    """An absent `task` is a named error, not a removal: the file and the todo
+    stay as they were and no sentinel is composed."""
     repo = make_repo(tmp_path)
+    task = "## Current task\n\nIMPORTANT UNSAVED\n"
     todo = "## Remaining\n\n- keep me\n"
-    (repo / "TASK.md").write_text("## Current task\n\nstale\n")
+    (repo / "TASK.md").write_text(task)
     (repo / "TODO.md").write_text(todo)
-    result = run_checkpoint(repo, precompact_payload("with-commit", todo_keep()))
-    assert result.returncode == 0
-    assert not (repo / "TASK.md").exists()
+    payload = precompact_payload("with-commit", "## Remaining\n\n- new\n")
+    del payload["task"]
+    result = run_checkpoint(repo, payload)
+    assert result.returncode == 2
+    assert "task: required" in result.stderr
+    assert (repo / "TASK.md").read_text() == task
     assert (repo / "TODO.md").read_text() == todo
+    assert not (repo / ".claude" / "autodrive").exists()
 
 
-def test_precompact_task_removal_with_todo_content_writes_the_todo(
-    tmp_path: Path,
-) -> None:
+def test_precompact_task_and_todo_content_both_written(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
+    task = "## Current task\n\nfresh task\n"
     todo = "## Remaining\n\n- fresh item\n"
     (repo / "TASK.md").write_text("## Current task\n\nstale\n")
     (repo / "TODO.md").write_text("## Remaining\n\n- old\n")
-    result = run_checkpoint(repo, precompact_payload("with-commit", todo))
-    assert result.returncode == 0
-    assert not (repo / "TASK.md").exists()
+    result = run_checkpoint(repo, precompact_payload("with-commit", todo, task=task))
+    assert result.returncode == 0, result.stderr
+    assert (repo / "TASK.md").read_text() == task
     assert (repo / "TODO.md").read_text() == todo
 
 
@@ -350,6 +357,7 @@ def test_precompact_with_rename_omitted_accepted(tmp_path: Path) -> None:
         "commit": "without-commit",
         "compact": False,
         "continue": False,
+        "task": task_clear(),
         "todo": todo_keep(),
     }
     assert run_checkpoint(repo, payload).returncode == 0
