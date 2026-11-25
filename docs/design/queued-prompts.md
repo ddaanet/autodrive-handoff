@@ -138,7 +138,7 @@ prompt's context. Every other plan passes the prompt unchanged:
   prompt's turn.
 - A `prepare` marker (FR-G) is not cancelled either. The take moved it to
   `pending`, which the sweep spares, so a hand-typed `/compact` still
-  re-injects the todo.
+  re-injects the frame.
 - A take that found `pending` (another drive's), `held`, another session's
   file or nothing took nothing, and the prompt passes.
 - A take that could not take the file (the lock busy, the reader failed) left

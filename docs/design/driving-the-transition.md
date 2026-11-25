@@ -161,7 +161,9 @@ Both inject the same frame, the task file and the todo, whichever has a body.
 What each says afterwards differs. `load-handoff.sh` always reports, on both
 channels: the frame's size and age, plus `No task frame` or `No todo` when one
 half has no body, or `No task frame or todo.` alone. `load-compact.sh` tells
-the user alone `todo re-injected` or `No todo`.
+the user alone which halves it re-injected (`task and todo re-injected`,
+`task re-injected; No todo`, `todo re-injected; No task frame`) or
+`No task frame or todo`.
 With no `pending` compaction it is silent, which is what keeps a hand-typed
 `/compact` or a threshold auto-compaction from re-injecting a stale list.
 

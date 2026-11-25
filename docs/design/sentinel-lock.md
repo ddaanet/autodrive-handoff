@@ -99,7 +99,7 @@ exactly as it was in every case:
   and still assemble and inject the frame, with a note on both channels that
   the transition state was left in place. `load-compact.sh` cannot tell then
   whether a compaction was pending, and a frame missing from a driven
-  compaction is the costlier error than a todo re-injected after an
+  compaction is the costlier error than a frame re-injected after an
   auto-compaction while a sentinel is on disk.
 
 The hook budgets in `hooks/hooks.json` cover the wait: the three lock-taking

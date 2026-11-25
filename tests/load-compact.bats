@@ -16,7 +16,7 @@ load lock-helpers
 
 # A transition in flight with a todo and no task file (the checkpoint cleared
 # it): the todo is what is re-injected, and the user is told so.
-@test "load-compact (pending present, todo present: consumes it, todo re-injected)" {
+@test "load-compact (pending present, todo present, no task: consumes it, todo re-injected, No task frame)" {
     rm -f "$tmp/TASK.md"
     printf '## Remaining\n\n- finish the parser\n' > "$tmp/TODO.md"
     seed_pending "$tmp" "compact continue"
@@ -24,7 +24,7 @@ load lock-helpers
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
     split_output "$output"
-    [ "$MSG" = "handoff: compacted — todo re-injected." ]
+    [ "$MSG" = "handoff: compacted — todo re-injected; No task frame." ]
     assert_framed "$CTX" $'\n\n## Remaining\n\n- finish the parser\n'
     echo "$output" | jq -e '.hookSpecificOutput.hookEventName == "SessionStart"' >/dev/null
     # The continuation is the mod's to submit, so it is not echoed here.
@@ -33,19 +33,19 @@ load lock-helpers
 
 # Both files cleared at the checkpoint: nothing to re-inject.
 # The message goes to the user alone; the agent is told nothing.
-@test "load-compact (pending present, no todo, no task: consumed, No todo, nothing injected)" {
+@test "load-compact (pending present, no todo, no task: consumed, No task frame or todo, nothing injected)" {
     rm -f "$tmp/TASK.md" "$tmp/TODO.md"
     seed_pending "$tmp" "compact continue"
     run_load_compact "$tmp"
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
     split_output "$output"
-    [ "$MSG" = "handoff: compacted — No todo." ]
+    [ "$MSG" = "handoff: compacted — No task frame or todo." ]
     echo "$output" | jq -e 'has("hookSpecificOutput") | not' >/dev/null
 }
 
 # A todo that is headings and nothing else is no todo.
-@test "load-compact (pending present, headings-only todo, no task: consumed, No todo, nothing injected)" {
+@test "load-compact (pending present, headings-only todo, no task: consumed, No task frame or todo, nothing injected)" {
     rm -f "$tmp/TASK.md"
     printf '## Remaining\n' > "$tmp/TODO.md"
     seed_pending "$tmp" "compact continue"
@@ -53,7 +53,7 @@ load lock-helpers
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
     split_output "$output"
-    [ "$MSG" = "handoff: compacted — No todo." ]
+    [ "$MSG" = "handoff: compacted — No task frame or todo." ]
     echo "$output" | jq -e 'has("hookSpecificOutput") | not' >/dev/null
 }
 
@@ -67,13 +67,13 @@ load lock-helpers
 
 # The checkpoint writes TASK.md at this boundary as it does at the clear one,
 # so a task file alone is the task frame, and it is injected.
-@test "load-compact (TASK.md alone: injected, and the message says No todo)" {
+@test "load-compact (TASK.md alone: injected, and the message says task re-injected, No todo)" {
     seed_pending "$tmp" "compact continue"
     printf '%s\n' "## Now" "- rewire the parser" > "$tmp/TASK.md"
     run_load_compact "$tmp"
     [ "$status" -eq 0 ]
     split_output "$output"
-    [ "$MSG" = "handoff: compacted — No todo." ]
+    [ "$MSG" = "handoff: compacted — task re-injected; No todo." ]
     assert_framed "$CTX" $'\n\n## Now\n- rewire the parser\n'
     echo "$output" | jq -e '.hookSpecificOutput.hookEventName == "SessionStart"' >/dev/null
     # The task file survives — it is not consumed by being read.
@@ -87,7 +87,7 @@ load lock-helpers
     run_load_compact "$tmp"
     [ "$status" -eq 0 ]
     split_output "$output"
-    [ "$MSG" = "handoff: compacted — todo re-injected." ]
+    [ "$MSG" = "handoff: compacted — task and todo re-injected." ]
     assert_framed "$CTX" $'\n\n## Now\n- rewire the parser\n\n## Remaining\n\n- finish the parser\n'
 }
 
@@ -100,7 +100,7 @@ load lock-helpers
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
     echo "$output" | jq -e '.hookSpecificOutput.additionalContext | test("hook smoke test")' >/dev/null
-    echo "$output" | jq -e '.systemMessage == "handoff: compacted — No todo."' >/dev/null
+    echo "$output" | jq -e '.systemMessage == "handoff: compacted — task re-injected; No todo."' >/dev/null
 }
 
 # FR-G's other half: the prepare marker (`compact: false`) arrives here as a
@@ -111,7 +111,7 @@ load lock-helpers
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
     echo "$output" | jq -e '.hookSpecificOutput.additionalContext | test("hook smoke test")' >/dev/null
-    echo "$output" | jq -e '.systemMessage == "handoff: compacted — No todo."' >/dev/null
+    echo "$output" | jq -e '.systemMessage == "handoff: compacted — task re-injected; No todo."' >/dev/null
 }
 
 @test "load-compact (worktree cwd: consumes the worktree pending file)" {
@@ -138,7 +138,7 @@ link_root() {
     ln -s "$2" "$tmp/$1"
 }
 
-@test "load-compact (TODO.md is a symlink to a body): consumed, No todo, nothing injected" {
+@test "load-compact (TODO.md is a symlink to a body): consumed, No task frame or todo, nothing injected" {
     rm -f "$tmp/TASK.md"
     printf '## Remaining\n\n- linked item\n' > "$other/todo.md"
     link_root TODO.md "$other/todo.md"
@@ -147,7 +147,7 @@ link_root() {
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
     split_output "$output"
-    [ "$MSG" = "handoff: compacted — No todo." ]
+    [ "$MSG" = "handoff: compacted — No task frame or todo." ]
     [ "$CTX" = "" ]
 }
 
@@ -159,11 +159,11 @@ link_root() {
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
     split_output "$output"
-    [ "$MSG" = "handoff: compacted — No todo." ]
+    [ "$MSG" = "handoff: compacted — No task frame or todo." ]
     [ "$CTX" = "" ]
 }
 
-@test "load-compact (TASK.md and TODO.md are dangling symlinks): consumed, No todo" {
+@test "load-compact (TASK.md and TODO.md are dangling symlinks): consumed, No task frame or todo" {
     link_root TASK.md "$other/nowhere-task.md"
     link_root TODO.md "$other/nowhere-todo.md"
     seed_pending "$tmp" "compact continue"
@@ -171,7 +171,7 @@ link_root() {
     [ "$status" -eq 0 ]
     [ ! -e "$tmp/.claude/autodrive" ]
     split_output "$output"
-    [ "$MSG" = "handoff: compacted — No todo." ]
+    [ "$MSG" = "handoff: compacted — No task frame or todo." ]
     [ "$CTX" = "" ]
 }
 

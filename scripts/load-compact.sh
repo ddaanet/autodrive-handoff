@@ -79,13 +79,17 @@ fi
 # continuation prompt is only a handle to them. Inject the frame here so the
 # handle resolves against the real thing rather than the summariser's
 # paraphrase. Not consumed by reading — the files stay on disk for the next
-# SessionStart(startup|clear). The message is about the todo either way.
+# SessionStart(startup|clear). The message names each half, injected or absent.
 handoff_frame "$cwd/$HANDOFF_REL_TASK" "$cwd/$HANDOFF_REL_TODO" || true
 
-if (( FRAME_TODO )); then
-    msg="handoff: compacted — todo re-injected"
+if (( FRAME_TASK && FRAME_TODO )); then
+    msg="handoff: compacted — task and todo re-injected"
+elif (( FRAME_TASK )); then
+    msg="handoff: compacted — task re-injected; No todo"
+elif (( FRAME_TODO )); then
+    msg="handoff: compacted — todo re-injected; No task frame"
 else
-    msg="handoff: compacted — No todo"
+    msg="handoff: compacted — No task frame or todo"
 fi
 
 # A sentinel left because its lock could not be taken is named on both channels.

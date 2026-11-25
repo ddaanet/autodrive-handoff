@@ -56,7 +56,11 @@ gone. The summary still paraphrases the conversation; the task file is the
 copy that does not drift, re-injected beside the todo. What differs between
 the boundaries is the transition alone, and the one asymmetry kept is that
 `continue: true` with neither file holding a body is refused only at the
-clear, since a compaction's summary still carries the conversation.
+clear, since a compaction's summary still carries the conversation. The risk
+accepted is staleness: work that goes on after the compaction with no new
+checkpoint leaves `TASK.md` behind it, re-injected as it was at the next
+session start. The clear boundary has the same exposure, and the next
+checkpoint replaces the file.
 
 **Commit/push status never appears in either file.** The routine wrap-up is
 `/handoff` then `/commit`, so any bookkeeping written at handoff time is

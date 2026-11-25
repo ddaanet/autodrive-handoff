@@ -198,7 +198,7 @@ become_armed() {
     [ "$status" -eq 0 ]
     cmp "$BATS_TEST_TMPDIR/sentinel.before" "$tmp/.claude/autodrive"
     split_output "$output"
-    [ "$MSG" = "handoff: compacted — todo re-injected; autodrive left in place — the sentinel's lock was busy." ]
+    [ "$MSG" = "handoff: compacted — todo re-injected; No task frame; autodrive left in place — the sentinel's lock was busy." ]
     [[ "$CTX" == *"- finish the parser"* ]]
     [[ "$CTX" == *"was left in place, not consumed: the sentinel's lock was busy."* ]]
 }
@@ -214,7 +214,7 @@ become_armed() {
     release_drive_lock
     cmp "$BATS_TEST_TMPDIR/sentinel.before" "$tmp/.claude/autodrive"
     split_output "$output"
-    [ "$MSG" = "handoff: compacted — No todo; autodrive left in place — the sentinel's lock was busy." ]
+    [ "$MSG" = "handoff: compacted — No task frame or todo; autodrive left in place — the sentinel's lock was busy." ]
     [[ "$CTX" == *"was left in place, not consumed"* ]]
 }
 

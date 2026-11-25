@@ -96,7 +96,7 @@ assert_cancel_report() {
     [ ! -e "$tmp/.claude/autodrive" ]
     split_output "$output"
     [ "$MSG" = $'\033[0m'"handoff: $cancel_msg." ]
-    [ "$CTX" = "The prepare marker was removed, so a /compact typed by hand will not re-inject the todo. Answer this prompt, then run the precompact skill again with the same transition, unless this prompt changes that." ]
+    [ "$CTX" = "The prepare marker was removed, so a /compact typed by hand will not re-inject the frame. Answer this prompt, then run the precompact skill again with the same transition, unless this prompt changes that." ]
     [[ "$(cat "$tmp/.claude/autodrive.swept")" == *$'\tstate=armed\towner='"$SESSION_ID"$'\tkind=prepare\t'* ]]
 }
 

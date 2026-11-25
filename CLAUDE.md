@@ -21,7 +21,9 @@ user-facing version.
 `handoff` is the `/clear` boundary's skill, `precompact` the `/compact` one's,
 and `autoname` a rename only: the payload's `skill` field names it and keys
 what the checkpoint prints. Both carry `task` (FR13: at most 1000 characters
-of prose, no list item) and `todo`, with the same rules. `clear` (bool) under `handoff`,
+of prose, no list item; content or `clear`) and `todo` (also `keep` or
+`edit`), the same at both boundaries but for the `continue` refusal below.
+`clear` (bool) under `handoff`,
 `compact` (bool, or a focus directive) under `precompact` and `continue`
 (bool) at both are required, with no default. `continue: true` is legal only
 when the transition is carried out (`typed` in the code), and under `handoff`

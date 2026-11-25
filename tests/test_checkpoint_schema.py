@@ -320,6 +320,29 @@ def test_precompact_without_task_errors_and_keeps_the_task_file(
     assert not (repo / ".claude" / "autodrive").exists()
 
 
+@pytest.mark.parametrize(
+    "task", [task_clear(), "## Current task\n\nfresh task\n"], ids=["clear", "content"]
+)
+def test_precompact_task_write_leaves_kept_todo_byte_identical(
+    tmp_path: Path, task: object
+) -> None:
+    """`todo: keep` leaves an existing TODO.md byte-identical while the task
+    half of the same call writes or removes TASK.md."""
+    repo = make_repo(tmp_path)
+    todo = "## Remaining\n\n- keep me\n\n  trailing  \n"
+    (repo / "TASK.md").write_text("## Current task\n\nstale\n")
+    (repo / "TODO.md").write_text(todo)
+    result = run_checkpoint(
+        repo, precompact_payload("with-commit", todo_keep(), task=task)
+    )
+    assert result.returncode == 0, result.stderr
+    assert (repo / "TODO.md").read_bytes() == todo.encode()
+    if isinstance(task, str):
+        assert (repo / "TASK.md").read_text() == task
+    else:
+        assert not (repo / "TASK.md").exists()
+
+
 def test_precompact_task_and_todo_content_both_written(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
     task = "## Current task\n\nfresh task\n"

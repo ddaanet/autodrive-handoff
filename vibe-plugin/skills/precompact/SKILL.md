@@ -96,7 +96,8 @@ what follows it. Prose. Not a recap.>
 - **No commit or push status**, and no item saying "commit the work" or "push
   the branch". A release still owed is an item.
 - A `TODO.md` that is already there in another shape keeps its shape: add to it
-  and drop from it with `edit`.
+  and drop from it with `edit` rather than rewriting it into this template.
+
 Neither file takes a `#` heading or extra sections. There is no `rename`
 field at this boundary. The Claude schema's `compact` focus string does not
 port — Vibe's `/compact` takes no argument; whatever the summariser must
