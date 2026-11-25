@@ -259,3 +259,25 @@ A commit the ask implies is not an exception either, because it comes after
 the checkpoint, as the commit act the checkpoint prints: after it so it
 carries the two files the checkpoint wrote, and before the arming
 instruction so the transition is released only once it has landed.
+
+2026-11-25 The release couples the two manifests, enforced at the gate.
+
+**One version at release, bumped on both surfaces.** The plugin ships two
+manifests for the same plugin — the Claude manifest
+(`.claude-plugin/plugin.json`) and the native Vibe manifest
+(`vibe-plugin/plugin.json`) — and their inventories differ. But they are one
+plugin, and a version that splits them loses which tag every Vibe skill copy
+shipped under, so the version is coupled: one number, carried by both
+manifests, bumped once per release. The release *acts* stay decoupled — tag +
+GH release + marketplace bump for the Claude surface (Vibe has no
+marketplace; its install is the documented per-consumer copy).
+
+The toolkit's `release` recipe bumps only the Claude manifest, so the Vibe
+manifest's bump is a sync commit immediately after `just release`. The coupling
+is enforced by `check-versions` (uncached, in `precommit`), not by a guard
+hook: the toolkit's `version-guard.sh` guards the Claude manifest and is
+Claude-only; Vibe's `pre_tool`/`post_tool` hooks are real surface the port
+leaves unused until something needs it, and a mirror guard there would refuse
+the coupled bump the policy itself requires. The gate is the one place both
+agents meet, and the sync commit — the only commit where the manifests are
+allowed to have disagreed — is green under it.

@@ -34,5 +34,28 @@ toolkit, vendored at `plugin-dev/` via `git subtree`. Rationale:
   bump is invisible to end-users, so the recipe treats both pushes as
   one atomic release.
 
+## The Vibe surface and the coupled version
+
+The native Vibe tree (`vibe-plugin/`) is part of the same plugin and
+ships under the same version. The coupling is one-way enforced where it
+can be: the toolkit's `release` recipe bumps only the Claude manifest,
+so the release sequence is `just release X.Y.Z` (commits, tags, pushes),
+then a `vibe-plugin/plugin.json` sync commit bumping it to `X.Y.Z` —
+plain tree state, no recipe to widen. Between the two commits the
+manifests legitimately disagree, and `check-versions` (uncached, in
+`precommit`) refuses any commit outside that window whose manifests
+disagree: with both files present and equal at the sync commit, the gate
+is green, and a hand edit of one manifest alone cannot pass any other
+commit. The release acts stay decoupled — and the tag + GH release +
+marketplace bump run for the Claude surface only, since Vibe has no
+marketplace; its install is the documented per-consumer copy.
+
+There is no Vibe-side version guard hook: the toolkit's
+`version-guard.sh` is a Claude `PreToolUse` hook the toolkit ships and
+guards the Claude manifest; Vibe exposes `pre_tool`/`post_tool` — a real
+surface the port leaves unused until something needs it — and a mirror
+guard there would refuse the coupled bump the policy requires. The
+coupling is enforced where both agents meet: the gate.
+
 Updates: `just update-plugin-dev dist-vX.Y.Z` (recipe imported from
 `release.just`; it refuses the bare `vX.Y.Z` source tag).

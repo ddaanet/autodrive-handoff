@@ -9,7 +9,7 @@ export PLUGIN_DEV_GATE_TOOLS := "bats --version\nshellcheck --version\njq --vers
 # autodrive-handoff plugin — dev recipes
 #
 # `precommit` is the gate that runs before every commit: two cached gates, then
-# three uncached ones. The cached pair is split because the cheap plugin checks
+# the uncached ones. The cached pair is split because the cheap plugin checks
 # read `skills/` and `.claude-plugin/`,
 # which the slow code checks never do: a skill edit must not pay for the
 # bats and pytest runs. `check-plugin` lints the manifests + settings, validates
@@ -22,7 +22,9 @@ export PLUGIN_DEV_GATE_TOOLS := "bats --version\nshellcheck --version\njq --vers
 # `check-size` (the byte caps, with `size.exempt`) and `check-frontmatter` (each
 # skill's frontmatter is YAML and obeys the field rules) come from the toolkit
 # and run on every call; `check-refs` and `check-size` because they read files
-# no cached gate's inputs cover.
+# no cached gate's inputs cover. `check-versions` (the one version both
+# manifests must carry) is consumer-local and also uncached, so a hand edit of
+# one manifest cannot slip a commit past the coupling.
 #
 # `prerelease` is the gate the imported `release` recipe depends on.
 # Here it is exactly `precommit`; widen it if the release ever needs
@@ -32,9 +34,13 @@ export PLUGIN_DEV_GATE_TOOLS := "bats --version\nshellcheck --version\njq --vers
 _default:
     @just --list
 
-# Run the commit gate: the plugin and code checks, the link, size, frontmatter and mode checks
-precommit: check-plugin check-code check-refs check-size check-frontmatter check-modes
-    @echo "precommit: check-plugin check-code check-refs check-size check-frontmatter check-modes passed"
+# Run the commit gate: the plugin and code checks, the link, size, frontmatter, mode and manifest-version checks
+precommit: check-plugin check-code check-refs check-size check-frontmatter check-modes check-versions
+    @echo "precommit: check-plugin check-code check-refs check-size check-frontmatter check-modes check-versions passed"
+
+# The two manifests carry one version (the release couples them); uncached, cheap
+check-versions:
+    bash scripts/check-versions.sh
 
 # Manifests, settings, plugin validation, mod tests, shellcheck; skipped while its inputs are unchanged
 check-plugin:

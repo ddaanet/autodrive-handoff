@@ -32,11 +32,14 @@ The consequences, kept together so the shape reads in one place:
   `AGENTS.md` is the ddaanet-flavoured instance of it (the frame files plus
   the memory entry-points, directed 2026-11-23).
 - **No sentinel, no lock, no hold, no `handoff-approved`, no write guard.**
+  Each dropped piece lacked its Vibe carrier for a structural reason, not
+  because hooks are out of scope: Vibe's `pre_tool`/`post_tool` hooks are real
+  surface, in scope where a particular need is — [the decisions
+  ledger](decisions.md) documents why a version guard is not one.
   There is no competing take to lock against and nothing to arm; a call's
-  root is the cwd, guarded by a run-from-the-project-root check because no
-  PreToolUse hook injects `HANDOFF_ROOT`. A direct edit to `TASK.md`/
-  `TODO.md` is a plain file write, as under Claude those files always were
-  (NFR1).
+  root is the cwd, guarded by a run-from-the-project-root check inside the
+  checkpoint. A direct edit to `TASK.md`/`TODO.md` is a plain file write, as
+  under Claude those files always were (NFR1).
 - **Memory rides gitlore alone.** The memory directive and the commit act are
   the Claude texts unchanged; the seam needs gitlore discoverable under Vibe.
   Vibe discovers plugins only from `~/.vibe/plugins/` and `.vibe/plugins/`,

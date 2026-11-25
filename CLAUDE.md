@@ -161,7 +161,11 @@ What you are touching → what to read first, under `docs/design/`:
   (marketplace entry)" — since auto-mode's permission harness reads only the
   current message.
 - `version-guard.sh` (wired in `.claude/settings.json`) refuses agent edits
-  that change `plugin.json`'s `.version`.
+  that change `plugin.json`'s `.version`; `check-versions` in the gate
+  refuses any commit where the Claude and Vibe manifests
+  (`.claude-plugin/plugin.json`, `vibe-plugin/plugin.json`) carry different
+  versions — the release couples them, and the Vibe sync commit follows the
+  release (`docs/design/release-infrastructure.md`).
 - A design change rewrites the design prose it invalidates, in the same
   commit; the commit body says why it changed.
 
@@ -179,7 +183,8 @@ pytest runs off a uv-managed venv that direnv activates (`.envrc` exports
 - `just precommit` — the gate, run before every commit; needs the venv. It
   depends on `check-plugin` and `check-code`, cached gates that skip while
   their inputs are unchanged (`PLUGIN_DEV_GATE_FORCE=1` runs them regardless),
-  and on `check-refs`, `check-size`, `check-frontmatter` and `check-modes`,
+  and on `check-refs`, `check-size`, `check-frontmatter`, `check-modes` and
+  `check-versions` (the two manifests' one version),
   uncached checks that run every time: Markdown links, the toolkit's byte caps
   (20000, 10000 for a `SKILL.md`), that each `SKILL.md`'s frontmatter is YAML
   that obeys the toolkit's field rules (it reads PyYAML through the venv's
