@@ -278,7 +278,12 @@ Vibe has no marketplace), one version at the tag.
 The Vibe manifest is bumped in its own commit before `just release`.
 `check-versions` (uncached, in `precommit`) accepts Vibe equal to Claude or
 exactly one patch, minor or major bump ahead, and refuses anything else. The
-release's bump commit is where they meet again, and it is the tagged commit.
+release's bump commit is where they meet again, and it is the tagged commit:
+one version at the tag holds when the Vibe bump was made and used the
+release's tier. The gate cannot catch either mistake, since the release does
+not gate its bump commit: a Vibe bump of a different tier tags mismatched
+manifests and stays green after, and a forgotten Vibe pre-bump tags Vibe one
+release behind, which the next commit refuses, forcing a sync commit.
 No toolkit change: the recipe still bumps only the Claude manifest, and
 `prerelease` (`precommit`) passes with Vibe ahead. A post-release sync commit,
 the earlier policy, left the tag one release behind. Rejected: a hook in the

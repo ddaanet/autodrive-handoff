@@ -43,8 +43,9 @@ and tags only the Claude manifest, so the Vibe manifest is bumped in its own
 commit *before* the release: `vibe-plugin/plugin.json` moves to the version
 the coming `just release <tier>` (tier one of `patch|minor|major`) will
 write, then the release runs. Its bump commit brings the Claude manifest to
-the Vibe one, and that commit is what gets tagged, so the tag carries both
-manifests at one version and nothing lags behind a release.
+the Vibe one, and that commit is what gets tagged, so when the Vibe bump was
+made and used the release's tier, the tag carries both manifests at one
+version and nothing lags behind a release.
 
 `check-versions` (uncached, in `precommit`) accepts the Vibe version equal
 to the Claude one, or exactly one patch (X.Y.Z to X.Y.(Z+1)), minor
@@ -53,9 +54,14 @@ held with both versions. It refuses everything else, naming both versions:
 Vibe behind, Claude ahead, two bumps, a skipped component such as 0.23.1 to
 0.24.1, a non-semver version. The release's own gate (`prerelease` is
 `precommit`) runs before the bump, with Vibe one bump ahead, and passes. The
-release does not re-run the gate on its bump commit, so a Vibe bump of a
-different tier than the release's goes untested: the tag would carry
-mismatched manifests. The release acts stay decoupled: the tag + GH release +
+release does not re-run the gate on its bump commit, so two mistakes reach
+the tag uncaught. A Vibe bump of a different tier than the release's tags
+mismatched manifests, and the gate stays green after it, since the Vibe
+manifest still reads as one bump ahead. A forgotten Vibe pre-bump passes
+`prerelease` (the manifests are equal) and tags the Vibe manifest one release
+behind; the next commit is then refused (Claude ahead), which forces a sync
+commit after the tag. The gate also accepts a lone Vibe bump of one tier at
+any commit, not only before a release. The release acts stay decoupled: the tag + GH release +
 marketplace bump run for the Claude surface only, since Vibe has no
 marketplace; its install is the documented per-consumer copy.
 

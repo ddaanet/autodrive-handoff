@@ -24,7 +24,8 @@ export PLUGIN_DEV_GATE_TOOLS := "bats --version\nshellcheck --version\njq --vers
 # and run on every call; `check-refs` and `check-size` because they read files
 # no cached gate's inputs cover. `check-versions` (the Vibe manifest equal to
 # the Claude one or one bump ahead) is consumer-local and also uncached, so a
-# hand edit of one manifest cannot slip a commit past the coupling.
+# lone Claude edit, or a Vibe edit outside that one-bump band, cannot slip a
+# commit past the coupling; a lone Vibe bump of one tier passes.
 #
 # `prerelease` is the gate the imported `release` recipe depends on.
 # Here it is exactly `precommit`; widen it if the release ever needs
