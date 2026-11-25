@@ -266,7 +266,7 @@ def _vibe_home() -> Path:
 
 
 def _compaction_prompt_id(root: str) -> str:
-    """Return the effective compaction_prompt_id, "" only when unreadable."""
+    """Return the effective compaction_prompt_id, "compact" when unreadable."""
     for cfg in (
         Path(root) / ".vibe" / "config.toml",
         _vibe_home() / "config.toml",

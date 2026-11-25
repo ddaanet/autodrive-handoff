@@ -40,18 +40,19 @@ The consequences, kept together so the shape reads in one place:
   root is the cwd, guarded by a run-from-the-project-root check inside the
   checkpoint. A direct edit to `TASK.md`/`TODO.md` is a plain file write, as
   under Claude those files always were (NFR1).
-- **Memory rides gitlore alone.** The commit act is the Claude text; the seam needs gitlore discoverable under Vibe.
+- **Memory rides gitlore alone.** Vibe has no `gitlore:commit` skill; the seam needs gitlore discoverable under Vibe.
   Vibe discovers plugins only from `~/.vibe/plugins/` and `.vibe/plugins/`,
   so gitlore (a Claude-format plugin, user-scope for Claude Code) sits
   outside that surface, and the port makes no move to pull it in: bridging
   through a symlink into Claude Code's plugin cache was ruled out (see
   `rejected-alternatives.md`), and gitlore shipping natively is its own
-  repo's work. Without gitlore the directive degrades in its text: dirty
-  memory is reported to the user as uncommitted until a session that has
-  gitlore, and the skill is not sent to a skill it cannot invoke. The directive's `gitlore:commit` names the same
-  alias the adapter exposes (`{plugin namespace}:{frontmatter name}`,
-  derived from the plugin name — `_native.py`), verified in the 3.0.1
-  source.
+  repo's work. The memory directive therefore does not send the agent to
+  `gitlore:commit`: it prints the dirty status, tells the agent to report
+  the memory as uncommitted to the user, left for a session that has gitlore.
+  The with-commit act leaves the memory pointer out of the commit and says so
+  in the reply. The adapter would expose gitlore's skill as
+  `{plugin namespace}:{frontmatter name}` (`_native.py`, verified in the
+  3.0.1 source); the port does not rely on it.
 
 ## Where the copies live
 
@@ -85,8 +86,8 @@ the user layer resolved as Vibe does, then prompt dirs, via `tomllib` —
 reading a config grammar with its parser) and prints the setup line when the
 seam is absent, so a skipped install step surfaces at the boundary where it
 is cheap, not at the compaction where it is a lost task. Residual bound: the
-guard checks that the key names the plugin's prompt, so a custom prompt of
-the user's own, not the plugin's, passes it.
+guard checks only that the key resolves to some non-builtin prompt file, so
+a custom prompt of the user's own, not the plugin's, passes it.
 
 ## Install and verification status
 

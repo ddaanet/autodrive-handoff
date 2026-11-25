@@ -16,7 +16,7 @@ Add nothing of your own inside any fenced block you do quote: no note, parenthet
 After Layer 1, and briefly:
 
 - Key decisions made this session and their rationale, if not already on disk
-- Files touched and their state of in-progress work (paths + one-line status), where this is not inferable from the frames
+- Files touched and their state of in-progress work (paths + one-line status)
 - What remains to be done that neither file lists
 - Any data, identifiers, or references the next LLM needs that are in neither file
 

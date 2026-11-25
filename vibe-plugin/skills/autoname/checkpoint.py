@@ -113,7 +113,7 @@ def compose_directives(
     Print order: the memory directive ("" when the gitlore store is absent
     or clean, and omitted), then the todo boundary/SDD nudge, then the
     compaction-prompt guard (precompact only), then the commit act (present
-    only under "with-commit", naming the memory gitlink when memory is
+    only under "with-commit", leaving the memory gitlink out when memory is
     owed), then the rename directive (handoff; autoname gets the rename
     directive alone, since with no drive the title reaches the user only
     through the printed line), then the closing line — always last.

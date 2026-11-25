@@ -65,9 +65,10 @@ prepared on disk and the user types the `/clear` or `/compact` themselves.
 
 Vibe has no native memory system; durable learnings ride
 [gitlore](https://github.com/ddaanet/gitlore), which publishes memory
-through git. The boundary's memory directive points at gitlore's
-`gitlore:commit` skill when the repo's `gitlore-memory` submodule is
-dirty. gitlore installs for Claude Code; it has no Vibe-native install of
+through git. When the repo's `gitlore-memory` submodule is dirty, the boundary's
+memory directive tells the agent to report it to you as uncommitted, since
+Vibe has no `gitlore:commit` skill; under with-commit the commit leaves the
+memory pointer out. gitlore installs for Claude Code; it has no Vibe-native install of
 its own, and bridging one through a symlink into Claude Code's plugin
 cache is ruled out — the port deliberately waits for gitlore to ship
 natively. Until then the boundary still prints its directive and the
