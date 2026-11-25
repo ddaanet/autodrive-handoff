@@ -9,63 +9,63 @@ through `just sync-vibe`; a drifted copy fails here.
 
 from __future__ import annotations
 
-import json
-import os
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
+import conftest
 import pytest
+from conftest import dirty_memory, make_gitlore_repo, make_repo
 
 # The repo top level, as check-size reserves for the toolkit: the tests run
 # from anywhere pytest plants them, so resolve against this file's location.
 REPO = Path(__file__).resolve().parent.parent
 VIBE = REPO / "vibe-plugin"
-SKILL_DIRS = ("handoff", "precompact", "autoname")
-MODULES = (
-    "checkpoint.py",
-    "_checkpoint_payload.py",
-    "_checkpoint_plan.py",
-    "_checkpoint_lib.py",
+# Derived from the tree, as the `sync-vibe` recipe derives its targets: the
+# skills carrying a checkpoint.py, and the canonical modules they copy.
+SKILL_DIRS = tuple(
+    sorted(p.parent.name for p in (VIBE / "skills").glob("*/checkpoint.py"))
 )
+MODULES = tuple(sorted(p.name for p in (VIBE / "scripts").glob("*.py")))
 
 TASK = "## Current task\n\nPort the handoff plugin to Vibe; the tree is written."
 TODO = "## Open decisions\n\n- None left.\n\n## Remaining\n\n- Run the gates."
 
 
 def run_checkpoint(
-    tmp_path: Path, payload: dict[str, Any], *, skill: str = "handoff"
+    repo: Path, payload: dict[str, Any], *, skill: str = "handoff"
 ) -> subprocess.CompletedProcess[str]:
-    """Run the named skill's checkpoint with the payload on stdin.
-
-    HOME is pinned to the project dir: the guard resolves the user's installed
-    compaction prompt through Path.home(), and a runner that has one must not
-    silence the warning the tests assert.
-    """
-    return subprocess.run(
-        [
-            sys.executable,
-            str(VIBE / "skills" / skill / "checkpoint.py"),
-        ],
-        input=json.dumps(payload),
-        capture_output=True,
-        text=True,
-        cwd=tmp_path,
-        env={**os.environ, "HOME": str(tmp_path)},
-        check=False,
+    """Run the named skill's checkpoint with the payload on stdin."""
+    return conftest.run_checkpoint(
+        repo,
+        payload,
+        command=(sys.executable, str(VIBE / "skills" / skill / "checkpoint.py")),
+        with_session_id=False,
     )
+
+
+@pytest.fixture(autouse=True)
+def _hermetic_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin HOME to the tmp dir.
+
+    The guard resolves the user's installed compaction prompt through
+    Path.home(), and a runner that has one must not silence the warning the
+    tests assert.
+    """
+    monkeypatch.setenv("HOME", str(tmp_path))
 
 
 @pytest.fixture
 def project(tmp_path: Path) -> Path:
-    """A throwaway project root: .git marks it for the root check."""
-    (tmp_path / ".git").mkdir()
-    return tmp_path
+    """A throwaway project root: git init marks it for the root check."""
+    return make_repo(tmp_path)
 
 
 def test_copies_are_identical_to_the_canonical_scripts() -> None:
     """The sync guard: every skill module copy matches vibe-plugin/scripts."""
+    assert SKILL_DIRS
+    assert MODULES
     for skill_dir in SKILL_DIRS:
         for module in MODULES:
             copy = VIBE / "skills" / skill_dir / module
@@ -279,30 +279,10 @@ def test_autoname_refuses_boundary_fields(project: Path) -> None:
     assert 'commit: forbidden when skill is "autoname"' in result.stderr
 
 
-def test_memory_directive_names_the_dirty_submodule(
-    project: Path,
-) -> None:
+def test_memory_directive_names_the_dirty_submodule(tmp_path: Path) -> None:
     """A dirty gitlore-memory submodule turns the memory directive on."""
-    mem = project / "memory"
-    subprocess.run(["git", "init", "-q", str(mem)], check=True)
-    (mem / "note.md").write_text("durable\n")
-    subprocess.run(
-        ["git", "-C", str(mem), "add", "note.md"],
-        check=True,
-        capture_output=True,
-    )
-    subprocess.run(
-        [
-            "git",
-            "config",
-            "--file",
-            str(project / ".gitmodules"),
-            "submodule.gitlore-memory.path",
-            "memory",
-        ],
-        check=True,
-        capture_output=True,
-    )
+    project = make_gitlore_repo(tmp_path)
+    dirty_memory(project)
     result = run_checkpoint(
         project,
         {
