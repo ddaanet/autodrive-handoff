@@ -47,13 +47,14 @@ def run_checkpoint(
 
 @pytest.fixture(autouse=True)
 def _hermetic_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Pin HOME to the tmp dir.
+    """Pin HOME to the tmp dir and unset VIBE_HOME.
 
-    The guard resolves the user's installed compaction prompt through
-    Path.home(), and a runner that has one must not silence the warning the
+    The guard resolves the user's installed compaction prompt through VIBE_HOME,
+    else Path.home(), and a runner that has one must not silence the warning the
     tests assert.
     """
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("VIBE_HOME", raising=False)
 
 
 @pytest.fixture
