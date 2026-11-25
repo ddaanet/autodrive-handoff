@@ -2,8 +2,8 @@
 
 # --- check-versions (precommit, uncached) ---
 #
-# The two manifests carry the same version; see
-# docs/design/release-infrastructure.md for the coupling and the sync commit.
+# The Vibe manifest equals the Claude one or is one patch/minor/major bump
+# ahead; see docs/design/release-infrastructure.md for the coupling.
 
 setup() {
     ROOT="$(mktemp -d)"
@@ -20,19 +20,56 @@ write_manifests() {
     printf '{"version": "%s"}\n' "$vibe" > "$ROOT/vibe-plugin/plugin.json"
 }
 
-@test "equal manifests pass, printing the shared version" {
-    write_manifests 1.2.3 1.2.3
+expect_relation() {
+    write_manifests "$1" "$2"
     run bash scripts/check-versions.sh "$ROOT"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"1.2.3"* ]]
+    [[ "$output" == "check-versions: $3 (claude $1, vibe $2)" ]]
 }
 
-@test "a release alone (claude bumped, vibe lagging) is refused, naming both versions" {
-    write_manifests 1.3.0 1.2.3
+expect_refused() {
+    write_manifests "$1" "$2"
     run bash scripts/check-versions.sh "$ROOT"
     [ "$status" -eq 1 ]
-    [[ "$output" == *"disagree"* ]]
-    [[ "$output" == *"$ROOT/.claude-plugin/plugin.json 1.3.0, $ROOT/vibe-plugin/plugin.json 1.2.3"* ]]
+    [[ "$output" == *"$ROOT/.claude-plugin/plugin.json $1, $ROOT/vibe-plugin/plugin.json $2"* ]]
+}
+
+@test "equal manifests pass, naming the relation and both versions" {
+    expect_relation 1.2.3 1.2.3 equal
+}
+
+@test "vibe one patch ahead passes" {
+    expect_relation 1.2.3 1.2.4 "vibe one patch ahead"
+}
+
+@test "vibe one minor ahead passes" {
+    expect_relation 1.2.3 1.3.0 "vibe one minor ahead"
+}
+
+@test "vibe one major ahead passes" {
+    expect_relation 1.2.3 2.0.0 "vibe one major ahead"
+}
+
+@test "vibe behind is refused, naming both versions" {
+    expect_refused 1.3.0 1.2.3
+}
+
+@test "claude ahead by a minor (a release alone) is refused" {
+    expect_refused 1.3.0 1.2.9
+}
+
+@test "vibe two bumps ahead is refused" {
+    expect_refused 1.2.3 1.2.5
+    expect_refused 1.2.3 1.4.0
+    expect_refused 1.2.3 3.0.0
+}
+
+@test "a minor bump without the patch reset is refused" {
+    expect_refused 0.23.1 0.24.1
+}
+
+@test "a non-semver version is refused" {
+    expect_refused 1.2.3 1.2.4-rc1
 }
 
 @test "a missing vibe manifest is refused, not skipped" {

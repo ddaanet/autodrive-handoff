@@ -22,9 +22,9 @@ export PLUGIN_DEV_GATE_TOOLS := "bats --version\nshellcheck --version\njq --vers
 # `check-size` (the byte caps, with `size.exempt`) and `check-frontmatter` (each
 # skill's frontmatter is YAML and obeys the field rules) come from the toolkit
 # and run on every call; `check-refs` and `check-size` because they read files
-# no cached gate's inputs cover. `check-versions` (the one version both
-# manifests must carry) is consumer-local and also uncached, so a hand edit of
-# one manifest cannot slip a commit past the coupling.
+# no cached gate's inputs cover. `check-versions` (the Vibe manifest equal to
+# the Claude one or one bump ahead) is consumer-local and also uncached, so a
+# hand edit of one manifest cannot slip a commit past the coupling.
 #
 # `prerelease` is the gate the imported `release` recipe depends on.
 # Here it is exactly `precommit`; widen it if the release ever needs
@@ -38,7 +38,7 @@ _default:
 precommit: check-plugin check-code check-refs check-size check-frontmatter check-modes check-versions
     @echo "precommit: check-plugin check-code check-refs check-size check-frontmatter check-modes check-versions passed"
 
-# The two manifests carry one version (the release couples them); uncached, cheap
+# The Vibe manifest equals the Claude one or leads it by one bump; uncached, cheap
 check-versions:
     bash scripts/check-versions.sh
 
