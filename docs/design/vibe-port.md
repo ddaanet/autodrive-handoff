@@ -40,15 +40,15 @@ The consequences, kept together so the shape reads in one place:
   root is the cwd, guarded by a run-from-the-project-root check inside the
   checkpoint. A direct edit to `TASK.md`/`TODO.md` is a plain file write, as
   under Claude those files always were (NFR1).
-- **Memory rides gitlore alone.** The memory directive and the commit act are
-  the Claude texts unchanged; the seam needs gitlore discoverable under Vibe.
+- **Memory rides gitlore alone.** The commit act is the Claude text; the seam needs gitlore discoverable under Vibe.
   Vibe discovers plugins only from `~/.vibe/plugins/` and `.vibe/plugins/`,
   so gitlore (a Claude-format plugin, user-scope for Claude Code) sits
   outside that surface, and the port makes no move to pull it in: bridging
   through a symlink into Claude Code's plugin cache was ruled out (see
   `rejected-alternatives.md`), and gitlore shipping natively is its own
-  repo's work. Uninstalled gitlore degrades to a printed directive the
-  skill cannot act on. The directive's `gitlore:commit` names the same
+  repo's work. Without gitlore the directive degrades in its text: dirty
+  memory is reported to the user as uncommitted until a session that has
+  gitlore, and the skill is not sent to a skill it cannot invoke. The directive's `gitlore:commit` names the same
   alias the adapter exposes (`{plugin namespace}:{frontmatter name}`,
   derived from the plugin name — `_native.py`), verified in the 3.0.1
   source.
@@ -57,15 +57,16 @@ The consequences, kept together so the shape reads in one place:
 
 The canonical Python is `vibe-plugin/scripts/`; `just sync-vibe` copies the
 four modules into the three caller skills (`handoff`, `precompact`,
-`autoname`), and each skill invokes the copy through the base directory the
+`autoname`; `autoname` runs from any directory, with no project root required), and each skill invokes the copy through the base directory the
 skill tool prints — the frame's decided invocation. The copies are not a
 build artifact Vibe assembles: the installed plugin ships them as-is, so
 byte equality is what keeps the copies one program, and it is asserted by
-`tests/test_vibe_checkpoint.py`. Type checking stays on the canonical copy
-alone (ruff, docformatter; mypy and ty read only `scripts/` and `tests/`),
-because three directories of flat modules reusing the same names collide
-under it, and a forked sibling would be type-checked against the other
-import path anyway. The check-size caps apply to every file as usual; the
+`tests/test_vibe_checkpoint.py`. The fork is not type-checked: mypy and ty read only
+`scripts/` and `tests/` (`[tool.mypy] files`, `[tool.ty]` in
+`pyproject.toml`), and three directories of flat modules reusing the same
+names would collide under them. What covers it is ruff, docformatter and
+`tests/test_vibe_checkpoint.py`, whose byte-equality assertion ties the
+copies to the canonical modules. The check-size caps apply to every file as usual; the
 checkpoint fork's directory is sized like the Claude one.
 
 ## The compact seam
@@ -74,14 +75,18 @@ The custom compaction prompt is the whole seam: `compaction_prompt_id` names
 a bare filename resolved from the project's `.vibe/prompts/` first, then the
 user's, then builtins (Vibe 3.0.1, `core/prompts/__init__.py`), and the
 prompt text replaces the builtin summary request entirely. The shipped
-`prompts/compaction.md` demands `TASK.md` and `TODO.md` reproduced verbatim
-in the summary before any paraphrase. Because the installed prompt is
-invisible to the skill protocol, the checkpoint carries a guard:
+`prompts/compaction.md` does not reproduce `TASK.md`, which `precompact`
+removes: it has the summary state the current task and the next action from
+the conversation, and instead of copying `TODO.md` it tells the next turn to
+re-read `TODO.md` from disk, where it survives. Because the installed prompt
+is invisible to the skill protocol, the checkpoint carries a guard:
 `compaction_prompt_guard` mirrors Vibe's own resolution (config file layers,
-then prompt dirs, via `tomllib` — reading a config grammar with its parser)
-and prints the setup line when the seam is absent, so a skipped install step
-surfaces at the boundary where it is cheap, not at the compaction where it
-is a lost task.
+the user layer resolved as Vibe does, then prompt dirs, via `tomllib` —
+reading a config grammar with its parser) and prints the setup line when the
+seam is absent, so a skipped install step surfaces at the boundary where it
+is cheap, not at the compaction where it is a lost task. Residual bound: the
+guard checks that the key names the plugin's prompt, so a custom prompt of
+the user's own, not the plugin's, passes it.
 
 ## Install and verification status
 

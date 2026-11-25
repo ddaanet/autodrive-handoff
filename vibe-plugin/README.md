@@ -10,9 +10,13 @@ prepared on disk and the user types the `/clear` or `/compact` themselves.
 1. **Copy the plugin into a plugins directory.**
 
    ```
+   rm -rf ~/.vibe/plugins/autodrive-handoff
    mkdir -p ~/.vibe/plugins
    cp -R vibe-plugin ~/.vibe/plugins/autodrive-handoff
    ```
+
+   The `rm -rf` makes the same three lines the update: without it, a
+   second `cp -R` nests `vibe-plugin/` inside the old install.
 
    (`.vibe/plugins/` in a trusted project works too; there it wins over the
    user scope on name collisions.) Run `/reload-plugins` in a running
@@ -43,8 +47,14 @@ prepared on disk and the user types the `/clear` or `/compact` themselves.
    mkdir -p .vibe/prompts
    cp ~/.vibe/plugins/autodrive-handoff/prompts/compaction.md \
       .vibe/prompts/handoff-compact.md
-   printf 'compaction_prompt_id = "handoff-compact"\n' >> .vibe/config.toml
    ```
+
+   Then set the key `compaction_prompt_id = "handoff-compact"` in
+   `.vibe/config.toml` as a top-level key, above the file's first `[table]`
+   header: below a header it belongs to that table, and Vibe and the guard
+   ignore it. When the file is absent, create it holding just that line;
+   when the key already exists, change its value rather than adding a
+   second one, which is invalid TOML.
 
    Then run `/reload`. The boundary itself reports when the prompt is
    missing — the checkpoint's compaction-prompt guard mirrors Vibe's own
@@ -90,8 +100,13 @@ what was refused.)
   caller skill directory, invoked through the base directory the skill
   tool prints. `TASK.md` and `TODO.md` keep the Claude plugin's templates
   and cap (1000 characters of prose).
-- **Updates**: reinstalling the directory replaces everything; the frame
+- **Updates**: rerun step 1, whose `rm -rf` replaces everything; the frame
   files in your project are kept as they are. The project-local compaction
   prompt is outside the plugin directory: after updating, re-copy
   `prompts/compaction.md` over `.vibe/prompts/handoff-compact.md`, or the
   summary runs under the old wording.
+- **Compaction carries the task in the summary.** `TASK.md` is gone at
+  `precompact`, so the prompt has the summary state the current task and
+  next action from the conversation, and tells the next turn to re-read
+  `TODO.md` from disk instead of reproducing it.
+- **`autoname` runs from any directory**; it needs no project root.
