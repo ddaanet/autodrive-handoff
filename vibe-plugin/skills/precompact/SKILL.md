@@ -1,6 +1,6 @@
 ---
 name: precompact
-description: 'Put the open work on disk before a `/compact`, so the compaction has nothing left to lose — the task and the todo are written to TASK.md and TODO.md, and the user runs `/compact`. Use when the user asks to "precompact", "prepare compaction", "prepare compact", "before compact", "before I compact", "about to compact", "flush memory before compact", "compact and continue", "compact then continue", "do this after compact", "compact and pick up", or otherwise signals an imminent `/compact`. For an imminent `/clear` or end of task, use the handoff skill.'
+description: 'Put the open work on disk before a `/compact`, so the compaction has nothing left to lose — the task and the todo are written to TASK.md and TODO.md, and the user pastes the `/compact` line it ends on. Use when the user asks to "precompact", "prepare compaction", "prepare compact", "before compact", "before I compact", "about to compact", "flush memory before compact", "compact and continue", "compact then continue", "do this after compact", "compact and pick up", or otherwise signals an imminent `/compact`. For an imminent `/clear` or end of task, use the handoff skill.'
 ---
 
 # precompact — Open Work on Disk at the Compact Boundary

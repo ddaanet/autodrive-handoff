@@ -3,7 +3,8 @@
 The native Vibe port of the autodrive-handoff plugin. Same boundaries, same
 frame files, one narrower mechanism: Vibe has no SessionStart-class hook,
 never reads CLAUDE.md, and has no driven continuation, so the transition is
-prepared on disk and the user types the `/clear` or `/compact` themselves.
+prepared on disk and the user types the `/clear` or pastes the `/compact` line
+themselves.
 
 ## Install
 

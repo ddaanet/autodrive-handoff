@@ -146,8 +146,9 @@ def test_precompact_writes_the_task_and_names_the_compact(
     assert result.returncode == 0, result.stderr
     assert (project / "TASK.md").read_text() == TASK
     assert result.stdout == (
-        "Once everything above is done, end on one line:\n"
-        "`Written — paste to compact: /compact TASK.md and TODO.md survive this"
+        "Once everything above is done, end on one line, the command the user"
+        " pastes to compact:\n"
+        "`/compact TASK.md and TODO.md survive this"
         " compaction on disk and are the task frame: do not reproduce them."
         " State the current task and its next action as the conversation now"
         " stands, and say the next turn first reads TASK.md and TODO.md from"
@@ -219,11 +220,7 @@ def test_todo_edit_replaces_one_occurrence(project: Path) -> None:
     )
     assert result.returncode == 0, result.stderr
     assert (project / "TODO.md").read_text() == "## Remaining\n\n\n- Second item.\n"
-    assert (
-        result.stdout.rstrip("\n")
-        .splitlines()[-1]
-        .startswith("`Written — paste to compact: /compact ")
-    )
+    assert result.stdout.rstrip("\n").splitlines()[-1].startswith("`/compact ")
 
 
 def test_autoname_prints_the_rename_line_and_writes_nothing(

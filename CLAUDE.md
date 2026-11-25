@@ -105,8 +105,8 @@ One line each, with the node under `docs/design/` that holds its behaviour.
   `tests/mod/fixtures/*.json`
 - `plugin-dev/` — vendored toolkit, read-only → release-infrastructure.md
 - `vibe-plugin/` — the native Vibe port: skills with the forked write path in
-  `scripts/`, copies in the caller skills (`just sync-vibe`), and the
-  compaction prompt → vibe-port.md
+  `scripts/` and copies in the caller skills (`just sync-vibe`) →
+  vibe-port.md
 - `.envrc` — activates the venv and pulls in `~/code/.envrc`
 - `.claude/rules/` — editing conventions, each scoped by its `paths:`
 
@@ -131,8 +131,8 @@ What you are touching → what to read first, under `docs/design/`:
   `with-commit`, the gitlore seam, FR9, FR12 → `the-checkpoint-directive.md`
 - `worktree_root.py`, `handoff_root_read`, `inject-checkpoint-root.sh`,
   `session-pointer.sh`, `HANDOFF_ROOT` → `scoping.md`
-- `vibe-plugin/`, its schema fork, the compaction prompt, the AGENTS.md
-  loader line, `sync-vibe` → `vibe-port.md`
+- `vibe-plugin/`, its schema fork, the pasted `/compact` direction, the
+  AGENTS.md loader line, `sync-vibe` → `vibe-port.md`
 - `plugin-dev/`, `release.just`, `$MARKETPLACE_DIR` →
   `release-infrastructure.md`
 - weighing or adding a standing call → `decisions.md`; re-proposing something

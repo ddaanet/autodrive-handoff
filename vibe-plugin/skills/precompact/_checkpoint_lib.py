@@ -129,20 +129,25 @@ def closing_directive(skill: str) -> str:
 
     One line per skill, quoted so the agent relays it rather than paraphrasing
     it. Under precompact the line carries the `/compact` command, with its
-    direction, for the user to paste. Anchored like the commit act and the
-    rename directive, so it is not appended to a reply still asking for the
-    memory directive's approval.
+    direction, for the user to paste: the code span holds the command alone, so
+    it is copied paste-ready. Anchored like the commit act and the rename
+    directive, so it is not appended to a reply still asking for the memory
+    directive's approval.
     """
     if skill not in ("handoff", "precompact"):
         raise ValueError(skill)
-    lead = "Once everything above is done, end on one line:"
     if skill == "handoff":
+        lead = "Once everything above is done, end on one line:"
         line = (
             "`Written — /clear when you are ready; the fresh session reads"
             " TASK.md and TODO.md first.`"
         )
     else:
-        line = f"`Written — paste to compact: /compact {COMPACT_DIRECTION}`"
+        lead = (
+            "Once everything above is done, end on one line, the command the"
+            " user pastes to compact:"
+        )
+        line = f"`/compact {COMPACT_DIRECTION}`"
     return _printf_lines(lead, line)
 
 
