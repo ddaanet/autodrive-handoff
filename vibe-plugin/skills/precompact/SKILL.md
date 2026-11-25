@@ -1,14 +1,16 @@
 ---
 name: precompact
-description: 'Put the open work on disk before a `/compact`, so the compaction has nothing left to lose — under Vibe the task itself crosses only through the custom compaction prompt, and this checkpoint also checks that it is installed. Use when the user asks to "precompact", "prepare compaction", "prepare compact", "before compact", "before I compact", "about to compact", "flush memory before compact", "compact and continue", "compact then continue", "do this after compact", "compact and pick up", or otherwise signals an imminent `/compact`. For an imminent `/clear` or end of task, use the handoff skill.'
+description: 'Put the open work on disk before a `/compact`, so the compaction has nothing left to lose — under Vibe the task is carried by the custom compaction prompt, and this checkpoint also checks that it is installed. Use when the user asks to "precompact", "prepare compaction", "prepare compact", "before compact", "before I compact", "about to compact", "flush memory before compact", "compact and continue", "compact then continue", "do this after compact", "compact and pick up", or otherwise signals an imminent `/compact`. For an imminent `/clear` or end of task, use the handoff skill.'
 ---
 
 # precompact — Open Work on Disk at the Compact Boundary
 
 Compaction paraphrases the conversation; disk survives it untouched. So:
 put what matters on disk before it runs. Under Vibe the task file is
-removed at this boundary and reaches the compacted session only through the
-custom compaction prompt — the checkpoint warns when it is not installed.
+removed at this boundary, so the task reaches the compacted session only
+through the custom compaction prompt, which asks the summariser for the task
+in hand and sends the next turn to TODO.md on disk — the checkpoint warns
+when the prompt is not installed.
 
 ## Protocol
 
@@ -68,8 +70,8 @@ by redoing finished work or re-litigating a settled decision.
   and drop from it with `edit`.
 - No `#` heading and no extra sections.
 
-There is no task snapshot and no `rename` field at this boundary: the summary
-carries the task, and the checkpoint removes the task file. The Claude
+There is no task snapshot and no `rename` field at this boundary: the compaction
+summary carries the task, and the checkpoint removes the task file. The Claude
 schema's `compact` focus string does not port — Vibe's `/compact` takes no
 argument; whatever the summariser must keep besides what is on disk belongs
 in the todo.
@@ -77,10 +79,11 @@ in the todo.
 Then run `checkpoint.py` (Bash) from the plugin's skill directory — the skill
 tool printed its path when this skill loaded, as
 `Base directory for this skill: <path>` — piping the whole call as JSON on
-stdin via a heredoc, with the project root as the cwd:
+stdin via a heredoc, run from the project root (a cwd inside a submodule such
+as the memory store would pass the root check and write the files there):
 
 ````
-python3 "<base directory>/checkpoint.py" <<'JSON'
+cd "<project root>" && python3 "<base directory>/checkpoint.py" <<'JSON'
 {
   "skill": "precompact",
   "commit": "<with-commit|without-commit>",
@@ -107,11 +110,11 @@ part in the order printed; each one waits for everything above it. The
 checkpoint owns the decision — do not re-derive or verify it. A non-zero
 exit names the offending field on stderr: fix the payload and retry.
 
-A `root` error means nothing was written: the cwd drifted off the project
-root — go back there and run the call again.
+A `root` error means nothing was written: the cwd was not a project root —
+run the call again from the project root.
 
 When a printed part warns that the custom compaction prompt is not
-installed, surface the warning and its setup line to the user before the
+installed, relay the warning and its setup line to the user before the
 closing line: running `/compact` without it loses the task to paraphrase.
 
 The last part is always the closing line. Vibe runs no transition for you:
@@ -119,7 +122,8 @@ end the reply on that line, so the user reads what to type — `/compact` —
 and types it.
 
 The normal case — nothing durable, clean memory, no commit — is one
-checkpoint call, and its output is one part, naming the line to end on.
+checkpoint call, and its output is one part, naming the line to end on (the
+guard adds a part when the prompt is not installed).
 
 ## Anti-patterns
 

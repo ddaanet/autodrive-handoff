@@ -33,8 +33,8 @@ takes belongs to a boundary this skill is not — no task file, no memory,
 no transition — and each is a schema error here rather than a silent
 ignore. A non-zero exit names the offending field on stderr.
 
-Its output is one line: the title, and the `/rename` command that carries
-it to the user. End the reply on that line — nothing under Vibe can type
+Its output ends on the `/rename` command that carries the title to the
+user. End the reply on that `/rename ...` line — nothing under Vibe can type
 `/rename`, so the user runs it.
 
 ## Anti-patterns

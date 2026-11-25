@@ -16,11 +16,12 @@ happen or the lists moved since (step 2).
 
 1. Find the task state already in context: the `TASK.md`/`TODO.md` content
    read at the session's first prompt, or any checkpoint output since.
-2. If the first prompt's read is missing (an older session, a repo without
-   the loader line yet), the session ran long, or the lists were edited
-   after that read, read `TODO.md` at the project root and take the open
-   decisions and remaining items from it. Absent both a read and edits, what
-   context holds is current however short it looks.
+2. Read `TODO.md` at the project root and take the open decisions and
+   remaining items from it when the first prompt's read is missing (an older
+   session, a repo without the loader line yet), when the lists were edited
+   after that read, or after a `/compact` (the compacted summary tells the
+   next turn to re-read `TODO.md`). Otherwise what context holds is current
+   however short it looks.
 3. List the open decisions and remaining items, grouped as they appear
    ("Open decisions" / "Remaining"). Trim for brevity; do not re-derive
    or editorialize beyond that.

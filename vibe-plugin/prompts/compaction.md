@@ -1,23 +1,19 @@
 CRITICAL: Respond with text only. Do NOT call any tools. Any tool call will be rejected.
 
-You are performing a CONTEXT CHECKPOINT COMPACTION. Create a handoff summary for another LLM that will resume this task. A handoff boundary ran just before this compaction: TASK.md and TODO.md in the project root are the sources of truth, and TASK.md no longer exists in context the next time the model looks — this summary is its only carrier.
+You are performing a CONTEXT CHECKPOINT COMPACTION. Create a handoff summary for another LLM that will resume this task. A handoff boundary may or may not have run just before this compaction (a plain /compact or an auto-compaction uses the same prompt). When one did, it removed TASK.md deliberately and left TODO.md on disk; either way the next model sees only this summary of the conversation, so the summary is the carrier of the task.
 
 The summary comes in two layers, in this order.
 
-## Layer 1: the files, verbatim
+## Layer 1: the task and the open work
 
-Reproduce the on-disk frames byte for byte, headings and blank lines included, inside fenced markdown blocks:
+- `## Current task` — the task in hand and its concrete next action, as the conversation now stands: the latest state of the work, not a copy of any TASK.md read earlier in the session (that read may be stale, and its "first action" may be done). Prose, not a recap.
+- `## Open decisions` and `## Remaining` — TODO.md survives on disk and the copy in this conversation may be stale (edited since, or by hand). Do not reproduce it. Say that the next turn's first act is to read TODO.md from disk and treat that file as the list. You may list the items you know of for orientation, flagged as not the file.
 
-- `## Current task` — the exact content of TASK.md. If TASK.md was absent or empty, write one line saying so.
-- `## Open decisions` and `## Remaining` — the exact content of TODO.md, the file reproduced in full.
-
-Do not trim, reword, reorder, or "summarize" these blocks. They exist so the next session keeps the exact identifiers, decisions and steps that were chosen to survive; a paraphrase defeats the boundary that wrote them.
-
-Add nothing of your own inside these blocks: no note, parenthetical, marker or status remark, not even after the last line. Anything inside a block reads as the file's content. A comment on a file goes in Layer 2, outside every fence.
+Add nothing of your own inside any fenced block you do quote: no note, parenthetical, marker or status remark, not even after the last line. Anything inside a block reads as the file's content. A comment on a file goes in Layer 2, outside every fence.
 
 ## Layer 2: what the files do not carry
 
-After the verbatim blocks, and briefly:
+After Layer 1, and briefly:
 
 - Key decisions made this session and their rationale, if not already on disk
 - Files touched and their state of in-progress work (paths + one-line status), where this is not inferable from the frames

@@ -123,10 +123,11 @@ Neither file takes a `#` heading or extra sections.
 Then run `checkpoint.py` (Bash) from the plugin's skill directory — the skill
 tool printed its path when this skill loaded, as
 `Base directory for this skill: <path>` — piping the whole wrap-up as JSON on
-stdin via a heredoc, with the project root as the cwd:
+stdin via a heredoc, run from the project root (a cwd inside a submodule such
+as the memory store would pass the root check and write the files there):
 
 ````
-python3 "<base directory>/checkpoint.py" <<'JSON'
+cd "<project root>" && python3 "<base directory>/checkpoint.py" <<'JSON'
 {
   "skill": "handoff",
   "commit": "<with-commit|without-commit>",
@@ -158,8 +159,8 @@ part in the order printed; each one waits for everything above it. The
 checkpoint owns the decision — do not re-derive or verify it. A non-zero
 exit names the offending field on stderr: fix the payload and retry.
 
-A `root` error means nothing was written: the cwd drifted off the project
-root — go back there and run the call again.
+A `root` error means nothing was written: the cwd was not a project root —
+run the call again from the project root.
 
 The last part is always the closing line. Vibe runs no transition for you:
 end the reply on that line, so the user reads what to type — `/clear` (and
