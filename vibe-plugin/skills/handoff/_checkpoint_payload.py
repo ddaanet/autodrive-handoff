@@ -2,11 +2,9 @@
 
 Vibe port of the Claude plugin's scripts/_checkpoint_payload.py, minus
 `build_transition`, `Transition` and `validate_continuation` (the sentinel
-and the driven continuation do not exist under Vibe) and with
-`validate_boundary` in their place: it narrows the `clear` (handoff) and
-`compact` (precompact) boolean, which decide the closing line's readiness
-wording. The `compact` focus string does not port — Vibe's `/compact` takes
-no argument, so the focus belongs in the todo.
+and the driven continuation do not exist under Vibe). The payload carries no
+transition flag: no `continue`, `clear` or `compact`, because nothing under
+Vibe drives a transition and the closing line is the same either way.
 
 Each validate_* function narrows one field of the JSON payload read on
 stdin, or exits 2 through lib.err naming the offending field. validate_task
@@ -86,14 +84,12 @@ _TOP_LEVEL_KEYS = (
     "rename",
     "task",
     "todo",
-    "clear",
-    "compact",
 )
 
 
 def validate_autoname_forbidden_fields(payload: JSONDict) -> None:
     """Error naming the field if any boundary-only field is present."""
-    for forbidden in ("commit", "task", "todo", "clear", "compact"):
+    for forbidden in ("commit", "task", "todo"):
         if forbidden in payload:
             lib.err(forbidden, 'forbidden when skill is "autoname"')
 
@@ -153,45 +149,6 @@ def _json_type(value: object) -> str:
         if isinstance(value, types):
             return name
     return "unknown"
-
-
-def validate_boundary(payload: JSONDict, skill: str) -> bool:
-    """Return whether the transition runs at once (the closing line's wording).
-
-    Under handoff the boolean is `clear`: true when the user asked for the
-    reset to be carried out, false when they are preparing one they will run
-    themselves. Under precompact it is `compact`; the focus string of the
-    Claude schema does not port, because Vibe's /compact takes no argument —
-    the error says so and points the focus at the todo. autoname returns
-    False: its forbidden-fields check has already refused both flags.
-    """
-    if skill == "autoname":
-        return False
-    if skill == "handoff":
-        if "compact" in payload:
-            lib.err("compact", 'forbidden when skill is "handoff"')
-        if "clear" not in payload:
-            lib.err("clear", 'required when skill is "handoff"')
-        return _require_bool("clear", payload["clear"])
-    if "clear" in payload:
-        lib.err("clear", 'forbidden when skill is "precompact"')
-    if "compact" not in payload:
-        lib.err("compact", 'required when skill is "precompact"')
-    return _require_bool("compact", payload["compact"])
-
-
-def _require_bool(field: str, value: object) -> bool:
-    """Return value as a bool, or error naming field describing both flags."""
-    if isinstance(value, bool):
-        return value
-    if _json_type(value) == "string":
-        lib.err(
-            field,
-            "must be true or false; Vibe's /compact takes no argument, so a"
-            " focus goes in the todo, not here",
-        )
-    lib.err(field, "must be true or false")
-    raise AssertionError("unreachable")  # lib.err() always raises
 
 
 def validate_task(payload: JSONDict) -> tuple[str, str]:

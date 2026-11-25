@@ -124,30 +124,36 @@ def rename_directive(title: str) -> str:
     )
 
 
-def closing_directive(skill: str, *, ready: bool) -> str:
+def closing_directive(skill: str) -> str:
     """Return the instruction to end the reply on one named line.
 
-    `ready` says the user asked for the transition to run at once (`clear: true`
-    under handoff, `compact: true` under precompact); false, they are preparing
-    one they will run themselves. Quoted either way, so the agent relays the
-    line rather than paraphrasing it. Anchored like the commit act and the
+    One line per skill, quoted so the agent relays it rather than paraphrasing
+    it. Under precompact the line carries the `/compact` command, with its
+    direction, for the user to paste. Anchored like the commit act and the
     rename directive, so it is not appended to a reply still asking for the
     memory directive's approval.
     """
     if skill not in ("handoff", "precompact"):
         raise ValueError(skill)
     lead = "Once everything above is done, end on one line:"
-    if ready:
+    if skill == "handoff":
         line = (
-            "`Ready to /clear — the fresh session reads TASK.md and TODO.md first.`"
-            if skill == "handoff"
-            else "`Ready to /compact — everything durable is on disk or in the todo.`"
+            "`Written — /clear when you are ready; the fresh session reads"
+            " TASK.md and TODO.md first.`"
         )
-    elif skill == "handoff":
-        line = "`Written — /clear when you are ready.`"
     else:
-        line = "`Written — /compact when you are ready.`"
+        line = f"`Written — paste to compact: /compact {COMPACT_DIRECTION}`"
     return _printf_lines(lead, line)
+
+
+# The argument of the pasted /compact: Vibe appends it to its builtin summary
+# request. One line, no backticks.
+COMPACT_DIRECTION = (
+    "TASK.md and TODO.md survive this compaction on disk and are the task"
+    " frame: do not reproduce them. State the current task and its next action"
+    " as the conversation now stands, and say the next turn first reads TASK.md"
+    " and TODO.md from disk."
+)
 
 
 def ledger_path(root: str) -> str | None:

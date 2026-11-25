@@ -38,26 +38,6 @@ prepared on disk and the user types the `/clear` or `/compact` themselves.
    an interactive session, or `--trust` on the headless invocation (it
    trusts the working directory for that run only).
 
-3. **Install the compaction prompt** (optional). It has the summary state
-   the current task and next action from the conversation, and sends the
-   next turn to re-read `TASK.md` and `TODO.md` from disk. Fine to skip
-   when you only ever use `/clear`:
-
-   ```
-   mkdir -p .vibe/prompts
-   cp ~/.vibe/plugins/autodrive-handoff/prompts/compaction.md \
-      .vibe/prompts/handoff-compact.md
-   ```
-
-   Then set the key `compaction_prompt_id = "handoff-compact"` in
-   `.vibe/config.toml` as a top-level key, above the file's first `[table]`
-   header: below a header it belongs to that table, and Vibe ignores it.
-   When the file is absent, create it holding just that line; when the key
-   already exists, change its value rather than adding a second one, which
-   is invalid TOML.
-
-   Then run `/reload`.
-
 ## Memory
 
 Vibe has no native memory system; durable learnings ride
@@ -88,9 +68,9 @@ what was refused.)
 - **No driven transitions.** Vibe cannot type `/clear`, and its hook
   surface (`post_agent`/`pre_tool`/`post_tool`) has no SessionStart and no
   Stop — so the mod, the sentinel in `.claude/autodrive`, the write guard
-  and the hold predicate have no counterpart, and the checkout drops the
-  `continue` payload field. The skills' closing lines name the command for
-  the user instead.
+  and the hold predicate have no counterpart, and the payload carries no
+  transition flag (`clear`, `compact`, `continue`). The skills' closing
+  lines name the command for the user instead.
 - **The frame is read, not injected.** The AGENTS.md line above replaces
   the SessionStart loader; the files arrive whole, never cut.
 - **One manifest, one write path.** `checkpoint.py` and its three modules
@@ -99,14 +79,11 @@ what was refused.)
   tool prints. `TASK.md` and `TODO.md` keep the Claude plugin's templates
   and cap (1000 characters of prose).
 - **Updates**: rerun step 1, whose `rm -rf` replaces everything; the frame
-  files in your project are kept as they are. The project-local compaction
-  prompt is outside the plugin directory: after updating, re-copy
-  `prompts/compaction.md` over `.vibe/prompts/handoff-compact.md`, or the
-  summary runs under the old wording.
+  files in your project are kept as they are.
 - **Nothing drives the compaction.** `precompact` flushes memory and
-  writes `TASK.md` and `TODO.md`, as `handoff` does, then names
-  `/compact` for you to type. Both files survive the compaction; the
-  prompt has the summary state the current task and next action from the
-  conversation, and tells the next turn to re-read both files from disk
-  instead of reproducing them.
+  writes `TASK.md` and `TODO.md`, as `handoff` does, then ends on a
+  `/compact` line for you to paste. Its text guides Vibe's own summary to
+  state the current task and next action and to point at the two files
+  instead of reproducing them. Add a focus to the line yourself if you want
+  one.
 - **`autoname` runs from any directory**; it needs no project root.

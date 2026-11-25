@@ -52,7 +52,6 @@ def main() -> int:
         validation.validate_autoname_forbidden_fields(payload)
     commit_mode = validation.validate_commit_mode(payload, skill)
     title = validation.validate_rename(payload, skill)
-    ready = validation.validate_boundary(payload, skill)
 
     plans: list[planning.FilePlan] = []
     if skill in ("handoff", "precompact"):
@@ -69,7 +68,6 @@ def main() -> int:
         skill,
         root,
         title,
-        ready=ready,
         commit_mode=commit_mode,
     )
     print_output(parts)
@@ -104,7 +102,6 @@ def compose_directives(
     root: Path,
     title: str,
     *,
-    ready: bool,
     commit_mode: str,
 ) -> list[str]:
     """Return the ordered, non-empty directive parts for this boundary.
@@ -130,7 +127,7 @@ def compose_directives(
         parts.append(lib.commit_directive(memory=bool(memory)))
     if skill == "handoff":
         parts.append(lib.rename_directive(title))
-    parts.append(lib.closing_directive(skill, ready=ready))
+    parts.append(lib.closing_directive(skill))
     return [part for part in parts if part]
 
 

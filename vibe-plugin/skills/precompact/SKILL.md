@@ -8,7 +8,7 @@ description: 'Put the open work on disk before a `/compact`, so the compaction h
 Compaction paraphrases the conversation; disk survives it untouched. So:
 put what matters on disk before it runs. Under Vibe nothing can run
 `/compact` for you: this skill flushes memory, writes `TASK.md` and
-`TODO.md`, and its closing line names `/compact` for the user to type.
+`TODO.md`, and its closing line hands the user a `/compact` line to paste.
 
 ## Protocol
 
@@ -25,11 +25,6 @@ These writes are the only tool calls allowed before `checkpoint.py`.
 
 Decide the following from the request and the state of the work. None of
 them has a default: considering the question is the whole contribution.
-
-**Does the user run `/compact` at once?** `compact: true` when the user
-asked for the compaction to be carried out — "compact and continue",
-"compact then continue". `compact: false` when they are preparing one they
-will run themselves — "precompact", "before I compact".
 
 **Does the ask imply a commit?** Two answers of equal weight:
 **`with-commit`** — the request this call serves implies a commit, a test
@@ -99,9 +94,7 @@ what follows it. Prose. Not a recap.>
   and drop from it with `edit` rather than rewriting it into this template.
 
 Neither file takes a `#` heading or extra sections. There is no `rename`
-field at this boundary. The Claude schema's `compact` focus string does not
-port — Vibe's `/compact` takes no argument; whatever the summariser must
-keep besides what is on disk belongs in the two files.
+field at this boundary.
 
 Then run `checkpoint.py` (Bash) from the plugin's skill directory — the skill
 tool printed its path when this skill loaded, as
@@ -114,7 +107,6 @@ cd "<project root>" && python3 "<base directory>/checkpoint.py" <<'JSON'
 {
   "skill": "precompact",
   "commit": "<with-commit|without-commit>",
-  "compact": <true|false>,
   "task": <"task content"|{"action": "clear"}>,
   "todo": <"todo content"|{"action": "clear"}|{"action": "keep"}|{"action": "edit", "old_string": "…", "new_string": "…"}>
 }
@@ -145,16 +137,16 @@ A `root` error means nothing was written: the cwd was not a project root —
 run the call again from the project root.
 
 The last part is always the closing line. Vibe runs no transition for you:
-end the reply on that line, so the user reads what to type — `/compact` —
-and types it.
+end the reply on that line, so the user reads the `/compact` line to paste —
+and pastes it.
 
 The normal case — nothing durable, clean memory, no commit — is one
 checkpoint call, and its output is one part, naming the line to end on.
 
 ## Anti-patterns
 
-- Submitting a `continue` field or the Claude schema's focus string. There
-  is no driven transition under Vibe, and `/compact` takes no argument.
+- Submitting `continue`, `clear` or `compact`. There is no driven
+  transition under Vibe; the checkpoint rejects them.
 - A `rename` field in the checkpoint payload. A title is autoname's, and
   the checkpoint rejects the key here.
 - Reading `TASK.md`, `TODO.md`, or any other project file "to check"

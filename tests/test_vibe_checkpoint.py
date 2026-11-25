@@ -68,14 +68,13 @@ def test_copies_are_identical_to_the_canonical_scripts() -> None:
 def test_handoff_writes_the_frame_and_names_the_clear(
     project: Path,
 ) -> None:
-    """A driven handoff writes both files and ends on the /clear line."""
+    """A handoff writes both files and ends on the one /clear line."""
     result = run_checkpoint(
         project,
         {
             "skill": "handoff",
             "commit": "with-commit",
             "rename": "Port The Handoff Plugin To Vibe",
-            "clear": True,
             "task": TASK,
             "todo": TODO,
         },
@@ -83,35 +82,13 @@ def test_handoff_writes_the_frame_and_names_the_clear(
     assert result.returncode == 0, result.stderr
     assert (project / "TASK.md").read_text() == TASK
     assert (project / "TODO.md").read_text() == TODO
-    assert "Ready to /clear" in result.stdout
     assert (
         result.stdout.rstrip("\n").splitlines()[-1]
-        == "`Ready to /clear — the fresh session reads TASK.md and TODO.md first.`"
+        == "`Written — /clear when you are ready; the fresh session reads"
+        " TASK.md and TODO.md first.`"
     )
     assert "`/rename Port The Handoff Plugin To Vibe`" in result.stdout
     assert "make the commit the request called for" in result.stdout
-
-
-def test_handoff_prepared_wording_when_not_clear(project: Path) -> None:
-    """Clear: false closes on the prepared line, not the ready one."""
-    result = run_checkpoint(
-        project,
-        {
-            "skill": "handoff",
-            "commit": "without-commit",
-            "rename": "Some Title",
-            "clear": False,
-            "task": TASK,
-            "todo": {"action": "keep"},
-        },
-    )
-    assert result.returncode == 0, result.stderr
-    assert (
-        result.stdout.rstrip("\n").splitlines()[-1]
-        == "`Written — /clear when you are ready.`"
-    )
-    assert "Ready to /clear" not in result.stdout
-    assert "`/rename Some Title`" in result.stdout
 
 
 def test_claude_continue_key_is_unknown(project: Path) -> None:
@@ -122,7 +99,6 @@ def test_claude_continue_key_is_unknown(project: Path) -> None:
             "skill": "handoff",
             "commit": "with-commit",
             "rename": "Some Title",
-            "clear": True,
             "continue": True,
             "task": TASK,
             "todo": TODO,
@@ -141,7 +117,6 @@ def test_task_over_limit_rejected_and_nothing_written(project: Path) -> None:
             "skill": "handoff",
             "commit": "with-commit",
             "rename": "Some Title",
-            "clear": True,
             "task": "## Current task\n\n" + "word " * 300,
             "todo": TODO,
         },
@@ -155,15 +130,14 @@ def test_task_over_limit_rejected_and_nothing_written(project: Path) -> None:
 def test_precompact_writes_the_task_and_names_the_compact(
     project: Path,
 ) -> None:
-    """Compact: true writes TASK.md as handoff does, and the output is the
-    closing line alone: no compaction-prompt check."""
+    """Precompact writes TASK.md as handoff does, and the output is the
+    closing line alone: the /compact line with its direction."""
     (project / "TASK.md").write_text("## Current task\n\nstale\n")
     result = run_checkpoint(
         project,
         {
             "skill": "precompact",
             "commit": "without-commit",
-            "compact": True,
             "task": TASK,
             "todo": {"action": "keep"},
         },
@@ -173,7 +147,11 @@ def test_precompact_writes_the_task_and_names_the_compact(
     assert (project / "TASK.md").read_text() == TASK
     assert result.stdout == (
         "Once everything above is done, end on one line:\n"
-        "`Ready to /compact — everything durable is on disk or in the todo.`\n"
+        "`Written — paste to compact: /compact TASK.md and TODO.md survive this"
+        " compaction on disk and are the task frame: do not reproduce them."
+        " State the current task and its next action as the conversation now"
+        " stands, and say the next turn first reads TASK.md and TODO.md from"
+        " disk.`\n"
     )
 
 
@@ -187,7 +165,6 @@ def test_precompact_without_task_errors_and_keeps_the_task_file(
         {
             "skill": "precompact",
             "commit": "without-commit",
-            "compact": False,
             "todo": {"action": "keep"},
         },
         skill="precompact",
@@ -197,21 +174,33 @@ def test_precompact_without_task_errors_and_keeps_the_task_file(
     assert (project / "TASK.md").read_text() == TASK
 
 
-def test_precompact_focus_string_refused(project: Path) -> None:
-    """The Claude schema's focus string says where the focus belongs instead."""
-    result = run_checkpoint(
-        project,
-        {
-            "skill": "precompact",
-            "commit": "without-commit",
-            "compact": "keep the parser work",
-            "task": {"action": "clear"},
-            "todo": {"action": "keep"},
-        },
-        skill="precompact",
-    )
+@pytest.mark.parametrize(
+    ("skill", "key", "value"),
+    [
+        ("precompact", "compact", True),
+        ("precompact", "compact", "keep the parser work"),
+        ("precompact", "clear", True),
+        ("handoff", "clear", True),
+        ("handoff", "compact", False),
+    ],
+)
+def test_transition_keys_are_unknown(
+    project: Path, skill: str, key: str, value: object
+) -> None:
+    """No transition flag exists: `clear` and `compact` are unknown keys."""
+    payload: dict[str, Any] = {
+        "skill": skill,
+        "commit": "without-commit",
+        "task": {"action": "clear"},
+        "todo": {"action": "keep"},
+        key: value,
+    }
+    if skill == "handoff":
+        payload["rename"] = "Some Title"
+    result = run_checkpoint(project, payload, skill=skill)
     assert result.returncode == 2
-    assert "takes no argument" in result.stderr
+    assert f'unknown key "{key}"' in result.stderr
+    assert not (project / "TASK.md").exists()
 
 
 def test_todo_edit_replaces_one_occurrence(project: Path) -> None:
@@ -223,7 +212,6 @@ def test_todo_edit_replaces_one_occurrence(project: Path) -> None:
         {
             "skill": "precompact",
             "commit": "with-commit",
-            "compact": False,
             "task": {"action": "clear"},
             "todo": {"action": "edit", "old_string": "- Old item.", "new_string": ""},
         },
@@ -232,8 +220,9 @@ def test_todo_edit_replaces_one_occurrence(project: Path) -> None:
     assert result.returncode == 0, result.stderr
     assert (project / "TODO.md").read_text() == "## Remaining\n\n\n- Second item.\n"
     assert (
-        result.stdout.rstrip("\n").splitlines()[-1]
-        == "`Written — /compact when you are ready.`"
+        result.stdout.rstrip("\n")
+        .splitlines()[-1]
+        .startswith("`Written — paste to compact: /compact ")
     )
 
 
@@ -279,7 +268,6 @@ def test_memory_directive_names_the_dirty_submodule(tmp_path: Path) -> None:
             "skill": "handoff",
             "commit": "with-commit",
             "rename": "Some Title",
-            "clear": True,
             "task": TASK,
             "todo": TODO,
         },
@@ -299,7 +287,6 @@ def test_root_check_refuses_a_non_project_cwd(tmp_path: Path) -> None:
             "skill": "handoff",
             "commit": "with-commit",
             "rename": "Some Title",
-            "clear": True,
             "task": TASK,
             "todo": TODO,
         },

@@ -30,10 +30,9 @@ you type nothing.
 
 **Mistral Vibe:** the same boundaries ship as a native Vibe plugin, in-repo
 under `vibe-plugin/` — not installed by this marketplace entry; copy that
-directory into `~/.vibe/plugins/`, add one AGENTS.md line, and install the
-compaction prompt (`vibe-plugin/README.md` has the three steps). The
-transitions are prepared, not driven: the user types the `/clear` or
-`/compact`.
+directory into `~/.vibe/plugins/`, and add one AGENTS.md line
+(`vibe-plugin/README.md` has the two steps). The transitions are prepared,
+not driven: the user types the `/clear` or pastes the `/compact` line.
 
 ## Use it
 

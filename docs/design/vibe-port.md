@@ -6,7 +6,9 @@ verified against mistral-vibe 3.0.1): Vibe's hook surface is
 `post_agent`/`pre_tool`/`post_tool` only — no SessionStart, no Stop, no
 PreCompact — and its Claude-format adapter refuses executable scripts, so the
 mod cannot run in any form. The port is `vibe-plugin/`, a separate tree: four
-skills, one write path, one AGENTS.md line, one optional compaction prompt.
+skills, one write path, one AGENTS.md line. Vibe plugins cannot execute a
+prompt or drive a transition: `/clear`, `/compact` and a continuation are not
+supported by the platform, so the mechanics are the simple ones.
 
 ## What ports and what drops
 
@@ -14,12 +16,12 @@ The write path ports; everything that ordered a transition around it drops.
 The consequences, kept together so the shape reads in one place:
 
 - **The write path is `vibe-plugin/scripts/checkpoint.py`** and its three
-  `_checkpoint_*` siblings. The payload schema loses `continue`, which only a
-  driven continuation could serve, and `compact` becomes a boolean only —
-  Vibe's `/compact` takes no argument, so the Claude focus string has no
-  carrier; the error says to put the focus in the todo. `precompact` drives
-  no compaction: it is the memory flush and the `TASK.md`/`TODO.md`
-  update, then the closing line naming `/compact` for the user.
+  `_checkpoint_*` siblings. The payload schema loses `continue`, `clear` and
+  `compact`: it carries no transition flag, because nothing drives a
+  transition and the closing line is the same either way; each key is refused
+  as unknown. `precompact` drives no compaction: it is the memory flush and
+  the `TASK.md`/`TODO.md` update, then the closing line handing the user a
+  `/compact` line to paste.
 - **The transition is user-run.** Nothing under Vibe can type `/clear`
   (`/compact`, `/rename`), so the closing directive names the command for the
   user instead of announcing an armed transition, and the skills' anti-pattern
@@ -74,21 +76,25 @@ checkpoint fork's directory is sized like the Claude one.
 ## The compact seam
 
 There is no way to drive a compaction under Vibe, so `precompact` does what
-`handoff` does to the two files and leaves `/compact` to the user: both
-files survive it on disk. The optional custom compaction prompt is the one
-piece of the seam left: `compaction_prompt_id` names a bare filename
-resolved from the project's `.vibe/prompts/` first, then the user's, then
-builtins (Vibe 3.0.1, `core/prompts/__init__.py`), and the prompt text
-replaces the builtin summary request entirely. The shipped
-`prompts/compaction.md` has the summary state the current task and the next
-action from the conversation, and instead of copying `TASK.md` and
-`TODO.md` it tells the next turn to re-read both from disk, where they
-survive. The checkpoint does not check whether the prompt is installed: with
-the task on disk, a missing prompt costs a paraphrase, not the task.
+`handoff` does to the two files and ends on a `/compact <direction>` line
+for the user to paste: both files survive the compaction on disk. Vibe's
+TUI `/compact` takes optional text to guide the summary (3.0.1,
+`/compact [instructions]`), appended to the builtin summary request. The
+direction (`COMPACT_DIRECTION` in `_checkpoint_lib.py`) says the two files
+are the task frame and must not be reproduced, asks the summary for the
+current task and next action as the conversation stands, and says the next
+turn first reads both files from disk. No focus field exists: a user who
+wants one adds it to the pasted line.
+
+This replaced an installed `compaction_prompt_id` prompt. Plugins cannot
+execute a prompt, and that prompt replaced the whole builtin summary request,
+had to be installed and refreshed by hand, and broke config validation when
+its file was missing. A direction on the user's own `/compact` has none of
+those costs.
 
 ## Install and verification status
 
-Install is copy-plus-two-config-steps, in `vibe-plugin/README.md`. Verified
+Install is copy-plus-one-config-step, in `vibe-plugin/README.md`. Verified
 2026-11-23 under 3.0.1 source and the test suite: the end-to-end checkpoint
 (payload on stdin from a skill-directory path), the schema fork, and
 gitlore's alias naming. Not yet verified live: a

@@ -12,8 +12,8 @@ them is gone.
 
 `checkpoint.py` does the writes and prints what is left to do. This skill
 decides what goes in them, then follows what it prints. Nothing under Vibe
-runs a `/clear` for you: when the user asked for the reset, this skill
-prepares it and its closing line names the command back to the user.
+runs a `/clear` for you: this skill prepares it and its closing line names
+the command for the user to type.
 
 ## Protocol
 
@@ -30,13 +30,6 @@ These writes are the only tool calls allowed before `checkpoint.py`.
 
 Decide the following from the request and the state of the work. None of
 them has a default: considering the question is the whole contribution.
-
-**Does the user run `/clear` at once?** `clear: true` when the user asked
-for the reset to happen now — "clear and continue", "continue in a new
-session", "pick this up in a new chat", and a bare "continue" after the
-handoff: there is no continuing this side of a clear. `clear: false` when
-they are preparing one they will run themselves — "save handoff",
-"before I clear", "wrap up".
 
 **Does the ask imply a commit?** Two answers of equal weight:
 
@@ -63,8 +56,7 @@ Then decide the content:
 
 The fresh session reads the two files whole (the AGENTS.md loader line), so
 whatever is in them arrives verbatim — and whatever is not in them is lost.
-There is no continuation prompt and no driven transition under Vibe: do not
-carry the Claude payload's `continue` field; this schema rejects it.
+There is no continuation prompt and no driven transition under Vibe.
 
 **Task template:**
 
@@ -132,7 +124,6 @@ cd "<project root>" && python3 "<base directory>/checkpoint.py" <<'JSON'
   "skill": "handoff",
   "commit": "<with-commit|without-commit>",
   "rename": "<session title>",
-  "clear": <true|false>,
   "task": <"task content"|{"action": "clear"}>,
   "todo": <"todo content"|{"action": "clear"}|{"action": "keep"}|{"action": "edit", "old_string": "…", "new_string": "…"}>
 }
@@ -175,7 +166,7 @@ end the reply on that line, so the user reads what to type — `/clear` (and
   stale by the time it writes.
 - Padding "Current task" to look thorough. Length should track how many
   threads are genuinely in flight, not effort.
-- Submitting a `continue` field, or any other Claude-only payload key. The
-  schema rejects them: there is no driven transition under Vibe.
+- Submitting `continue`, `clear`, `compact` or any other Claude-only payload
+  key. The schema rejects them: there is no driven transition under Vibe.
 - Paraphrasing the closing line into prose. The user acts on the line
   verbatim: `/clear` is a slash command no agent can type.
