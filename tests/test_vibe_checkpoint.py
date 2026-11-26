@@ -45,6 +45,18 @@ def run_checkpoint(
     )
 
 
+def handoff_payload(**overrides: object) -> dict[str, object]:
+    """Return a valid Vibe handoff payload, with overrides applied."""
+    return {
+        "skill": "handoff",
+        "commit": "with-commit",
+        "rename": "Some Title",
+        "task": TASK,
+        "todo": TODO,
+        **overrides,
+    }
+
+
 @pytest.fixture
 def project(tmp_path: Path) -> Path:
     """A throwaway project root: git init marks it for the root check."""
@@ -71,13 +83,7 @@ def test_handoff_writes_the_frame_and_names_the_clear(
     """A handoff writes both files and ends on the one /clear line."""
     result = run_checkpoint(
         project,
-        {
-            "skill": "handoff",
-            "commit": "with-commit",
-            "rename": "Port The Handoff Plugin To Vibe",
-            "task": TASK,
-            "todo": TODO,
-        },
+        handoff_payload(rename="Port The Handoff Plugin To Vibe"),
     )
     assert result.returncode == 0, result.stderr
     assert (project / "TASK.md").read_text() == TASK
@@ -95,14 +101,7 @@ def test_claude_continue_key_is_unknown(project: Path) -> None:
     """The Claude schema's `continue` is rejected before anything is written."""
     result = run_checkpoint(
         project,
-        {
-            "skill": "handoff",
-            "commit": "with-commit",
-            "rename": "Some Title",
-            "continue": True,
-            "task": TASK,
-            "todo": TODO,
-        },
+        handoff_payload(**{"continue": True}),
     )
     assert result.returncode == 2
     assert 'unknown key "continue"' in result.stderr
@@ -113,13 +112,7 @@ def test_task_over_limit_rejected_and_nothing_written(project: Path) -> None:
     """A 1001-character prose body exits 2; the absent file proves the order."""
     result = run_checkpoint(
         project,
-        {
-            "skill": "handoff",
-            "commit": "with-commit",
-            "rename": "Some Title",
-            "task": "## Current task\n\n" + "word " * 300,
-            "todo": TODO,
-        },
+        handoff_payload(task="## Current task\n\n" + "word " * 300),
     )
     assert result.returncode == 2
     assert "the limit is 1000" in result.stderr
@@ -261,13 +254,7 @@ def test_memory_directive_names_the_dirty_submodule(tmp_path: Path) -> None:
     dirty_memory(project)
     result = run_checkpoint(
         project,
-        {
-            "skill": "handoff",
-            "commit": "with-commit",
-            "rename": "Some Title",
-            "task": TASK,
-            "todo": TODO,
-        },
+        handoff_payload(),
     )
     assert result.returncode == 0, result.stderr
     assert "gitlore memory has uncommitted changes:" in result.stdout
@@ -280,13 +267,7 @@ def test_root_check_refuses_a_non_project_cwd(tmp_path: Path) -> None:
     """A cwd with no project marker errors naming root, before any write."""
     result = run_checkpoint(
         tmp_path,
-        {
-            "skill": "handoff",
-            "commit": "with-commit",
-            "rename": "Some Title",
-            "task": TASK,
-            "todo": TODO,
-        },
+        handoff_payload(),
     )
     assert result.returncode == 2
     assert "root: the cwd is not a project root" in result.stderr

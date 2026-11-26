@@ -291,14 +291,7 @@ def test_sentinel_typing_nothing_arms_even_with_memory_gate_pending(
 ) -> None:
     repo = make_gitlore_repo(tmp_path)
     dirty_memory(repo)
-    payload = {
-        "skill": "precompact",
-        "commit": commit,
-        "compact": False,
-        "continue": False,
-        "task": task_clear(),
-        "todo": todo_keep(),
-    }
+    payload = precompact_payload(commit)
     result = run_checkpoint(repo, payload)
     assert result.returncode == 0
     lines = (repo / ".claude" / "autodrive").read_text().splitlines()

@@ -1,10 +1,7 @@
 """Payload validation for the Vibe checkpoint.
 
-Vibe port of the Claude plugin's scripts/_checkpoint_payload.py, minus
-`build_transition`, `Transition` and `validate_continuation` (the sentinel
-and the driven continuation do not exist under Vibe). The payload carries no
-transition flag: no `continue`, `clear` or `compact`, because nothing under
-Vibe drives a transition and the closing line is the same either way.
+The payload carries no transition flag: `continue`, `clear` and `compact` are
+unknown keys, because nothing under Vibe drives a transition.
 
 Each validate_* function narrows one field of the JSON payload read on
 stdin, or exits 2 through lib.err naming the offending field. validate_task
@@ -94,14 +91,8 @@ def validate_autoname_forbidden_fields(payload: JSONDict) -> None:
             lib.err(forbidden, 'forbidden when skill is "autoname"')
 
 
-def validate_commit_mode(payload: JSONDict, skill: str) -> str:
-    """Return the commit mode.
-
-    "" for autoname (it carries no commit awareness); the commit mode string
-    otherwise.
-    """
-    if skill == "autoname":
-        return ""
+def validate_commit_mode(payload: JSONDict) -> str:
+    """Return the commit mode, "with-commit" or "without-commit"."""
     commit_mode = payload.get("commit")
     if commit_mode not in ("with-commit", "without-commit"):
         if commit_mode in (None, ""):

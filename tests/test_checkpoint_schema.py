@@ -173,14 +173,7 @@ def test_rename_missing_under_handoff_errors_naming_rename(tmp_path: Path) -> No
 
 def test_each_of_two_skill_values_accepted(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
-    payload = {
-        "skill": "precompact",
-        "commit": "without-commit",
-        "compact": False,
-        "continue": False,
-        "task": task_clear(),
-        "todo": todo_keep(),
-    }
+    payload = precompact_payload("without-commit")
     assert run_checkpoint(repo, payload).returncode == 0
     payload = {
         "skill": "handoff",
@@ -214,13 +207,8 @@ def test_retired_driven_skill_names_rejected(tmp_path: Path) -> None:
 def test_rename_present_under_precompact_errors(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
     payload = {
-        "skill": "precompact",
-        "commit": "with-commit",
+        **precompact_payload("with-commit"),
         "rename": "Not Allowed",
-        "compact": False,
-        "continue": False,
-        "task": task_clear(),
-        "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)
     assert result.returncode == 2
@@ -234,12 +222,7 @@ def test_empty_or_null_rename_under_precompact_errors(
 ) -> None:
     repo = make_repo(tmp_path)
     payload = {
-        "skill": "precompact",
-        "commit": "with-commit",
-        "compact": False,
-        "continue": False,
-        "task": task_clear(),
-        "todo": todo_keep(),
+        **precompact_payload("with-commit"),
         "rename": value,
     }
     result = run_checkpoint(repo, payload)
@@ -375,12 +358,5 @@ def test_rename_not_a_string_errors(tmp_path: Path, value: object) -> None:
 
 def test_precompact_with_rename_omitted_accepted(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
-    payload = {
-        "skill": "precompact",
-        "commit": "without-commit",
-        "compact": False,
-        "continue": False,
-        "task": task_clear(),
-        "todo": todo_keep(),
-    }
+    payload = precompact_payload("without-commit")
     assert run_checkpoint(repo, payload).returncode == 0

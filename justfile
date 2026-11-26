@@ -55,13 +55,16 @@ check-plugin:
     shellcheck -x bin/* scripts/*.sh tests/*.bats tests/*.bash
     record-sentinel
 
+# The Python files docformatter checks (ruff takes its own include from pyproject.toml).
+python_files := "scripts/*.py tests/*.py vibe-plugin/scripts/*.py"
+
 # Python lint + type checks and the bats + pytest suites; skipped while its inputs are unchanged
 check-code:
     #!{{ plugin_dev_gate_prolog }}
     sentinel-guard check-code .gitignore bin hooks scripts tests pyproject.toml uv.lock vibe-plugin/scripts vibe-plugin/skills
     ruff check
     ruff format --check
-    docformatter --check scripts/*.py tests/*.py vibe-plugin/scripts/*.py
+    docformatter --check {{ python_files }}
     mypy
     ty check
     plugin-dev/run-bats.sh tests/*.bats
@@ -76,12 +79,13 @@ check-code:
 sync-vibe:
     #!/usr/bin/env bash
     set -euo pipefail
+    mods=(vibe-plugin/scripts/*.py)
     skills=0
     for target in vibe-plugin/skills/*/checkpoint.py; do
-        cp vibe-plugin/scripts/*.py "$(dirname "$target")/"
+        cp "${mods[@]}" "$(dirname "$target")/"
         skills=$((skills + 1))
     done
-    echo "sync-vibe: copied $(ls vibe-plugin/scripts/*.py | wc -l | tr -d ' ') modules into $skills skills"
+    echo "sync-vibe: copied ${#mods[@]} modules into $skills skills"
 
 # `claude plugin validate --strict`, minus two findings that cannot be fixed,
 # each dropped only on the entry whose `file` is the one it belongs to: the
@@ -114,7 +118,7 @@ prerelease: precommit
 lint:
     ruff check
     ruff format --check
-    docformatter --check scripts/*.py tests/*.py
+    docformatter --check {{ python_files }}
 
 # Both type checkers, strict mypy + ty. Both gate precommit.
 typecheck:

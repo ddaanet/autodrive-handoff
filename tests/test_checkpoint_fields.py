@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 from conftest import (
     make_repo,
+    precompact_payload,
     run_checkpoint,
     task_clear,
     todo_keep,
@@ -214,12 +215,7 @@ def test_top_level_unknown_key_errors_under_handoff(tmp_path: Path) -> None:
 def test_top_level_unknown_key_errors_under_precompact(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
     payload = {
-        "skill": "precompact",
-        "commit": "without-commit",
-        "compact": False,
-        "continue": False,
-        "task": task_clear(),
-        "todo": todo_keep(),
+        **precompact_payload("without-commit"),
         "bogus": "x",
     }
     result = run_checkpoint(repo, payload)

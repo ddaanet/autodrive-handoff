@@ -47,15 +47,17 @@ relation_of() {
     [[ "$v" =~ $semver ]] || return 1
     if [[ "$v" == "$c" ]]; then
         echo equal
-    elif [[ "$v" == "$cx.$cy.$((cz + 1))" ]]; then
-        echo "vibe one patch ahead"
-    elif [[ "$v" == "$cx.$((cy + 1)).0" ]]; then
-        echo "vibe one minor ahead"
-    elif [[ "$v" == "$((cx + 1)).0.0" ]]; then
-        echo "vibe one major ahead"
-    else
-        return 1
+        return 0
     fi
+    local -a bumps=("$cx.$cy.$((cz + 1))" patch "$cx.$((cy + 1)).0" minor "$((cx + 1)).0.0" major)
+    local i
+    for ((i = 0; i < ${#bumps[@]}; i += 2)); do
+        if [[ "$v" == "${bumps[i]}" ]]; then
+            echo "vibe one ${bumps[i + 1]} ahead"
+            return 0
+        fi
+    done
+    return 1
 }
 
 # Prints the manifest's .version; fails on a missing file, a parse error or an

@@ -1,9 +1,5 @@
 """Plan layer for the Vibe checkpoint.
 
-Vibe port of the Claude plugin's scripts/_checkpoint_plan.py, minus
-`has_body_after` (the continuation it served does not exist under Vibe) and the
-sentinel constants' _lib.sh mirror-comment.
-
 Resolves each half of the wrap-up, the task and the todo, to a `FilePlan` before
 anything is written, so every payload failure surfaces while the plans are being
 resolved; `apply_plan` then performs them. Errors go through
@@ -125,19 +121,16 @@ def apply_plan(plan: FilePlan) -> None:
         plan.path.unlink(missing_ok=True)
 
 
-def write_replacing(path: Path, body: str, *, prefix: str | None = None) -> None:
+def write_replacing(path: Path, body: str) -> None:
     """Write body at path through a sibling temporary file and os.replace.
 
     The rename swaps whatever is at the name, a link included, for the new file
     rather than writing through it. The new file keeps the mode of the regular
     file it replaces, else takes the one the umask gives a new file; the
-    temporary file is removed when anything fails. `prefix` names the temporary
-    file, `.<name>.` by default.
+    temporary file, named `.<name>.*`, is removed when anything fails.
     """
     mode = replaced_mode(path)
-    if prefix is None:
-        prefix = f".{path.name}."
-    fd, name = tempfile.mkstemp(prefix=prefix, dir=path.parent)
+    fd, name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as tmp:
             tmp.write(body)

@@ -1,17 +1,13 @@
 #!/usr/bin/env python3
 """Shared helpers for the Vibe checkpoint.
 
-The checkpoint.py and _checkpoint_plan.py of the Vibe port: the gitlore
-directives and the error helper unchanged from the Claude plugin's
-scripts/_checkpoint_lib.py, the frame-fitting half and the
---has-body/--fit-frame CLI dropped (the loaders that consumed them do not
-exist under Vibe), the closing directive rewritten for a boundary the *user*
-carries out — nothing under Vibe can type `/clear` — and a rename directive
-where the drive's `/rename` used to run.
+The gitlore memory directives, the commit act, the rename directive and the
+closing directive, the last two written for a boundary the *user* carries out:
+nothing under Vibe can type `/clear` or `/rename`.
 
 Each directive function returns its directive text, or "" when silent; the
-caller decides whether to print it. `err` is the one exit for a schema or
-write-time error, shared by both callers.
+caller decides whether to print it. `err` is the one exit for a schema or write-
+time error, shared by both callers.
 """
 
 from __future__ import annotations

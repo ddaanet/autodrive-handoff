@@ -45,22 +45,24 @@ def main() -> int:
     """
     payload = validation.read_payload()
     skill = validation.validate_skill(payload)
-    root = Path.cwd() if skill == "autoname" else validate_root()
-    validation.validate_top_level_keys(payload)
-
     if skill == "autoname":
+        # A rename only: no root check, nothing written, the rename line alone.
+        validation.validate_top_level_keys(payload)
         validation.validate_autoname_forbidden_fields(payload)
-    commit_mode = validation.validate_commit_mode(payload, skill)
-    title = validation.validate_rename(payload, skill)
+        title = validation.validate_rename(payload, skill)
+        print_output([lib.rename_directive(title)])
+        return 0
 
-    plans: list[planning.FilePlan] = []
-    if skill in ("handoff", "precompact"):
-        task_fields = validation.validate_task(payload)
-        todo_fields = validation.validate_todo(payload)
-        plans = [
-            planning.plan_task(root, *task_fields),
-            planning.plan_todo(root, *todo_fields),
-        ]
+    root = validate_root()
+    validation.validate_top_level_keys(payload)
+    commit_mode = validation.validate_commit_mode(payload)
+    title = validation.validate_rename(payload, skill)
+    task_fields = validation.validate_task(payload)
+    todo_fields = validation.validate_todo(payload)
+    plans = [
+        planning.plan_task(root, *task_fields),
+        planning.plan_todo(root, *todo_fields),
+    ]
     for plan in plans:
         planning.apply_plan(plan)
 
@@ -104,42 +106,37 @@ def compose_directives(
     *,
     commit_mode: str,
 ) -> list[str]:
-    """Return the ordered, non-empty directive parts for this boundary.
+    """Return a handoff's or precompact's ordered, non-empty directive parts.
 
     Print order: the memory directive ("" when the gitlore store is absent
-    or clean, and omitted), then the todo boundary/SDD nudge, then the commit
-    act (present only under "with-commit", leaving the memory gitlink out when
-    memory is owed), then the rename directive (handoff; autoname gets the rename
-    directive alone, since with no drive the title reaches the user only
-    through the printed line), then the closing line — always last.
+    or clean, and omitted), then the todo boundary/SDD nudge ("" with no live
+    ledger, and omitted), then the commit act (present only under
+    "with-commit", leaving the memory gitlink out when memory is owed), then
+    the rename directive (handoff only), then the closing line — always last.
     """
-    if skill == "autoname":
-        return [lib.rename_directive(title)]
     memory = lib.memory_directive(str(root))
-    parts: list[str] = []
-    if memory:
-        parts.append(memory)
-    if skill == "handoff":
-        parts.append(lib.todo_boundary(str(root)))
-    else:
-        parts.append(lib.sdd_directive(str(root)))
+    nudge = (
+        lib.todo_boundary(str(root))
+        if skill == "handoff"
+        else lib.sdd_directive(str(root))
+    )
+    parts = [part for part in (memory, nudge) if part]
     if commit_mode == "with-commit":
         parts.append(lib.commit_directive(memory=bool(memory)))
     if skill == "handoff":
         parts.append(lib.rename_directive(title))
     parts.append(lib.closing_directive(skill))
-    return [part for part in parts if part]
+    return parts
 
 
 def print_output(parts: list[str]) -> None:
-    """Print the directive output: the non-empty parts, blank-line separated.
+    """Print the directive output: the parts, blank-line separated.
 
-    Writes nothing for an empty list. Each part already ends in a newline of its
-    own, so the trailing one is stripped before joining: otherwise the separator
-    lands on top of it and every gap is two blank lines rather than one.
+    Each part already ends in a newline of its own, so the trailing one is
+    stripped before joining: otherwise the separator lands on top of it and
+    every gap is two blank lines rather than one.
     """
-    if parts:
-        sys.stdout.write("\n\n".join(part.rstrip("\n") for part in parts) + "\n")
+    sys.stdout.write("\n\n".join(part.rstrip("\n") for part in parts) + "\n")
 
 
 if __name__ == "__main__":

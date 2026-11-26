@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 from conftest import (
     make_repo,
+    precompact_payload,
     read_back_drive,
     run_checkpoint,
     task_clear,
@@ -137,11 +138,9 @@ def test_precompact_continue_true_needs_no_file_body(
     """
     repo = make_repo(tmp_path)
     payload = {
-        "skill": "precompact",
-        "commit": "without-commit",
+        **precompact_payload("without-commit"),
         "compact": True,
         "continue": True,
-        "task": task_clear(),
         "todo": todo,
     }
     result = run_checkpoint(repo, payload)
@@ -193,14 +192,7 @@ def test_handoff_clear_true_with_continuation(tmp_path: Path) -> None:
 
 def test_precompact_compact_false_composes_the_prepare_marker(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
-    payload = {
-        "skill": "precompact",
-        "commit": "without-commit",
-        "compact": False,
-        "continue": False,
-        "task": task_clear(),
-        "todo": todo_keep(),
-    }
+    payload = precompact_payload("without-commit")
     result = run_checkpoint(repo, payload)
     assert result.returncode == 0
     assert (
@@ -212,12 +204,8 @@ def test_precompact_compact_false_composes_the_prepare_marker(tmp_path: Path) ->
 def test_precompact_compact_true_no_continuation_bare_compact(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
     payload = {
-        "skill": "precompact",
-        "commit": "without-commit",
+        **precompact_payload("without-commit"),
         "compact": True,
-        "continue": False,
-        "task": task_clear(),
-        "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)
     assert result.returncode == 0
@@ -230,12 +218,9 @@ def test_precompact_compact_true_no_continuation_bare_compact(tmp_path: Path) ->
 def test_precompact_compact_true_with_continuation(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
     payload = {
-        "skill": "precompact",
-        "commit": "without-commit",
+        **precompact_payload("without-commit"),
         "compact": True,
         "continue": True,
-        "task": task_clear(),
-        "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)
     assert result.returncode == 0
@@ -248,12 +233,8 @@ def test_precompact_compact_true_with_continuation(tmp_path: Path) -> None:
 def test_precompact_focus_directive_no_continuation(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
     payload = {
-        "skill": "precompact",
-        "commit": "without-commit",
+        **precompact_payload("without-commit"),
         "compact": "keep the parser work",
-        "continue": False,
-        "task": task_clear(),
-        "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)
     assert result.returncode == 0
@@ -268,12 +249,9 @@ def test_precompact_focus_directive_and_continuation_both_carried(
 ) -> None:
     repo = make_repo(tmp_path)
     payload = {
-        "skill": "precompact",
-        "commit": "without-commit",
+        **precompact_payload("without-commit"),
         "compact": "keep the parser work",
         "continue": True,
-        "task": task_clear(),
-        "todo": todo_keep(),
     }
     result = run_checkpoint(repo, payload)
     assert result.returncode == 0
