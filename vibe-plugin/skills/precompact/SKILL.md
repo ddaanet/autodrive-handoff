@@ -14,10 +14,12 @@ put what matters on disk before it runs. Under Vibe nothing can run
 
 ### Step 1: Write durable learnings to memory
 
-If durable learnings surfaced this session, write them to memory now — under
-Vibe memory is gitlore (its `gitlore:memory-writing` flow); when no store is
-mounted, skip silently. Skip if nothing durable surfaced — do not force.
-These writes are the only tool calls allowed before `checkpoint.py`.
+If durable learnings surfaced this session and a memory store is mounted,
+write each one now as a file in the store, following the conventions of the
+store's own `MEMORY.md`; gitlore's skills are not available under Vibe, and
+the checkpoint reports the store's uncommitted state afterwards. When no
+store is mounted, skip silently. Skip if nothing durable surfaced — do not
+force. These writes are the only tool calls allowed before `checkpoint.py`.
 
 ### Step 2: Decide, then checkpoint
 
@@ -63,7 +65,7 @@ what follows it. Prose. Not a recap.>
   Step 1. Finished work is one sentence at most.
 - No file paths or code beyond what's needed to say what's in progress.
 - **No commit, push or release status** ("the work is uncommitted", "nothing
-  pushed", "ready to commit"): the line is false after the next commit. If
+  pushed", "ready to commit", "release is a separate request"): the line is false after the next commit. If
   uncommitted work matters, what matters is *why* (tests red, decision
   pending): write that as an open decision in the todo.
 
@@ -72,8 +74,9 @@ what follows it. Prose. Not a recap.>
 ```markdown
 ## Open decisions
 
-- <Unmade choice, phrased as a decision still to make, with the identifiers,
-  paths and exact question that must survive verbatim.>
+- <Unmade choice, phrased as a decision still to make, with enough context to
+  decide — identifiers, commit ranges, file paths, the exact shape of the
+  question, whatever must survive verbatim.>
 
 <Drop the section if there are no open decisions. No filler.>
 
@@ -83,24 +86,27 @@ what follows it. Prose. Not a recap.>
 ```
 
 - **Open items only, in both sections.** A finished item or a resolved decision
-  is dropped, never checked off: anything still listed reads as outstanding and
-  gets redone.
+  is dropped, never checked off, prefixed "done:" or struck through: anything
+  still listed reads as outstanding and gets redone.
 - **A decision the user has left unanswered across several frames is declined,
   not missed.** Drop it, and never annotate one with the number of times it has
-  been raised. Work that can proceed without an answer is listed as work.
+  been raised. A listed decision blocks nothing either: work that can proceed
+  without the answer is listed as work.
 - **No commit or push status**, and no item saying "commit the work" or "push
   the branch". A release still owed is an item.
+- Durable lessons go to memory, not to `## Open decisions`.
 - A `TODO.md` that is already there in another shape keeps its shape: add to it
   and drop from it with `edit` rather than rewriting it into this template.
 
 Neither file takes a `#` heading or extra sections. There is no `rename`
 field at this boundary.
 
-Then run `checkpoint.py` (Bash) from the plugin's skill directory — the skill
-tool printed its path when this skill loaded, as
+Then run `<base directory>/checkpoint.py` (Bash) — the skill tool printed the
+base directory when this skill loaded, as
 `Base directory for this skill: <path>` — piping the whole call as JSON on
-stdin via a heredoc, run from the project root (a cwd inside a submodule such
-as the memory store would pass the root check and write the files there):
+stdin via a heredoc, with the project root as the working directory (a cwd
+inside a submodule such as the memory store would pass the root check and
+write the files there):
 
 ````
 cd "<project root>" && python3 "<base directory>/checkpoint.py" <<'JSON'

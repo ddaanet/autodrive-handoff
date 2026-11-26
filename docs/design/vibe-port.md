@@ -52,7 +52,9 @@ The consequences, kept together so the shape reads in one place:
   repo's work. The memory directive therefore does not send the agent to
   `gitlore:commit`: it prints the dirty status, tells the agent to report
   the memory as uncommitted to the user, left for a session that has gitlore.
-  The with-commit act leaves the memory pointer out of the commit and says so
+  Step 1 of the two boundary skills therefore writes a durable fact as a plain
+  file in the mounted store, by the store's own `MEMORY.md` conventions, with no
+  gitlore skill in the path; the directive then reports it. The with-commit act leaves the memory pointer out of the commit and says so
   in the reply. The adapter would expose gitlore's skill as
   `{plugin namespace}:{frontmatter name}` (`_native.py`, verified in the
   3.0.1 source); the port does not rely on it.
@@ -98,8 +100,10 @@ Install is copy-plus-one-config-step, in `vibe-plugin/README.md`. Verified
 2026-11-23 under 3.0.1 source and the test suite: the end-to-end checkpoint
 (payload on stdin from a skill-directory path), the schema fork, and
 gitlore's alias naming. Not yet verified live: a
-Vibe session invoking a ported skill end to end (`/autodrive-handoff:handoff`
-in a consumer) — it needs the installed state, which is the user's
+Vibe session invoking a ported skill end to end (`/autodrive_handoff:handoff`
+in a consumer; that slash-menu spelling, the manifest name with `-` turned to `_`
+by `_typescript_identifier` in `_native.py`, was read from the 3.0.1 source and
+not exercised live) — it needs the installed state, which is the user's
 environment, and a headless probe. A symlink of the Claude cache into
 `~/.vibe/plugins/` was probed live on 2026-11-23 (all six `gitlore:*`
 skills surfaced under exact names) and then removed as ruled out.

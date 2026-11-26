@@ -19,10 +19,12 @@ the command for the user to type.
 
 ### Step 1: Write durable learnings to memory
 
-If durable learnings surfaced this session, write them to memory now — under
-Vibe memory is gitlore (its `gitlore:memory-writing` flow); when no store is
-mounted, skip silently. Skip if nothing durable surfaced — do not force.
-These writes are the only tool calls allowed before `checkpoint.py`.
+If durable learnings surfaced this session and a memory store is mounted,
+write each one now as a file in the store, following the conventions of the
+store's own `MEMORY.md`; gitlore's skills are not available under Vibe, and
+the checkpoint reports the store's uncommitted state afterwards. When no
+store is mounted, skip silently. Skip if nothing durable surfaced — do not
+force. These writes are the only tool calls allowed before `checkpoint.py`.
 
 ### Step 2: Decide, then checkpoint
 
@@ -112,11 +114,12 @@ follows it. Prose. Not a recap.>
 
 Neither file takes a `#` heading or extra sections.
 
-Then run `checkpoint.py` (Bash) from the plugin's skill directory — the skill
-tool printed its path when this skill loaded, as
+Then run `<base directory>/checkpoint.py` (Bash) — the skill tool printed the
+base directory when this skill loaded, as
 `Base directory for this skill: <path>` — piping the whole wrap-up as JSON on
-stdin via a heredoc, run from the project root (a cwd inside a submodule such
-as the memory store would pass the root check and write the files there):
+stdin via a heredoc, with the project root as the working directory (a cwd
+inside a submodule such as the memory store would pass the root check and
+write the files there):
 
 ````
 cd "<project root>" && python3 "<base directory>/checkpoint.py" <<'JSON'
@@ -154,8 +157,11 @@ A `root` error means nothing was written: the cwd was not a project root —
 run the call again from the project root.
 
 The last part is always the closing line. Vibe runs no transition for you:
-end the reply on that line, so the user reads what to type — `/clear` (and
-`/rename <title>`, from the rename line) — and types it.
+end the reply on that line, and relay the rename line too, so the user
+reads both commands. The order that titles the fresh session, the one the
+frame is for: `/clear` first (Vibe's `/clear` starts a new conversation),
+then `/rename <title>`, which titles whichever session is current. Typed
+before `/clear`, the rename titles the session being left.
 
 ## Anti-patterns
 

@@ -57,12 +57,15 @@ what was refused.)
 
 ## Skills
 
+Vibe registers a skill as `{namespace}:{name}`, the namespace being the manifest
+name with `-` turned to `_` (read from the 3.0.1 source, not exercised live).
+
 | skill | use it |
 |---|---|
-| `/autodrive-handoff:handoff` | before a `/clear` |
-| `/autodrive-handoff:precompact` | before a `/compact` |
-| `/autodrive-handoff:autoname` | to decide a session title — the user runs `/rename` with it |
-| `/autodrive-handoff:pending` | to list the open decisions and remaining todos already loaded |
+| `/autodrive_handoff:handoff` | before a `/clear` |
+| `/autodrive_handoff:precompact` | before a `/compact` |
+| `/autodrive_handoff:autoname` | to decide a session title — the user runs `/rename` with it |
+| `/autodrive_handoff:pending` | to list the open decisions and remaining todos already loaded |
 
 ## What differs from the Claude plugin
 

@@ -1,6 +1,6 @@
 ---
 name: autoname
-description: Set the session title from the conversation — a rename only, with no task snapshot and no memory write. Vibe auto-titles sessions, so this is the manual counterpart: the checkpoint validates the title and the closing line hands it to the user. Use when the user asks to "name this conversation", "name this chat", "name this session", "rename session", "rename this session", "title this session", or "autoname". For "save handoff", "before /clear", "wrap up", or "I'm done", use the handoff skill instead.
+description: 'Set the session title from the conversation — a rename only, with no task snapshot and no memory write. Vibe auto-titles sessions, so this is the manual counterpart: the checkpoint validates the title and the closing line hands it to the user. Use when the user asks to "name this conversation", "name this chat", "name this session", "rename session", "rename this session", "title this session", or "autoname". For "save handoff", "before /clear", "wrap up", or "I''m done", use the handoff skill instead.'
 ---
 
 # autoname — Session Title Only
