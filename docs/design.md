@@ -271,6 +271,7 @@ The standing calls, each argued in
 - **With nothing to approve, the wrap-up completes in a single turn.**
 - **A context-size nudge was tried and dropped.**
 - **Between deciding and the checkpoint, no tool call.**
+- **No lag at the tag.**
 
 ## Rejected alternatives
 
@@ -308,6 +309,8 @@ Ruled out, each argued in
   with a driven continuation**
 - **Driving the TUI through tmux**, **reading the pane to confirm an action**
 - **A `restart` kind, and identifying the exiting process**
+- **Symlinking the Claude plugin cache into `~/.vibe/plugins/` to surface
+  gitlore**
 - **A `/autoname` mod command**, **a second parser of the sentinel in the mod**
 - **Per-session sentinels or checksums for sessions sharing a root**,
   **recording the root in the sentinel**, **refusing a symlinked `.claude/`**

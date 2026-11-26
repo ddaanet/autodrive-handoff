@@ -11,7 +11,7 @@ supply. It does not add a third summarisation layer.
 
 **Both files are plain files; only the sentinel is guarded.** The task file
 needs no protection from the agent that authors it. The checkpoint replaces it
-whole at every clear boundary, so nothing a direct edit leaves behind survives
+whole at every boundary, so nothing a direct edit leaves behind survives
 the next one, and until then it is a note the next session reads, which is
 what the todo file is too. So neither file is guarded, gitignored or staged by
 a hook, and a guard, two stagers and a manifest are machinery the design does
@@ -256,15 +256,13 @@ commit answer does not set their tense. They still precede the checkpoint
 call, whose memory directive keys on a dirty submodule. Nothing else is
 read, not even the plugin's own files: a reference file both skills read on
 every call is rejected (see
-[rejected alternatives](rejected-alternatives.md)). The todo template and
-rules are inlined in both boundary skills, so neither makes a read to draft,
+[rejected alternatives](rejected-alternatives.md)). The task and todo
+templates and their rules are inlined in both boundary skills, so neither makes a read to draft,
 and the window between deciding and the checkpoint holds no call.
 A commit the ask implies is not an exception either, because it comes after
 the checkpoint, as the commit act the checkpoint prints: after it so it
 carries the two files the checkpoint wrote, and before the arming
 instruction so the transition is released only once it has landed.
-
-2026-11-25 The Vibe manifest leads the release by at most one bump, enforced at the gate.
 
 **No lag at the tag.** The plugin ships two manifests for the same plugin, the
 Claude manifest (`.claude-plugin/plugin.json`) and the native Vibe manifest
@@ -281,8 +279,10 @@ exactly one patch, minor or major bump ahead, and refuses anything else. The
 release's bump commit is where they meet again, and it is the tagged commit:
 one version at the tag holds when the Vibe bump was made and used the
 release's tier. The gate cannot catch either mistake, since the release does
-not gate its bump commit: a Vibe bump of a different tier tags mismatched
-manifests and stays green after, and a forgotten Vibe pre-bump tags Vibe one
+not gate its bump commit: a Vibe bump of a higher tier than the release's tags
+mismatched manifests and stays green after (claude 0.23.2, vibe 0.24.0), one of
+a lower tier tags them mismatched too and goes red on the next precommit
+(claude 0.24.0, vibe 0.23.2: Claude ahead), and a forgotten Vibe pre-bump tags Vibe one
 release behind, which the next commit refuses, forcing a sync commit.
 No toolkit change: the recipe still bumps only the Claude manifest, and
 `prerelease` (`precommit`) passes with Vibe ahead. A post-release sync commit,

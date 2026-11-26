@@ -4,7 +4,7 @@
 
 ## Remaining
 
-- Ship per plans/2026-11-25-symmetric-session-files.md step 3: Vibe manifest bump commit to 0.24.0, push dev, /ddaa:preflight, `just release minor`.
+- Ship per plans/2026-11-25-symmetric-session-files.md step 3: finish `/edify:release` (the release-review fixes and the medium loop over them), then push dev, /ddaa:preflight, `just release minor`.
 - Drop the gitlore launcher note into the gitlore repo so gate runs here stop needing GITLORE_LAUNCHED=1: its launcher injects --settings ahead of the subcommand, and claude 2.1.330 refuses any option before plugin.
 - Headless live-probe of a ported Vibe skill end to end in a consumer repo, the last "not yet verified live" line in docs/design/vibe-port.md.
 - Durable learnings since memory froze under Vibe (adapter alias naming, the symlink ruling, the review-loop pattern) ride gitlore's memory flow when its Vibe port lands.

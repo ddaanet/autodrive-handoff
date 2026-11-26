@@ -4,16 +4,16 @@ Clear or compact a long Claude Code session without losing the thread.
 
 Before a `/clear` or `/compact`, the plugin has Claude put the work in
 progress on disk: the open decisions and remaining to-do items, plus the task
-in hand before a `/clear`. After the reset the files are injected back,
+in hand. After the reset the files are injected back,
 verbatim, except that `TODO.md` items may be cut to fit the hook-output limit, with a line saying so. If you ask, the plugin also runs the reset and resumes the work, so
 you type nothing.
 
 ## What you get
 
-- **A task frame that survives `/clear`.** `TASK.md` and `TODO.md` in your
+- **A task frame that survives `/clear` and `/compact`.** `TASK.md` and `TODO.md` in your
   project root, loaded into the next session.
-- **A to-do list that survives `/compact`.** The wrap-up saves `TODO.md` before
-  the compaction and re-injects it word for word after.
+- **Files re-injected word for word.** The wrap-up saves both files before
+  either reset and loads them again after.
 - **Optional hands-off resets.** Ask for "clear and continue" or "compact and
   continue" and the plugin runs the command and resumes from the files.
 - **Optional commit.** The wrap-up has Claude commit the two files with your
@@ -253,7 +253,7 @@ and writes](#what-the-plugin-runs-and-writes) lists every file.
 
 [`skills/handoff/SKILL.md`](skills/handoff/SKILL.md) and
 [`skills/precompact/SKILL.md`](skills/precompact/SKILL.md) are the protocols the
-agent follows; the first also holds the templates for the two files they
+agent follows; both also hold the templates for the two files they
 write.
 
 ## Development

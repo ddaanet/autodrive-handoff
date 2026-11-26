@@ -96,6 +96,8 @@ One line each, with the node under `docs/design/` that holds its behaviour.
 - `scripts/report-drive-failure.sh` — `UserPromptSubmit`: failure report,
   sweep, drift note → driving-the-transition.md, queued-prompts.md,
   sessions-sharing-a-root.md
+- `scripts/check-versions.sh` — the two manifests' version coupling →
+  release-infrastructure.md
 - `scripts/write-guard.sh` — `PreToolUse(Write|Edit)`: denies a direct write
   to the sentinel → the-write-path.md
 - `scripts/inject-checkpoint-root.sh` — `PreToolUse(Bash)`: exports
@@ -133,7 +135,7 @@ What you are touching → what to read first, under `docs/design/`:
   `session-pointer.sh`, `HANDOFF_ROOT` → `scoping.md`
 - `vibe-plugin/`, its schema fork, the pasted `/compact` direction, the
   AGENTS.md loader line, `sync-vibe` → `vibe-port.md`
-- `plugin-dev/`, `release.just`, `$MARKETPLACE_DIR` →
+- `plugin-dev/`, `release.just`, `$MARKETPLACE_DIR`, `check-versions.sh` →
   `release-infrastructure.md`
 - weighing or adding a standing call → `decisions.md`; re-proposing something
   ruled out → `rejected-alternatives.md`

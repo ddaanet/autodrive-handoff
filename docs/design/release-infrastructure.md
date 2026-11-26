@@ -56,8 +56,10 @@ Vibe behind, Claude ahead, two bumps, a skipped component such as 0.23.1 to
 `precommit`) runs before the bump, with Vibe one bump ahead, and passes. The
 release does not re-run the gate on its bump commit, so two mistakes reach
 the tag uncaught. A Vibe bump of a different tier than the release's tags
-mismatched manifests, and the gate stays green after it, since the Vibe
-manifest still reads as one bump ahead. A forgotten Vibe pre-bump passes
+mismatched manifests. A higher tier stays green after it, since the Vibe
+manifest still reads as one bump ahead (claude 0.23.2, vibe 0.24.0); a lower
+one goes red on the next precommit, since Claude is then ahead (claude 0.24.0,
+vibe 0.23.2). A forgotten Vibe pre-bump passes
 `prerelease` (the manifests are equal) and tags the Vibe manifest one release
 behind; the next commit is then refused (Claude ahead), which forces a sync
 commit after the tag. The gate also accepts a lone Vibe bump of one tier at
