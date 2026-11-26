@@ -5,10 +5,10 @@ Reads a JSON payload on stdin, validates it against the schema (FR2 — a
 violation exits 2 naming the offending field on stderr), applies the task/todo
 tagged union — content, or an object naming an action (FR5) — to `TASK.md` and
 `TODO.md` in the root, composes the sentinel (FR8), and prints the directive
-output (FR9). Only `handoff` carries a `task`; `precompact` forbids the key and
-removes any task file on disk. The sentinel and the directive composition live
-here; validating the payload lives in _checkpoint_payload.py, and resolving the
-two halves to file plans and applying them in _checkpoint_plan.py.
+output (FR9). `handoff` and `precompact` carry `task` and `todo` alike. The
+sentinel and the directive composition live here; validating the payload lives
+in _checkpoint_payload.py, and resolving the two halves to file plans and
+applying them in _checkpoint_plan.py.
 
 NFR1: nothing here mutates git state — this is the agent's sandboxed Bash, and
 both files are plain tracked files whichever commit comes next picks up. At turn
@@ -82,7 +82,7 @@ def main() -> int:
     task_fields: tuple[str, str] | None = None
     todo_fields: tuple[str, str, str, str] | None = None
     if skill in ("handoff", "precompact"):
-        task_fields = validation.validate_task(payload, skill)
+        task_fields = validation.validate_task(payload)
         todo_fields = validation.validate_todo(payload)
 
     # One locked scope covers reading TASK.md/TODO.md to plan, applying the
@@ -98,7 +98,8 @@ def main() -> int:
                 planning.plan_task(root, *task_fields),
                 planning.plan_todo(root, *todo_fields),
             ]
-            # Only under handoff: after a compaction the summary carries the task.
+            # Only under handoff: a compaction's summary still carries the
+            # conversation, so an empty frame leaves the continuation something.
             if skill == "handoff" and continuation:
                 require_something_to_continue(plans)
         for plan in plans:

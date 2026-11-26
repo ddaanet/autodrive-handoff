@@ -243,17 +243,12 @@ def require_one_line(field: str, value: str) -> None:
         )
 
 
-def validate_task(payload: JSONDict, skill: str) -> tuple[str, str]:
+def validate_task(payload: JSONDict) -> tuple[str, str]:
     """("write", content) or ("clear", "").
 
-    Required under handoff. Forbidden under precompact by key presence, whatever
-    the value, and the absent key resolves to ("clear", ""): the removal runs
-    through the same plan as an explicit clear.
+    Required at both boundaries, by key presence, with the same shape and rules
+    under each.
     """
-    if skill == "precompact":
-        if "task" in payload:
-            lib.err("task", 'forbidden when skill is "precompact"')
-        return "clear", ""
     if "task" not in payload:
         lib.err("task", 'required, a content string or {"action": "clear"}')
     task = payload["task"]

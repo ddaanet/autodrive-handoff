@@ -103,8 +103,8 @@ committed but the two agent-authored files.
 
 ## What is guarded
 
-Neither file is. `TASK.md` is replaced whole at every clear boundary and
-removed at every compact one, and `TODO.md` is the agent's own scratch list
+Neither file is. `TASK.md` is replaced whole or removed at every boundary,
+as the payload says, and `TODO.md` is the agent's own scratch list
 (FR4), so a direct edit of either is an ordinary edit, and nothing stages
 them: they are tracked like any file and ride the next commit. The one
 checkpoint-only file is the `.claude/autodrive` sentinel (FR3), which names
