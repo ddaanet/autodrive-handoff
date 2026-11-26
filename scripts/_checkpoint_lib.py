@@ -167,11 +167,11 @@ def ledger_path(root: str) -> str | None:
             continue
         try:
             first = f.read_text(encoding="utf-8").split("\n", 1)[0]
-        except OSError:
+            mtime = f.stat().st_mtime
+        except (OSError, UnicodeDecodeError):
             continue
         if not first.startswith("# SDD ledger — plan: "):
             continue
-        mtime = f.stat().st_mtime
         if mtime > best_mtime:
             best, best_mtime = f, mtime
     if best is None:

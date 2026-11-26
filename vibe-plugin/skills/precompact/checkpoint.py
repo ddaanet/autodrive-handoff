@@ -40,7 +40,8 @@ def main() -> int:
 
     Validate the payload, apply the writes, print the directives. Anything
     that fails does so before the first write: the schema is validated ahead
-    of the plans, and the plans are resolved ahead of `apply_plan`, so an
+    of the plans, and the plans and the directives (which run git and read the
+    SDD ledger) are resolved ahead of `apply_plan`, so an
     errored call leaves `TASK.md` and `TODO.md` as they were.
     """
     payload = validation.read_payload()
@@ -63,15 +64,14 @@ def main() -> int:
         planning.plan_task(root, *task_fields),
         planning.plan_todo(root, *todo_fields),
     ]
-    for plan in plans:
-        planning.apply_plan(plan)
-
     parts = compose_directives(
         skill,
         root,
         title,
         commit_mode=commit_mode,
     )
+    for plan in plans:
+        planning.apply_plan(plan)
     print_output(parts)
     return 0
 

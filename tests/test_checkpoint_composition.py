@@ -47,6 +47,18 @@ def test_handoff_composition_carries_todo_boundary_not_sdd_nudge(
     assert "re-dispatched" not in result.stdout
 
 
+def test_undecodable_ledger_counts_as_absent(tmp_path: Path) -> None:
+    """A non-UTF-8 progress.md is no live ledger: no traceback after the
+    writes."""
+    repo = make_gitlore_repo(tmp_path)
+    add_sdd_ledger(repo)
+    (repo / ".superpowers/sdd/feature-plan/progress.md").write_bytes(b"\xff\xfe\n")
+    result = run_checkpoint(repo, handoff_payload("without-commit"))
+    assert result.returncode == 0, result.stderr
+    assert "Traceback" not in result.stderr
+    assert "progress.md" not in result.stdout
+
+
 def test_precompact_composition_carries_sdd_nudge_memory_first(tmp_path: Path) -> None:
     repo = make_gitlore_repo(tmp_path)
     dirty_memory(repo)

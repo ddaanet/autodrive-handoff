@@ -9,6 +9,7 @@ through `just sync-vibe`; a drifted copy fails here.
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -16,6 +17,7 @@ from typing import Any
 
 import conftest
 import pytest
+import yaml
 from conftest import dirty_memory, make_gitlore_repo, make_repo
 
 # The repo top level, as check-size reserves for the toolkit: the tests run
@@ -95,6 +97,49 @@ def test_handoff_writes_the_frame_and_names_the_clear(
     )
     assert "`/rename Port The Handoff Plugin To Vibe`" in result.stdout
     assert "make the commit the request called for" in result.stdout
+
+
+def test_undecodable_ledger_counts_as_absent(project: Path) -> None:
+    """A non-UTF-8 progress.md is no live ledger, not a traceback."""
+    conftest.add_sdd_ledger(project)
+    (project / ".superpowers/sdd/feature-plan/progress.md").write_bytes(b"\xff\n")
+    result = run_checkpoint(project, handoff_payload())
+    assert result.returncode == 0, result.stderr
+    assert "Traceback" not in result.stderr
+
+
+def test_composing_failure_precedes_the_first_write(tmp_path: Path) -> None:
+    """With git off PATH, composing fails and TASK.md/TODO.md stay unwritten."""
+    repo = make_gitlore_repo(tmp_path)
+    dirty_memory(repo)
+    env = conftest.git_free_env()
+    env["PATH"] = str(tmp_path / "nowhere")
+    result = subprocess.run(
+        [sys.executable, str(VIBE / "skills" / "handoff" / "checkpoint.py")],
+        input=json.dumps(handoff_payload()),
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert not (repo / "TASK.md").exists()
+    assert not (repo / "TODO.md").exists()
+
+
+def test_every_skill_frontmatter_is_yaml_with_string_name_and_description() -> None:
+    """No gate reads the Vibe skills' frontmatter: parse each as YAML."""
+    skills = sorted((VIBE / "skills").glob("*/SKILL.md"))
+    assert skills
+    for skill in skills:
+        lines = skill.read_text().splitlines()
+        assert lines[0] == "---", skill
+        end = lines.index("---", 1)
+        meta = yaml.safe_load("\n".join(lines[1:end]))
+        assert isinstance(meta, dict), skill
+        assert isinstance(meta.get("name"), str), skill
+        assert isinstance(meta.get("description"), str), skill
 
 
 def test_claude_continue_key_is_unknown(project: Path) -> None:

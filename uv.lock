@@ -59,6 +59,7 @@ dev = [
     { name = "pyyaml" },
     { name = "ruff" },
     { name = "ty" },
+    { name = "types-pyyaml" },
 ]
 
 [package.metadata]
@@ -71,6 +72,7 @@ dev = [
     { name = "pyyaml", specifier = ">=6" },
     { name = "ruff", specifier = ">=0.14.9" },
     { name = "ty", specifier = ">=0.0.1a14" },
+    { name = "types-pyyaml", specifier = ">=6" },
 ]
 
 [[package]]
@@ -389,6 +391,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/86/68/0f3b7bb03a7da676ef51b1c0af0bde1e500d69d5f0c807ed63b6f30b66dd/ty-0.0.46-py3-none-win32.whl", hash = "sha256:26db0ce89c573e60132d14e9688c9329a1633b1a8c26fe457025c7c406f7d5e6", size = 10960002, upload-time = "2026-06-09T03:28:02.832Z" },
     { url = "https://files.pythonhosted.org/packages/b1/f4/91ff618b2dee39d0633d23e1adac0174aa1de80df17e270acac534034dbc/ty-0.0.46-py3-none-win_amd64.whl", hash = "sha256:90e8e6d446b9cb7cb4bede9fca7b3c99fd1e2355605ecf431c131a51db2a5e93", size = 12097413, upload-time = "2026-06-09T03:28:27.495Z" },
     { url = "https://files.pythonhosted.org/packages/e5/2e/300174fca375a27a7c28dd80e990d857d7b3e3b25980c65063f980aa2f17/ty-0.0.46-py3-none-win_arm64.whl", hash = "sha256:ebd320d82605079b901a095dc4711037a0c488b4ace79a602fef4df0d3f4cf74", size = 11439595, upload-time = "2026-06-09T03:28:15.355Z" },
+]
+
+[[package]]
+name = "types-pyyaml"
+version = "6.0.12.20261122"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/3d/fe/e4d32b089d06f3b5d2f3f1909b1cb450ce2e18ea6e2c1863d2b29ad0090e/types_pyyaml-6.0.12.20261122.tar.gz", hash = "sha256:7fa577c893a1db255cbb02320884ffcb97b7a219fe515bec6c5f15d5d3af41ed", size = 19093, upload-time = "2026-11-22T08:57:28.481Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4c/71/8dc5553ca25c3a4799ce789f8300d2c3933d427585222c431c77450ed60d/types_pyyaml-6.0.12.20261122-py3-none-any.whl", hash = "sha256:689fbbe883b60471166dede9dba6ac0dbdbcf0ea98062d7ec195430f5bbdb009", size = 21356, upload-time = "2026-11-22T08:57:27.509Z" },
 ]
 
 [[package]]
