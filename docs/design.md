@@ -270,7 +270,7 @@ The standing calls, each argued in
 - **The design names no todo tool.**
 - **With nothing to approve, the wrap-up completes in a single turn.**
 - **A context-size nudge was tried and dropped.**
-- **Between deciding and the checkpoint, no tool call.**
+- **Between deciding and the checkpoint, no tool call** but memory writes (Vibe adds two reads).
 - **No lag at the tag.**
 
 ## Rejected alternatives

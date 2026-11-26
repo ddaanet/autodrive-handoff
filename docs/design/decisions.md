@@ -249,9 +249,9 @@ the fix; a hook blocking Read/Bash/Grep between the skill's invocation and
 the checkpoint was not built, and is the next escalation if wording proves
 insufficient, not further wording tweaks.
 
-Memory writes are the one call that precedes the checkpoint (the Vibe skills
-add two reads, `.gitmodules` for the store's path and its `MEMORY.md`, since
-no gitlore skill finds the store). They are the
+Memory writes are the one call that precedes the checkpoint; the Vibe skills
+add two reads before them, `.gitmodules` for the store's path and its
+`MEMORY.md`, since no gitlore skill finds the store. They are the
 step before the deciding one, the skill's first, and nothing in them waits on
 a decision — how memory is written is gitlore's rule in every mode, so the
 commit answer does not set their tense. They still precede the checkpoint

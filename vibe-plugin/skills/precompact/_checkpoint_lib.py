@@ -125,14 +125,15 @@ def rename_directive(title: str) -> str:
 def closing_directive(skill: str, title: str = "") -> str:
     """Return the instruction to end the reply on one named line.
 
-    One line per skill, quoted so the agent relays it rather than paraphrasing
-    it. Under precompact the line carries the `/compact` command, with its
-    direction, for the user to paste: the code span holds the command alone, so
-    it is copied paste-ready. Under handoff the line also carries the session
-    title as `/rename`, after the `/clear`: that order titles the fresh session
-    (Vibe's `/clear` starts a new conversation, and `/rename` titles whichever
-    is current). Anchored like the commit act and the rename directive, so it is
-    not appended to a reply still asking for the memory directive's approval.
+    One line per skill, which the agent relays rather than paraphrases. Under
+    precompact the line carries the `/compact` command, with its direction, for
+    the user to paste: the code span holds the command alone, so it is copied
+    paste-ready. Under handoff the line also carries the session title as
+    `/rename`, after the `/clear`: that order titles the fresh session (Vibe's
+    `/clear` starts a new conversation, and `/rename` titles whichever is
+    current). The lead "Once everything above is done" anchors it, as it does
+    the commit act, so the line is not appended to a reply still asking for the
+    memory directive's approval.
     """
     if skill not in ("handoff", "precompact"):
         raise ValueError(skill)

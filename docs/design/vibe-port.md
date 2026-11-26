@@ -27,8 +27,8 @@ The consequences, kept together so the shape reads in one place:
   user instead of announcing an armed transition, and the skills' anti-pattern
   "never print the command for the user to run" inverts into its instruction.
   The skill bodies carry the inversion; the checkpoint names Vibe's
-  surface only in the closing line, the rename part (autoname's, a bare
-  `/rename` line) and the memory directive (no `gitlore:commit` here). Under
+  surface only in the closing line, the rename part (autoname's: the decided
+  title, a line saying nothing here can type `/rename`, then the command) and the memory directive (no `gitlore:commit` here). Under
   `handoff` the title rides the closing line itself, `/clear` then
   `/rename <title>` in the order typed, because `/rename` titles the current
   session and a part printed above the `/clear` would be typed first.
