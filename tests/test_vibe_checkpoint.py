@@ -96,6 +96,8 @@ def test_handoff_writes_the_frame_and_names_the_clear(
         " TASK.md and TODO.md first.`"
     )
     assert "`/rename Port The Handoff Plugin To Vibe`" in result.stdout
+    # The rename prints before the /clear line but is typed after it.
+    assert "after the /clear" in result.stdout
     assert "make the commit the request called for" in result.stdout
 
 

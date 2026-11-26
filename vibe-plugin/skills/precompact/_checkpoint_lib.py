@@ -107,15 +107,23 @@ def commit_directive(*, memory: bool = False) -> str:
     return _printf_lines(sentence)
 
 
-def rename_directive(title: str) -> str:
+def rename_directive(title: str, *, after_clear: bool = False) -> str:
     """Return the rename act for autoname and handoff.
 
     Vibe has no drive to submit `/rename` at turn end, so the title crosses only
-    as a line the user acts on.
+    as a line the user acts on. Under handoff the closing line's `/clear` comes
+    after this part in the print order, but `/rename` titles the current
+    session, so the directive says to type it once the `/clear` is done.
     """
+    when = (
+        "the user runs it after the /clear on the closing line, which titles"
+        " the fresh session:"
+        if after_clear
+        else "the user runs it:"
+    )
     return _printf_lines(
         f'Session title decided: "{title}".',
-        "Nothing here can type /rename; the user runs it:",
+        f"Nothing here can type /rename; {when}",
         f"`/rename {title}`",
     )
 

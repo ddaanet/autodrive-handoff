@@ -124,7 +124,7 @@ def compose_directives(
     if commit_mode == "with-commit":
         parts.append(lib.commit_directive(memory=bool(memory)))
     if skill == "handoff":
-        parts.append(lib.rename_directive(title))
+        parts.append(lib.rename_directive(title, after_clear=True))
     parts.append(lib.closing_directive(skill))
     return parts
 

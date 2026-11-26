@@ -22,9 +22,11 @@ the command for the user to type.
 If durable learnings surfaced this session and a memory store is mounted,
 write each one now as a file in the store, following the conventions of the
 store's own `MEMORY.md`; gitlore's skills are not available under Vibe, and
-the checkpoint reports the store's uncommitted state afterwards. When no
-store is mounted, skip silently. Skip if nothing durable surfaced — do not
-force. These writes are the only tool calls allowed before `checkpoint.py`.
+the checkpoint reports the store's uncommitted state afterwards. The store is
+the `gitlore-memory` submodule, at the `path` `.gitmodules` gives (usually
+`memory/`). When no store is mounted, skip silently. Skip if nothing durable
+surfaced — do not force. Reading the store's `MEMORY.md` and writing the
+facts are the only tool calls allowed before `checkpoint.py`.
 
 ### Step 2: Decide, then checkpoint
 
@@ -158,10 +160,11 @@ run the call again from the project root.
 
 The last part is always the closing line. Vibe runs no transition for you:
 end the reply on that line, and relay the rename line too, so the user
-reads both commands. The order that titles the fresh session, the one the
-frame is for: `/clear` first (Vibe's `/clear` starts a new conversation),
-then `/rename <title>`, which titles whichever session is current. Typed
-before `/clear`, the rename titles the session being left.
+reads both commands. The rename part is printed before the closing line but
+says to type it after the `/clear`: that order titles the fresh session, the
+one the frame is for (Vibe's `/clear` starts a new conversation, and
+`/rename <title>` titles whichever session is current). Typed before
+`/clear`, the rename titles the session being left.
 
 ## Anti-patterns
 

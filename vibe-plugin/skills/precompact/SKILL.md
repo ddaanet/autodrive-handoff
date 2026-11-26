@@ -17,9 +17,11 @@ put what matters on disk before it runs. Under Vibe nothing can run
 If durable learnings surfaced this session and a memory store is mounted,
 write each one now as a file in the store, following the conventions of the
 store's own `MEMORY.md`; gitlore's skills are not available under Vibe, and
-the checkpoint reports the store's uncommitted state afterwards. When no
-store is mounted, skip silently. Skip if nothing durable surfaced — do not
-force. These writes are the only tool calls allowed before `checkpoint.py`.
+the checkpoint reports the store's uncommitted state afterwards. The store is
+the `gitlore-memory` submodule, at the `path` `.gitmodules` gives (usually
+`memory/`). When no store is mounted, skip silently. Skip if nothing durable
+surfaced — do not force. Reading the store's `MEMORY.md` and writing the
+facts are the only tool calls allowed before `checkpoint.py`.
 
 ### Step 2: Decide, then checkpoint
 
