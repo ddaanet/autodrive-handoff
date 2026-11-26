@@ -107,44 +107,42 @@ def commit_directive(*, memory: bool = False) -> str:
     return _printf_lines(sentence)
 
 
-def rename_directive(title: str, *, after_clear: bool = False) -> str:
-    """Return the rename act for autoname and handoff.
+def rename_directive(title: str) -> str:
+    """Return the rename act for autoname.
 
     Vibe has no drive to submit `/rename` at turn end, so the title crosses only
-    as a line the user acts on. Under handoff the closing line's `/clear` comes
-    after this part in the print order, but `/rename` titles the current
-    session, so the directive says to type it once the `/clear` is done.
+    as a line the user acts on. Under handoff the title rides the closing line
+    instead, after its `/clear`, so the order the user types in is the order
+    printed.
     """
-    when = (
-        "the user runs it after the /clear on the closing line, which titles"
-        " the fresh session:"
-        if after_clear
-        else "the user runs it:"
-    )
     return _printf_lines(
         f'Session title decided: "{title}".',
-        f"Nothing here can type /rename; {when}",
+        "Nothing here can type /rename; the user runs it:",
         f"`/rename {title}`",
     )
 
 
-def closing_directive(skill: str) -> str:
+def closing_directive(skill: str, title: str = "") -> str:
     """Return the instruction to end the reply on one named line.
 
     One line per skill, quoted so the agent relays it rather than paraphrasing
     it. Under precompact the line carries the `/compact` command, with its
     direction, for the user to paste: the code span holds the command alone, so
-    it is copied paste-ready. Anchored like the commit act and the rename
-    directive, so it is not appended to a reply still asking for the memory
-    directive's approval.
+    it is copied paste-ready. Under handoff the line also carries the session
+    title as `/rename`, after the `/clear`: that order titles the fresh session
+    (Vibe's `/clear` starts a new conversation, and `/rename` titles whichever
+    is current). Anchored like the commit act and the rename directive, so it is
+    not appended to a reply still asking for the memory directive's approval.
     """
     if skill not in ("handoff", "precompact"):
         raise ValueError(skill)
     if skill == "handoff":
         lead = "Once everything above is done, end on one line:"
         line = (
-            "`Written — /clear when you are ready; the fresh session reads"
-            " TASK.md and TODO.md first.`"
+            "Written — type `/clear`, then `/rename "
+            + title
+            + "`, when you are ready; the fresh session reads"
+            " TASK.md and TODO.md first."
         )
     else:
         lead = (

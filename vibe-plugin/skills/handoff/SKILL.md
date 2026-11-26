@@ -25,8 +25,8 @@ store's own `MEMORY.md`; gitlore's skills are not available under Vibe, and
 the checkpoint reports the store's uncommitted state afterwards. The store is
 the `gitlore-memory` submodule, at the `path` `.gitmodules` gives (usually
 `memory/`). When no store is mounted, skip silently. Skip if nothing durable
-surfaced — do not force. Reading the store's `MEMORY.md` and writing the
-facts are the only tool calls allowed before `checkpoint.py`.
+surfaced — do not force. Reading `.gitmodules` for the store's path, reading the store's `MEMORY.md`
+and writing the facts are the only tool calls allowed before `checkpoint.py`.
 
 ### Step 2: Decide, then checkpoint
 
@@ -51,7 +51,7 @@ Then decide the content:
 
 - **Session title** — a concise, specific title (≤ ~50 characters, Title
   Case, no surrounding quotes, no trailing punctuation) for the work done
-  this session. It reaches the user as a `/rename` suggestion.
+  this session. It reaches the user as a `/rename` command typed after the `/clear`.
 - **Task snapshot** — whether there's an active task whose state is worth
   preserving; if so, draft it from the task template below.
 - **Todo content** — whether there are open decisions still to make, steps
@@ -159,12 +159,10 @@ A `root` error means nothing was written: the cwd was not a project root —
 run the call again from the project root.
 
 The last part is always the closing line. Vibe runs no transition for you:
-end the reply on that line, and relay the rename line too, so the user
-reads both commands. The rename part is printed before the closing line but
-says to type it after the `/clear`: that order titles the fresh session, the
-one the frame is for (Vibe's `/clear` starts a new conversation, and
-`/rename <title>` titles whichever session is current). Typed before
-`/clear`, the rename titles the session being left.
+end the reply on that one line. It names `/clear` and then `/rename <title>`,
+in that order, which titles the fresh session, the one the frame is for
+(Vibe's `/clear` starts a new conversation, and `/rename` titles whichever
+session is current).
 
 ## Anti-patterns
 

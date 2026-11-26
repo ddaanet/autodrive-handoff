@@ -21,7 +21,8 @@ files carry and the continuation are inline in `skills/handoff/SKILL.md`.
 `skills/precompact/SKILL.md` repeats both templates and their rules, so
 neither skill reads anything to draft; an edit to either template or its
 rules changes both. Memory writes are the only tool calls ahead of the
-checkpoint
+checkpoint (the Vibe skills also read `.gitmodules` for the store's path and
+the store's `MEMORY.md`, having no gitlore to find them)
 ([Between deciding and the checkpoint, no tool call](decisions.md)).
 
 There is no restart skill: Claude Code's own `/restart` relaunches with

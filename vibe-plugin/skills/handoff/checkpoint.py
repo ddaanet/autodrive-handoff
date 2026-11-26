@@ -112,7 +112,7 @@ def compose_directives(
     or clean, and omitted), then the todo boundary/SDD nudge ("" with no live
     ledger, and omitted), then the commit act (present only under
     "with-commit", leaving the memory gitlink out when memory is owed), then
-    the rename directive (handoff only), then the closing line — always last.
+    the closing line — always last; under handoff it carries the title.
     """
     memory = lib.memory_directive(str(root))
     nudge = (
@@ -123,9 +123,7 @@ def compose_directives(
     parts = [part for part in (memory, nudge) if part]
     if commit_mode == "with-commit":
         parts.append(lib.commit_directive(memory=bool(memory)))
-    if skill == "handoff":
-        parts.append(lib.rename_directive(title, after_clear=True))
-    parts.append(lib.closing_directive(skill))
+    parts.append(lib.closing_directive(skill, title))
     return parts
 
 

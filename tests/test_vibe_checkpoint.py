@@ -90,14 +90,14 @@ def test_handoff_writes_the_frame_and_names_the_clear(
     assert result.returncode == 0, result.stderr
     assert (project / "TASK.md").read_text() == TASK
     assert (project / "TODO.md").read_text() == TODO
-    assert (
-        result.stdout.rstrip("\n").splitlines()[-1]
-        == "`Written — /clear when you are ready; the fresh session reads"
-        " TASK.md and TODO.md first.`"
+    last = result.stdout.rstrip("\n").splitlines()[-1]
+    assert last == (
+        "Written — type `/clear`, then `/rename Port The Handoff Plugin To Vibe`,"
+        " when you are ready; the fresh session reads TASK.md and TODO.md first."
     )
-    assert "`/rename Port The Handoff Plugin To Vibe`" in result.stdout
-    # The rename prints before the /clear line but is typed after it.
-    assert "after the /clear" in result.stdout
+    # One closing line, /clear before /rename; no separate rename part.
+    assert last.index("`/clear`") < last.index("`/rename ")
+    assert result.stdout.count("/rename") == 1
     assert "make the commit the request called for" in result.stdout
 
 

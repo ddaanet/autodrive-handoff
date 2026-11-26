@@ -20,8 +20,8 @@ store's own `MEMORY.md`; gitlore's skills are not available under Vibe, and
 the checkpoint reports the store's uncommitted state afterwards. The store is
 the `gitlore-memory` submodule, at the `path` `.gitmodules` gives (usually
 `memory/`). When no store is mounted, skip silently. Skip if nothing durable
-surfaced — do not force. Reading the store's `MEMORY.md` and writing the
-facts are the only tool calls allowed before `checkpoint.py`.
+surfaced — do not force. Reading `.gitmodules` for the store's path, reading the store's `MEMORY.md`
+and writing the facts are the only tool calls allowed before `checkpoint.py`.
 
 ### Step 2: Decide, then checkpoint
 

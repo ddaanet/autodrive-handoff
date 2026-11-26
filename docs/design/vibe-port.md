@@ -26,10 +26,12 @@ The consequences, kept together so the shape reads in one place:
   (`/compact`, `/rename`), so the closing directive names the command for the
   user instead of announcing an armed transition, and the skills' anti-pattern
   "never print the command for the user to run" inverts into its instruction.
-  The skill bodies carry the inversion; the checkpoint never mentions Vibe's
-  surface beyond the closing line and the rename part, which says under
-  `handoff` to type `/rename` after the `/clear` (the print order puts it
-  first, but it titles the current session).
+  The skill bodies carry the inversion; the checkpoint names Vibe's
+  surface only in the closing line, the rename part (autoname's, a bare
+  `/rename` line) and the memory directive (no `gitlore:commit` here). Under
+  `handoff` the title rides the closing line itself, `/clear` then
+  `/rename <title>` in the order typed, because `/rename` titles the current
+  session and a part printed above the `/clear` would be typed first.
 - **The frame is read, not injected.** One AGENTS.md line replaces the
   SessionStart loaders and arrives whole (verbatim splice, no cut, no
   `persisted-output` wrapper); the `pending` skill assumes that read. The
@@ -57,9 +59,9 @@ The consequences, kept together so the shape reads in one place:
   Step 1 of the two boundary skills therefore writes a durable fact as a plain
   file in the mounted store (the `gitlore-memory` submodule, at its
   `.gitmodules` path), by the store's own `MEMORY.md` conventions, with no
-  gitlore skill in the path; the directive then reports it. Reading that
-  `MEMORY.md` and writing the facts are the only tool calls before the
-  checkpoint. The with-commit act leaves the memory pointer out of the commit and says so
+  gitlore skill in the path; the directive then reports it. Reading `.gitmodules` for that path, reading the
+  store's `MEMORY.md` and writing the facts are the only tool calls before
+  the checkpoint. The with-commit act leaves the memory pointer out of the commit and says so
   in the reply. The adapter would expose gitlore's skill as
   `{plugin namespace}:{frontmatter name}` (`_native.py`, verified in the
   3.0.1 source); the port does not rely on it.
